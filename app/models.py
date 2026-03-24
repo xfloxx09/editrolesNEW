@@ -1,4 +1,4 @@
-# app/models.py
+# app/models.py (corrected with Table definitions for role_permissions and role_projects)
 print("<<<< START models.py (ARCHIV-HISTORIE) GELADEN >>>>")
 
 from flask_login import UserMixin
@@ -7,6 +7,7 @@ from app import db, login_manager
 from datetime import datetime, timezone
 from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
 
+# Association tables
 team_leaders = db.Table('team_leaders',
     db.Column('team_id', db.Integer, db.ForeignKey('teams.id', ondelete='CASCADE'), primary_key=True),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
@@ -23,6 +24,18 @@ user_projects = db.Table('user_projects',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('project_id', db.Integer, db.ForeignKey('projects.id'), primary_key=True)
 )
+
+# NEW: role and permission association tables
+role_permissions = db.Table('role_permissions',
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id', ondelete='CASCADE'), primary_key=True)
+)
+
+role_projects = db.Table('role_projects',
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('project_id', db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), primary_key=True)
+)
+
 
 class Project(db.Model):
     __tablename__ = 'projects'
@@ -56,8 +69,8 @@ class Role(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.String(255))
 
-    permissions = db.relationship('Permission', secondary='role_permissions', backref='roles')
-    projects = db.relationship('Project', secondary='role_projects', backref='roles')
+    permissions = db.relationship('Permission', secondary=role_permissions, backref='roles')
+    projects = db.relationship('Project', secondary=role_projects, backref='roles')
 
     def __repr__(self):
         return f'<Role {self.name}>'
@@ -115,6 +128,7 @@ class User(UserMixin, db.Model):
         if self.role.name == ROLE_ADMIN:
             return True
         return any(p.name == permission_name for p in self.role.permissions)
+
 
 @login_manager.user_loader
 def load_user(id):
