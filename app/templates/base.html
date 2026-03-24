@@ -19,13 +19,13 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
-                    {% if current_user.role and current_user.role.name == 'Teamleiter' and current_user.teams_led.count() > 0 %}
+                    {% if current_user.role_name == 'Teamleiter' and current_user.teams_led.count() > 0 %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}
-                    {% if current_user.role and current_user.role.name in ['Projektleiter', 'Qualitätsmanager', 'Abteilungsleiter', 'Admin', 'Betriebsleiter'] %} 
+                    {% if current_user.role_name in ['Projektleiter', 'Qualitätsmanager', 'Abteilungsleiter', 'Admin', 'Betriebsleiter'] %} 
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.pl_qm_dashboard') }}">Teams</a></li> 
                     {% endif %}
-                    {% if current_user.role and current_user.role.name in ['Admin', 'Betriebsleiter'] %}
+                    {% if current_user.role_name in ['Admin', 'Betriebsleiter'] %}
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                 Admin
@@ -45,7 +45,7 @@
             <ul class="navbar-nav">
                 {% if current_user.is_authenticated %}
                     <!-- "Jetzt coachen" Button -->
-                    {% if current_user.role and current_user.role.name in ['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Admin', 'Betriebsleiter'] %}
+                    {% if current_user.role_name in ['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Admin', 'Betriebsleiter'] %}
                         <li class="nav-item dropdown mr-2">
                             <a class="nav-link dropdown-toggle telekom-button" href="#" id="coachDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="background-color: #e20074; border-radius: 20px; padding: 5px 15px; color: white;">
                                 <i class="fas fa-plus-circle"></i> Neues Coaching
@@ -60,7 +60,7 @@
                             </div>
                         </li>
                     {% endif %}
-                    <li class="nav-item"><span class="navbar-text" style="color: #e20074; margin-right: 15px;">Angemeldet als: {{ current_user.username }} ({{ current_user.role.name if current_user.role else 'Keine Rolle' }})</span></li>
+                    <li class="nav-item"><span class="navbar-text" style="color: #e20074; margin-right: 15px;">Angemeldet als: {{ current_user.username }} ({{ current_user.role_name }})</span></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.profile') }}">Profil</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Abmelden</a></li>
                 {% else %}
