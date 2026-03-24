@@ -183,6 +183,315 @@ def create_app(config_class=Config):
         else:
             print("✅ Spalte 'assigned_coaching_id' in coachings existiert bereits.")
 
+        # ========== NEW: roles and permissions ==========
+        # 8. Create permissions table
+        if 'permissions' not in inspector.get_table_names():
+            print("⚠️ Tabelle 'permissions' fehlt – wird erstellt...")
+            conn.execute(text('''
+                CREATE TABLE permissions (
+                    id SERIAL NOT NULL,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    description VARCHAR(255),
+                    PRIMARY KEY (id)
+                )
+            '''))
+            conn.commit()
+            print("✅ Tabelle 'permissions' erstellt.")
+        else:
+            print("✅ Tabelle 'permissions' existiert bereits.")
+
+        # 9. Create roles table
+        if 'roles' not in inspector.get_table_names():
+            print("⚠️ Tabelle 'roles' fehlt – wird erstellt...")
+            conn.execute(text('''
+                CREATE TABLE roles (
+                    id SERIAL NOT NULL,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    description VARCHAR(255),
+                    PRIMARY KEY (id)
+                )
+            '''))
+            conn.commit()
+            print("✅ Tabelle 'roles' erstellt.")
+        else:
+            print("✅ Tabelle 'roles' existiert bereits.")
+
+        # 10. Create role_permissions junction table
+        if 'role_permissions' not in inspector.get_table_names():
+            print("⚠️ Tabelle 'role_permissions' fehlt – wird erstellt...")
+            conn.execute(text('''
+                CREATE TABLE role_permissions (
+                    role_id INTEGER NOT NULL,
+                    permission_id INTEGER NOT NULL,
+                    PRIMARY KEY (role_id, permission_id),
+                    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+                )
+            '''))
+            conn.commit()
+            print("✅ Tabelle 'role_permissions' erstellt.")
+        else:
+            print("✅ Tabelle 'role_permissions' existiert bereits.")
+
+        # 11. Create role_projects junction table
+        if 'role_projects' not in inspector.get_table_names():
+            print("⚠️ Tabelle 'role_projects' fehlt – wird erstellt...")
+            conn.execute(text('''
+                CREATE TABLE role_projects (
+                    role_id INTEGER NOT NULL,
+                    project_id INTEGER NOT NULL,
+                    PRIMARY KEY (role_id, project_id),
+                    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                )
+            '''))
+            conn.commit()
+            print("✅ Tabelle 'role_projects' erstellt.")
+        else:
+            print("✅ Tabelle 'role_projects' existiert bereits.")
+
+        # 12. Add role_id to users table
+        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        if 'role_id' not in columns_users:
+            print("⚠️ Spalte 'role_id' in users fehlt – wird hinzugefügt...")
+            conn.execute(text('ALTER TABLE users ADD COLUMN role_id INTEGER REFERENCES roles(id)'))
+            conn.commit()
+            print("✅ Spalte 'role_id' in users hinzugefügt.")
+        else:
+            print("✅ Spalte 'role_id' in users existiert bereits.")
+
+        # 13. Insert default permissions if they don't exist
+        default_permissions = [
+            ('view_coaching_dashboard', 'View coaching dashboard'),
+            ('view_workshop_dashboard', 'View workshop dashboard'),
+            ('view_assigned_coachings', 'View assigned coachings list'),
+            ('create_assigned_coaching', 'Create assigned coaching tasks'),
+            ('accept_assigned_coaching', 'Accept assigned coaching tasks'),
+            ('reject_assigned_coaching', 'Reject assigned coaching tasks'),
+            ('cancel_assigned_coaching', 'Cancel assigned coaching tasks'),
+            ('view_assigned_coaching_report', 'View assigned coaching report'),
+            ('add_coaching', 'Add a coaching entry'),
+            ('edit_coaching', 'Edit any coaching entry'),
+            ('add_workshop', 'Add a workshop'),
+            ('edit_workshop', 'Edit any workshop'),
+            ('view_team_view', 'View team details'),
+            ('view_pl_qm_dashboard', 'View project leader/quality manager dashboard'),
+            ('view_admin_panel', 'View admin panel'),
+            ('manage_users', 'Create/edit/delete users'),
+            ('manage_teams', 'Create/edit/delete teams'),
+            ('manage_team_members', 'Create/edit/delete team members'),
+            ('manage_projects', 'Create/edit/delete projects'),
+            ('manage_coachings', 'Manage coachings (admin)'),
+            ('manage_workshops', 'Manage workshops (admin)'),
+            ('set_project', 'Switch active project'),
+            ('coach', 'Can perform coaching (add/edit own coachings)'),
+            ('view_own_team', 'View own team (for team leaders)'),
+            ('manage_roles', 'Manage roles and permissions'),
+        ]
+        for name, desc in default_permissions:
+            res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
+            if not res:
+                conn.execute(
+                    text("INSERT INTO permissions (name, description) VALUES (:name, :desc)"),
+                    {"name": name, "desc": desc}
+                )
+                print(f"✅ Permission '{name}' hinzugefügt.")
+        conn.commit()
+
+        # 14. Insert default roles if they don't exist
+        default_roles = [
+            ('Admin', 'Administrator with full access'),
+            ('Betriebsleiter', 'Operations manager'),
+            ('Projektleiter', 'Project leader'),
+            ('Teamleiter', 'Team leader'),
+            ('Qualitätsmanager', 'Quality coach'),
+            ('SalesCoach', 'Sales coach'),
+            ('Trainer', 'Trainer'),
+            ('Abteilungsleiter', 'Department head'),
+        ]
+        for role_name, role_desc in default_roles:
+            res = conn.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}).fetchone()
+            if not res:
+                conn.execute(
+                    text("INSERT INTO roles (name, description) VALUES (:name, :desc)"),
+                    {"name": role_name, "desc": role_desc}
+                )
+                print(f"✅ Rolle '{role_name}' hinzugefügt.")
+
+        # 15. Assign permissions to roles
+        # Fetch all permissions
+        all_perms = conn.execute(text("SELECT id, name FROM permissions")).fetchall()
+        perm_map = {p[1]: p[0] for p in all_perms}
+
+        # Admin: all permissions
+        admin_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Admin'")).fetchone()
+        if admin_role:
+            admin_id = admin_role[0]
+            for perm_id in perm_map.values():
+                exists = conn.execute(
+                    text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                    {"role_id": admin_id, "perm_id": perm_id}
+                ).fetchone()
+                if not exists:
+                    conn.execute(
+                        text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                        {"role_id": admin_id, "perm_id": perm_id}
+                    )
+            print("✅ Admin hat alle Berechtigungen.")
+
+        # Betriebsleiter: same as admin for now
+        betriebsleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Betriebsleiter'")).fetchone()
+        if betriebsleiter_role:
+            bl_id = betriebsleiter_role[0]
+            for perm_id in perm_map.values():
+                exists = conn.execute(
+                    text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                    {"role_id": bl_id, "perm_id": perm_id}
+                ).fetchone()
+                if not exists:
+                    conn.execute(
+                        text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                        {"role_id": bl_id, "perm_id": perm_id}
+                    )
+            print("✅ Betriebsleiter hat alle Berechtigungen.")
+
+        # Projektleiter
+        projleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Projektleiter'")).fetchone()
+        if projleiter_role:
+            pl_id = projleiter_role[0]
+            pl_perms = ['view_coaching_dashboard', 'view_workshop_dashboard', 'view_assigned_coachings', 'create_assigned_coaching', 'cancel_assigned_coaching', 'view_assigned_coaching_report', 'view_pl_qm_dashboard', 'set_project']
+            for perm_name in pl_perms:
+                perm_id = perm_map.get(perm_name)
+                if perm_id:
+                    exists = conn.execute(
+                        text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                        {"role_id": pl_id, "perm_id": perm_id}
+                    ).fetchone()
+                    if not exists:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                            {"role_id": pl_id, "perm_id": perm_id}
+                        )
+            print("✅ Projektleiter Berechtigungen gesetzt.")
+
+        # Teamleiter
+        teamleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
+        if teamleiter_role:
+            tl_id = teamleiter_role[0]
+            tl_perms = ['view_coaching_dashboard', 'view_workshop_dashboard', 'view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching', 'add_coaching', 'edit_coaching', 'add_workshop', 'edit_workshop', 'view_team_view', 'coach']
+            for perm_name in tl_perms:
+                perm_id = perm_map.get(perm_name)
+                if perm_id:
+                    exists = conn.execute(
+                        text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                        {"role_id": tl_id, "perm_id": perm_id}
+                    ).fetchone()
+                    if not exists:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                            {"role_id": tl_id, "perm_id": perm_id}
+                        )
+            print("✅ Teamleiter Berechtigungen gesetzt.")
+
+        # Qualitätsmanager
+        qm_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Qualitätsmanager'")).fetchone()
+        if qm_role:
+            qm_id = qm_role[0]
+            qm_perms = ['view_coaching_dashboard', 'view_workshop_dashboard', 'view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching', 'add_coaching', 'edit_coaching', 'add_workshop', 'edit_workshop', 'view_pl_qm_dashboard', 'coach']
+            for perm_name in qm_perms:
+                perm_id = perm_map.get(perm_name)
+                if perm_id:
+                    exists = conn.execute(
+                        text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                        {"role_id": qm_id, "perm_id": perm_id}
+                    ).fetchone()
+                    if not exists:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                            {"role_id": qm_id, "perm_id": perm_id}
+                        )
+            print("✅ Qualitätsmanager Berechtigungen gesetzt.")
+
+        # SalesCoach, Trainer
+        sales_role = conn.execute(text("SELECT id FROM roles WHERE name = 'SalesCoach'")).fetchone()
+        trainer_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Trainer'")).fetchone()
+        coach_perms = ['view_coaching_dashboard', 'view_workshop_dashboard', 'view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching', 'add_coaching', 'edit_coaching', 'add_workshop', 'edit_workshop', 'coach']
+        for role_id in [sales_role[0] if sales_role else None, trainer_role[0] if trainer_role else None]:
+            if role_id:
+                for perm_name in coach_perms:
+                    perm_id = perm_map.get(perm_name)
+                    if perm_id:
+                        exists = conn.execute(
+                            text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                            {"role_id": role_id, "perm_id": perm_id}
+                        ).fetchone()
+                        if not exists:
+                            conn.execute(
+                                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                                {"role_id": role_id, "perm_id": perm_id}
+                            )
+        print("✅ SalesCoach/Trainer Berechtigungen gesetzt.")
+
+        # Abteilungsleiter
+        abt_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Abteilungsleiter'")).fetchone()
+        if abt_role:
+            abt_id = abt_role[0]
+            abt_perms = ['view_coaching_dashboard', 'view_workshop_dashboard', 'view_assigned_coachings', 'create_assigned_coaching', 'cancel_assigned_coaching', 'view_assigned_coaching_report', 'view_pl_qm_dashboard', 'set_project']
+            for perm_name in abt_perms:
+                perm_id = perm_map.get(perm_name)
+                if perm_id:
+                    exists = conn.execute(
+                        text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
+                        {"role_id": abt_id, "perm_id": perm_id}
+                    ).fetchone()
+                    if not exists:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                            {"role_id": abt_id, "perm_id": perm_id}
+                        )
+            print("✅ Abteilungsleiter Berechtigungen gesetzt.")
+
+        # 16. Migrate existing users to role_id
+        # First, get all users with role string still set (if column exists)
+        # We'll use the old 'role' column if it still exists (it may have been dropped already)
+        # But we need to check if the column 'role' exists in users table
+        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        if 'role' in columns_users:
+            print("⚠️ Alte Spalte 'role' in users gefunden – wird migriert...")
+            # Fetch all users that have role string and role_id is null
+            users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
+            for user_id, old_role in users_to_migrate:
+                # Map old role string to new role name
+                role_name = old_role  # since we kept the same names
+                role_id = conn.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}).fetchone()
+                if role_id:
+                    conn.execute(
+                        text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
+                        {"role_id": role_id[0], "user_id": user_id}
+                    )
+                    print(f"✅ Benutzer ID {user_id} zu Rolle '{role_name}' zugewiesen.")
+                else:
+                    print(f"⚠️ Keine Rolle für '{old_role}' gefunden, Benutzer ID {user_id} wird auf Standard gesetzt.")
+                    # Set to a default role (e.g., 'Teamleiter')
+                    default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
+                    if default_role:
+                        conn.execute(
+                            text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
+                            {"role_id": default_role[0], "user_id": user_id}
+                        )
+            conn.commit()
+            print("✅ Migration der Benutzer abgeschlossen.")
+        else:
+            print("✅ Alte Spalte 'role' existiert nicht mehr.")
+
+        # 17. Drop old 'role' column if it exists
+        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        if 'role' in columns_users:
+            print("⚠️ Alte Spalte 'role' wird gelöscht...")
+            conn.execute(text('ALTER TABLE users DROP COLUMN role'))
+            conn.commit()
+            print("✅ Alte Spalte 'role' gelöscht.")
+
         print("--- Migration abgeschlossen ---")
 
     # Blueprints registrieren
@@ -231,6 +540,15 @@ def create_app(config_class=Config):
             count = 0
         return {'pending_assigned_count': count}
 
+    # Kontextprozessor für Berechtigungsprüfungen in Templates
+    @app.context_processor
+    def inject_permissions():
+        def has_perm(permission_name):
+            if current_user.is_authenticated:
+                return current_user.has_permission(permission_name)
+            return False
+        return {'has_perm': has_perm}
+
     # Benutzerdefinierter Jinja-Filter für Athener Zeit
     @app.template_filter('athens_time')
     def format_athens_time(utc_dt, fmt='%d.%m.%Y %H:%M'):
@@ -261,7 +579,7 @@ def create_app(config_class=Config):
             except:
                 return str(utc_dt)
 
-    # NEU: Filter für Status-Übersetzung ins Deutsche
+    # Filter für Status-Übersetzung
     @app.template_filter('status_de')
     def translate_status(status):
         translations = {
