@@ -1,4 +1,4 @@
-# app/models.py (corrected with Table definitions for role_permissions and role_projects)
+# app/models.py
 print("<<<< START models.py (ARCHIV-HISTORIE) GELADEN >>>>")
 
 from flask_login import UserMixin
@@ -25,7 +25,6 @@ user_projects = db.Table('user_projects',
     db.Column('project_id', db.Integer, db.ForeignKey('projects.id'), primary_key=True)
 )
 
-# NEW: role and permission association tables
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
     db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id', ondelete='CASCADE'), primary_key=True)
@@ -102,20 +101,25 @@ class User(UserMixin, db.Model):
         return f'<User {self.username}>'
 
     @property
+    def role_name(self):
+        """Return the name of the user's role."""
+        return self.role.name if self.role else None
+
+    @property
     def has_multiple_projects(self):
-        if self.role.name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+        if self.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
             return False
-        if self.role.name == ROLE_ABTEILUNGSLEITER:
+        if self.role_name == ROLE_ABTEILUNGSLEITER:
             return self.projects.count() > 1
         else:
             from app.models import Project
             return Project.query.count() > 1
 
     def get_allowed_project_ids(self):
-        if self.role.name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        if self.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             from app.models import Project
             return [p.id for p in Project.query.all()]
-        elif self.role.name == ROLE_ABTEILUNGSLEITER:
+        elif self.role_name == ROLE_ABTEILUNGSLEITER:
             return [p.id for p in self.projects]
         else:
             return [self.project_id] if self.project_id else []
