@@ -3,13 +3,14 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project
-from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission
+from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm
 from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone
 
 bp = Blueprint('admin', __name__)
+
 
 @bp.route('/')
 @login_required
@@ -50,7 +51,8 @@ def panel():
         if user_project_filter:
             users_query = users_query.filter(User.project_id == user_project_filter)
         if user_role_filter:
-            users_query = users_query.filter(User.role == user_role_filter)
+            # Filter by role name (since we have role relationship)
+            users_query = users_query.join(User.role).filter(Role.name == user_role_filter)
         if user_search:
             users_query = users_query.filter(
                 or_(
@@ -101,7 +103,7 @@ def panel():
     # Listen für Filter-Dropdowns
     all_projects = Project.query.order_by(Project.name).all()
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
-    all_roles = [role for role, _ in RegistrationForm.role.kwargs['choices']]
+    all_roles = [role.name for role in Role.query.order_by(Role.name).all()]
 
     return render_template('admin/admin_panel.html', title='Admin Panel',
                            users_paginated=users_paginated,
@@ -130,6 +132,7 @@ def panel():
                            archiv_filter_active=archiv_filter_active,
                            config=current_app.config)
 
+
 # --- Projekt Management ---
 @bp.route('/projects')
 @login_required
@@ -137,6 +140,7 @@ def panel():
 def manage_projects():
     projects = Project.query.order_by(Project.name).all()
     return render_template('admin/manage_projects.html', projects=projects)
+
 
 @bp.route('/projects/create', methods=['GET', 'POST'])
 @login_required
@@ -150,6 +154,7 @@ def create_project():
         flash('Projekt erfolgreich erstellt.', 'success')
         return redirect(url_for('admin.manage_projects'))
     return render_template('admin/create_project.html', form=form)
+
 
 @bp.route('/projects/edit/<int:project_id>', methods=['GET', 'POST'])
 @login_required
@@ -165,6 +170,7 @@ def edit_project(project_id):
         return redirect(url_for('admin.manage_projects'))
     return render_template('admin/edit_project.html', form=form, project=project)
 
+
 @bp.route('/projects/delete/<int:project_id>', methods=['POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -178,6 +184,7 @@ def delete_project(project_id):
     flash('Projekt gelöscht.', 'success')
     return redirect(url_for('admin.manage_projects'))
 
+
 # --- User Management ---
 @bp.route('/users/create', methods=['GET', 'POST'])
 @login_required
@@ -186,8 +193,13 @@ def create_user():
     form = RegistrationForm()
     if form.validate_on_submit():
         try:
-            # Abteilungsleiter: set project_id to first selected project, otherwise None (but column is NOT NULL, so fallback to a dummy? We'll use first selected project)
-            if form.role.data == ROLE_ABTEILUNGSLEITER:
+            role = Role.query.get(form.role_id.data)
+            if not role:
+                flash('Ungültige Rolle.', 'danger')
+                return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
+
+            # Abteilungsleiter: set project_id to first selected project
+            if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
                     flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
@@ -195,14 +207,14 @@ def create_user():
                 user = User(
                     username=form.username.data,
                     email=form.email.data if form.email.data else None,
-                    role=form.role.data,
+                    role_id=form.role_id.data,
                     project_id=primary_project_id
                 )
             else:
                 user = User(
                     username=form.username.data,
                     email=form.email.data if form.email.data else None,
-                    role=form.role.data,
+                    role_id=form.role_id.data,
                     project_id=form.project_id.data
                 )
             user.set_password(form.password.data)
@@ -210,14 +222,14 @@ def create_user():
             db.session.flush()
 
             # Teamleiter: assign teams
-            if user.role == ROLE_TEAMLEITER and form.team_ids.data:
+            if role.name == ROLE_TEAMLEITER and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user.teams_led = selected_teams
             else:
                 user.teams_led = []
 
-            # Abteilungsleiter: assign all selected projects (including the primary)
-            if user.role == ROLE_ABTEILUNGSLEITER and form.project_ids.data:
+            # Abteilungsleiter: assign all selected projects
+            if role.name == ROLE_ABTEILUNGSLEITER and form.project_ids.data:
                 selected_projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
                 user.projects = selected_projects
             else:
@@ -236,6 +248,7 @@ def create_user():
                 flash(f"Fehler im Feld '{form[field].label.text if hasattr(form[field], 'label') else field}': {error}", 'danger')
     return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
 
+
 @bp.route('/users/edit/<int:user_id>', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -249,30 +262,33 @@ def edit_user(user_id):
 
     if form.validate_on_submit():
         try:
+            role = Role.query.get(form.role_id.data)
+            if not role:
+                flash('Ungültige Rolle.', 'danger')
+                return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
+
             user_to_edit.username = form.username.data
             user_to_edit.email = form.email.data if form.email.data else None
-            user_to_edit.role = form.role.data
+            user_to_edit.role_id = form.role_id.data
 
             # Handle project assignment based on role
-            if user_to_edit.role == ROLE_ABTEILUNGSLEITER:
-                # Set project_id to the first selected project (required for NOT NULL)
+            if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
                     flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
                     return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
                 user_to_edit.project_id = primary_project_id
-                # Assign all selected projects
                 selected_projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
                 user_to_edit.projects = selected_projects
             else:
                 user_to_edit.project_id = form.project_id.data
-                user_to_edit.projects = []  # clear any previous project assignments
+                user_to_edit.projects = []
 
             if form.password.data:
                 user_to_edit.set_password(form.password.data)
 
             # Teamleiter: assign teams
-            if user_to_edit.role == ROLE_TEAMLEITER and form.team_ids.data:
+            if role.name == ROLE_TEAMLEITER and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user_to_edit.teams_led = selected_teams
             else:
@@ -288,9 +304,10 @@ def edit_user(user_id):
     elif request.method == 'GET':
         form.username.data = user_to_edit.username
         form.email.data = user_to_edit.email
-        form.role.data = user_to_edit.role
+        form.role_id.data = user_to_edit.role_id
         form.team_ids.data = [team.id for team in user_to_edit.teams_led.all()]
-        if user_to_edit.role != ROLE_ABTEILUNGSLEITER:
+        role = user_to_edit.role
+        if role.name != ROLE_ABTEILUNGSLEITER:
             form.project_id.data = user_to_edit.project_id
         else:
             form.project_ids.data = [p.id for p in user_to_edit.projects]
@@ -300,6 +317,7 @@ def edit_user(user_id):
                 flash(f"Fehler im Feld '{form[field].label.text if hasattr(form[field], 'label') else field}': {error}", 'danger')
 
     return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
+
 
 @bp.route('/users/delete/<int:user_id>', methods=['POST'])
 @login_required
@@ -322,16 +340,17 @@ def delete_user(user_id):
         flash(f'Fehler beim Löschen des Benutzers. Es könnten noch verbundene Daten existieren (z.B. Coachings). Details im Log.', 'danger')
     return redirect(url_for('admin.panel'))
 
+
 # --- Team Management ---
 @bp.route('/teams/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def create_team():
     form = TeamForm()
-    all_team_leaders = User.query.filter(User.role == ROLE_TEAMLEITER).order_by(User.username).all()
+    all_team_leaders = User.query.filter(User.role.has(name=ROLE_TEAMLEITER)).order_by(User.username).all()
     if form.validate_on_submit():
         if form.name.data.strip().upper() == ARCHIV_TEAM_NAME:
-            flash(f'Der Teamname "{ARCHIV_TEAM_NAME}" ist für das System reserviert.', 'danger')
+            flash(f'Der Teamname \"{ARCHIV_TEAM_NAME}\" ist für das System reserviert.', 'danger')
             return render_template('admin/create_team.html', title='Team erstellen', form=form, config=current_app.config)
         try:
             team = Team(
@@ -342,7 +361,7 @@ def create_team():
             db.session.flush()
 
             if form.team_leaders.data:
-                leaders = User.query.filter(User.id.in_(form.team_leaders.data), User.role == ROLE_TEAMLEITER).all()
+                leaders = User.query.filter(User.id.in_(form.team_leaders.data), User.role.has(name=ROLE_TEAMLEITER)).all()
                 team.leaders = leaders
             else:
                 team.leaders = []
@@ -355,6 +374,7 @@ def create_team():
             current_app.logger.error(f"Fehler beim Erstellen des Teams: {e}")
             flash(f'Fehler beim Erstellen des Teams: {str(e)}', 'danger')
     return render_template('admin/create_team.html', title='Team erstellen', form=form, all_team_leaders=all_team_leaders, config=current_app.config)
+
 
 @bp.route('/teams/edit/<int:team_id>', methods=['GET', 'POST'])
 @login_required
@@ -379,7 +399,7 @@ def edit_team(team_id):
             team_to_edit.project_id = form.project_id.data
 
             if form.team_leaders.data:
-                leaders = User.query.filter(User.id.in_(form.team_leaders.data), User.role == ROLE_TEAMLEITER).all()
+                leaders = User.query.filter(User.id.in_(form.team_leaders.data), User.role.has(name=ROLE_TEAMLEITER)).all()
                 team_to_edit.leaders = leaders
             else:
                 team_to_edit.leaders = []
@@ -398,6 +418,7 @@ def edit_team(team_id):
         form.project_id.data = team_to_edit.project_id
 
     return render_template('admin/edit_team.html', title='Team bearbeiten', form=form, team=team_to_edit, config=current_app.config)
+
 
 @bp.route('/teams/delete/<int:team_id>', methods=['POST'])
 @login_required
@@ -421,6 +442,7 @@ def delete_team(team_id):
         current_app.logger.error(f"Fehler beim Löschen von Team ID {team_id}: {e}")
         flash('Fehler beim Löschen des Teams.', 'danger')
     return redirect(url_for('admin.panel'))
+
 
 # --- Team Member Management ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
@@ -448,6 +470,7 @@ def create_team_member():
     return render_template('admin/create_team_member.html', title='Teammitglied erstellen',
                            form=form, projects=projects, all_teams=all_teams, config=current_app.config)
 
+
 @bp.route('/teammembers/edit/<int:member_id>', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -472,6 +495,7 @@ def edit_team_member(member_id):
     return render_template('admin/edit_team_member.html', title='Teammitglied bearbeiten',
                            form=form, member=member, projects=projects, all_teams=all_teams, config=current_app.config)
 
+
 @bp.route('/teammembers/<int:member_id>/move-to-archiv', methods=['POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -488,12 +512,13 @@ def move_to_archiv(member_id):
         member_to_move.original_project_id = member_to_move.team.project_id
         member_to_move.team_id = archiv_team.id
         db.session.commit()
-        flash(f'Mitglied "{member_to_move.name}" wurde von Team "{original_team_name}" ins ARCHIV verschoben.', 'success')
+        flash(f'Mitglied \"{member_to_move.name}\" wurde von Team \"{original_team_name}\" ins ARCHIV verschoben.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim Verschieben von Mitglied {member_id} ins Archiv: {e}")
         flash('Fehler beim Verschieben des Mitglieds ins Archiv.', 'danger')
     return redirect(url_for('admin.edit_team', team_id=original_team_id))
+
 
 @bp.route('/teammembers/delete-permanent/<int:member_id>', methods=['POST'])
 @login_required
@@ -507,13 +532,14 @@ def delete_team_member_permanently(member_id):
         db.session.execute(workshop_participants.delete().where(workshop_participants.c.team_member_id == member_id))
         db.session.delete(member)
         db.session.commit()
-        flash(f'Mitglied "{member_name}" wurde endgültig gelöscht.', 'success')
+        flash(f'Mitglied \"{member_name}\" wurde endgültig gelöscht.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim endgültigen Löschen von Mitglied {member_id}: {e}")
         flash(f'Fehler beim Löschen: {str(e)}', 'danger')
     
     return redirect(url_for('admin.panel'))
+
 
 # --- Coaching Management (Admin) ---
 @bp.route('/manage_coachings', methods=['GET', 'POST'])
@@ -620,12 +646,13 @@ def manage_coachings():
                            config=current_app.config,
                            ARCHIV_TEAM_NAME=ARCHIV_TEAM_NAME)
 
+
 @bp.route('/coaching/<int:coaching_id>/edit', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_coaching_entry(coaching_id):
     coaching_to_edit = Coaching.query.get_or_404(coaching_id)
-    form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role, current_user_team_ids=[])
+    form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=False, project_id=coaching_to_edit.project_id)
 
     if form.validate_on_submit():
@@ -669,6 +696,7 @@ def edit_coaching_entry(coaching_id):
                             tcap_js=tcap_js_for_edit,
                             config=current_app.config)
 
+
 @bp.route('/coaching/<int:coaching_id>/delete', methods=['POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -683,6 +711,7 @@ def delete_coaching_entry(coaching_id):
         current_app.logger.error(f"Fehler beim Löschen von Coaching ID {coaching_id}: {e}")
         flash(f'Fehler beim Löschen von Coaching ID {coaching_id}.', 'danger')
     return redirect(url_for('admin.manage_coachings'))
+
 
 # --- Workshop Management (Admin) ---
 @bp.route('/manage_workshops', methods=['GET', 'POST'])
@@ -760,12 +789,13 @@ def manage_workshops():
                            workshop_participants=workshop_participants,
                            db=db)
 
+
 @bp.route('/workshop/<int:workshop_id>/edit', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_workshop_entry(workshop_id):
     workshop_to_edit = Workshop.query.get_or_404(workshop_id)
-    form = WorkshopForm(obj=workshop_to_edit, current_user_role=current_user.role, current_user_team_ids=[])
+    form = WorkshopForm(obj=workshop_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_participant_choices(project_id=workshop_to_edit.project_id)
 
     existing_participant_ids = [p.id for p in workshop_to_edit.participants]
@@ -824,6 +854,7 @@ def edit_workshop_entry(workshop_id):
                            existing_ratings=existing_ratings,
                            config=current_app.config)
 
+
 @bp.route('/workshop/<int:workshop_id>/delete', methods=['POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -838,3 +869,80 @@ def delete_workshop_entry(workshop_id):
         current_app.logger.error(f"Fehler beim Löschen von Workshop ID {workshop_id}: {e}")
         flash(f'Fehler beim Löschen von Workshop ID {workshop_id}.', 'danger')
     return redirect(url_for('admin.manage_workshops'))
+
+
+# --- Role Management ---
+@bp.route('/roles')
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def manage_roles():
+    roles = Role.query.order_by(Role.name).all()
+    return render_template('admin/manage_roles.html', roles=roles, config=current_app.config)
+
+
+@bp.route('/roles/create', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def create_role():
+    form = RoleForm()
+    if form.validate_on_submit():
+        role = Role(name=form.name.data, description=form.description.data)
+        db.session.add(role)
+        db.session.flush()
+        # Assign permissions
+        if form.permissions.data:
+            perms = Permission.query.filter(Permission.id.in_(form.permissions.data)).all()
+            role.permissions = perms
+        # Assign projects
+        if form.projects.data:
+            projs = Project.query.filter(Project.id.in_(form.projects.data)).all()
+            role.projects = projs
+        db.session.commit()
+        flash('Rolle erfolgreich erstellt.', 'success')
+        return redirect(url_for('admin.manage_roles'))
+    return render_template('admin/create_role.html', form=form, config=current_app.config)
+
+
+@bp.route('/roles/edit/<int:role_id>', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def edit_role(role_id):
+    role = Role.query.get_or_404(role_id)
+    form = RoleForm(obj=role)
+    if form.validate_on_submit():
+        role.name = form.name.data
+        role.description = form.description.data
+        # Update permissions
+        role.permissions = []
+        if form.permissions.data:
+            perms = Permission.query.filter(Permission.id.in_(form.permissions.data)).all()
+            role.permissions = perms
+        # Update projects
+        role.projects = []
+        if form.projects.data:
+            projs = Project.query.filter(Project.id.in_(form.projects.data)).all()
+            role.projects = projs
+        db.session.commit()
+        flash('Rolle aktualisiert.', 'success')
+        return redirect(url_for('admin.manage_roles'))
+    # Pre-populate form
+    form.permissions.data = [p.id for p in role.permissions]
+    form.projects.data = [p.id for p in role.projects]
+    return render_template('admin/edit_role.html', form=form, role=role, config=current_app.config)
+
+
+@bp.route('/roles/delete/<int:role_id>', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def delete_role(role_id):
+    role = Role.query.get_or_404(role_id)
+    if role.name in ['Admin', 'Betriebsleiter']:
+        flash('Diese Rolle kann nicht gelöscht werden.', 'danger')
+        return redirect(url_for('admin.manage_roles'))
+    if role.users.count() > 0:
+        flash('Rolle kann nicht gelöscht werden, da sie noch Benutzern zugewiesen ist.', 'danger')
+        return redirect(url_for('admin.manage_roles'))
+    db.session.delete(role)
+    db.session.commit()
+    flash('Rolle gelöscht.', 'success')
+    return redirect(url_for('admin.manage_roles'))
