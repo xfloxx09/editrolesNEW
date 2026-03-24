@@ -165,7 +165,7 @@ def coaching_dashboard():
 
     filtered_ids_subquery = global_base.with_entities(Coaching.id).distinct().subquery()
     global_total_coachings = global_base.distinct().count()
-    total_time = db.session.query(func.sum(Coaching.time_spent)).filter(Coaching.id.in_(filtered_ids_subquery)).scalar() or 0
+    total_time = db.session.query(func.sum(Coaching.time_spent)).filter(Coaching.id.in_(filtered_ids_subquery.select())).scalar() or 0
     global_time_display = f"{total_time//60} Std. {total_time%60} Min. ({total_time} Min.)"
 
     list_q = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id)\
