@@ -1,4 +1,4 @@
-# app/__init__.py (full corrected version with proper column checks)
+# app/__init__.py (with fix to assign default roles to users with NULL role_id)
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -458,7 +458,25 @@ def create_app(config_class=Config):
                         )
             print("✅ Abteilungsleiter Berechtigungen gesetzt.")
 
-        # 16. Migrate existing users to role_id (only if 'role' column still exists)
+        # 16. Ensure all users have a role_id (assign default if NULL)
+        users_without_role = conn.execute(text("SELECT id FROM users WHERE role_id IS NULL")).fetchall()
+        if users_without_role:
+            print(f"⚠️ {len(users_without_role)} Benutzer ohne Rolle gefunden. Setze Standardrolle 'Teamleiter'...")
+            default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
+            if default_role:
+                for user in users_without_role:
+                    conn.execute(
+                        text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
+                        {"role_id": default_role[0], "user_id": user[0]}
+                    )
+                conn.commit()
+                print(f"✅ {len(users_without_role)} Benutzern wurde die Rolle 'Teamleiter' zugewiesen.")
+            else:
+                print("❌ Standardrolle 'Teamleiter' nicht gefunden.")
+        else:
+            print("✅ Alle Benutzer haben bereits eine Rolle.")
+
+        # 17. Migrate existing users to role_id (only if 'role' column still exists)
         columns_users = [col['name'] for col in inspector.get_columns('users')]
         if 'role' in columns_users:
             users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
@@ -488,7 +506,7 @@ def create_app(config_class=Config):
         else:
             print("✅ Alte Spalte 'role' existiert nicht mehr, überspringe Benutzermigration.")
 
-        # 17. Drop old 'role' column if it exists
+        # 18. Drop old 'role' column if it exists
         columns_users = [col['name'] for col in inspector.get_columns('users')]
         if 'role' in columns_users:
             print("⚠️ Alte Spalte 'role' wird gelöscht...")
@@ -524,9 +542,9 @@ def create_app(config_class=Config):
         from app.models import Project
         from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
         if current_user.is_authenticated:
-            if current_user.role.name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+            if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
                 projects = Project.query.order_by(Project.name).all()
-            elif current_user.role.name == ROLE_ABTEILUNGSLEITER:
+            elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
                 projects = current_user.projects.order_by(Project.name).all()
             else:
                 projects = []
@@ -538,7 +556,7 @@ def create_app(config_class=Config):
     @app.context_processor
     def inject_assigned_count():
         from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER
-        if current_user.is_authenticated and current_user.role.name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
+        if current_user.is_authenticated and current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
             from app.models import AssignedCoaching
             count = AssignedCoaching.query.filter_by(coach_id=current_user.id, status='pending').count()
         else:
