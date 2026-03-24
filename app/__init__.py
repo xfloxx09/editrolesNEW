@@ -95,7 +95,33 @@ def create_app(config_class=Config):
             print("✅ Tabelle 'user_projects' erstellt.")
 
             # Für alle bestehenden Abteilungsleiter die Zuordnung zum aktuellen Projekt eintragen
-            res = conn.execute(text("SELECT id, project_id FROM users WHERE role = 'Abteilungsleiter' AND project_id IS NOT NULL"))
+            # Check if 'role' column still exists in users table
+            columns_users = [col['name'] for col in inspector.get_columns('users')]
+            if 'role' in columns_users:
+                res = conn.execute(text("SELECT id, project_id FROM users WHERE role = 'Abteilungsleiter' AND project_id IS NOT NULL"))
+                rows = res.fetchall()
+                for user_id, project_id in rows:
+                    conn.execute(
+                        text("INSERT INTO user_projects (user_id, project_id) VALUES (:user_id, :project_id)"),
+                        {"user_id": user_id, "project_id": project_id}
+                    )
+                conn.commit()
+                print(f"ℹ️ {len(rows)} Abteilungsleiter-Zuordnungen in user_projects eingetragen.")
+            else:
+                print("ℹ️ Alte Spalte 'role' existiert nicht mehr, überspringe Migration von Abteilungsleitern.")
+        else:
+            print("✅ Tabelle 'user_projects' existiert bereits.")
+
+        # 5. Fehlende Zuordnungen nachholen (nur wenn 'role' Spalte noch existiert)
+        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        if 'role' in columns_users:
+            res = conn.execute(text("""
+                SELECT u.id, u.project_id
+                FROM users u
+                WHERE u.role = 'Abteilungsleiter'
+                  AND u.project_id IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = u.project_id)
+            """))
             rows = res.fetchall()
             for user_id, project_id in rows:
                 conn.execute(
@@ -103,27 +129,10 @@ def create_app(config_class=Config):
                     {"user_id": user_id, "project_id": project_id}
                 )
             conn.commit()
-            print(f"ℹ️ {len(rows)} Abteilungsleiter-Zuordnungen in user_projects eingetragen.")
+            if rows:
+                print(f"ℹ️ {len(rows)} zusätzliche Abteilungsleiter-Zuordnungen in user_projects nachgetragen.")
         else:
-            print("✅ Tabelle 'user_projects' existiert bereits.")
-
-        # 5. Fehlende Zuordnungen nachholen
-        res = conn.execute(text("""
-            SELECT u.id, u.project_id
-            FROM users u
-            WHERE u.role = 'Abteilungsleiter'
-              AND u.project_id IS NOT NULL
-              AND NOT EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = u.project_id)
-        """))
-        rows = res.fetchall()
-        for user_id, project_id in rows:
-            conn.execute(
-                text("INSERT INTO user_projects (user_id, project_id) VALUES (:user_id, :project_id)"),
-                {"user_id": user_id, "project_id": project_id}
-            )
-        conn.commit()
-        if rows:
-            print(f"ℹ️ {len(rows)} zusätzliche Abteilungsleiter-Zuordnungen in user_projects nachgetragen.")
+            print("ℹ️ Alte Spalte 'role' existiert nicht mehr, überspringe zusätzliche Migration von Abteilungsleitern.")
 
         # ========== assigned_coachings table ==========
         # 6. Create assigned_coachings table if not exists
@@ -452,14 +461,10 @@ def create_app(config_class=Config):
             print("✅ Abteilungsleiter Berechtigungen gesetzt.")
 
         # 16. Migrate existing users to role_id
-        # First, get all users with role string still set (if column exists)
-        # We'll use the old 'role' column if it still exists (it may have been dropped already)
-        # But we need to check if the column 'role' exists in users table
-        columns_users = [col['name'] for col in inspector.get_columns('users')]
-        if 'role' in columns_users:
-            print("⚠️ Alte Spalte 'role' in users gefunden – wird migriert...")
-            # Fetch all users that have role string and role_id is null
-            users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
+        # First, get all users that have role_id still null
+        users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
+        if users_to_migrate:
+            print(f"⚠️ {len(users_to_migrate)} Benutzer ohne Rolle gefunden – wird migriert...")
             for user_id, old_role in users_to_migrate:
                 # Map old role string to new role name
                 role_name = old_role  # since we kept the same names
@@ -482,7 +487,7 @@ def create_app(config_class=Config):
             conn.commit()
             print("✅ Migration der Benutzer abgeschlossen.")
         else:
-            print("✅ Alte Spalte 'role' existiert nicht mehr.")
+            print("✅ Alle Benutzer haben bereits eine Rolle.")
 
         # 17. Drop old 'role' column if it exists
         columns_users = [col['name'] for col in inspector.get_columns('users')]
@@ -491,6 +496,8 @@ def create_app(config_class=Config):
             conn.execute(text('ALTER TABLE users DROP COLUMN role'))
             conn.commit()
             print("✅ Alte Spalte 'role' gelöscht.")
+        else:
+            print("✅ Alte Spalte 'role' existiert nicht mehr.")
 
         print("--- Migration abgeschlossen ---")
 
@@ -518,9 +525,9 @@ def create_app(config_class=Config):
         from app.models import Project
         from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
         if current_user.is_authenticated:
-            if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+            if current_user.role.name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
                 projects = Project.query.order_by(Project.name).all()
-            elif current_user.role == ROLE_ABTEILUNGSLEITER:
+            elif current_user.role.name == ROLE_ABTEILUNGSLEITER:
                 projects = current_user.projects.order_by(Project.name).all()
             else:
                 projects = []
@@ -532,7 +539,7 @@ def create_app(config_class=Config):
     @app.context_processor
     def inject_assigned_count():
         from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER
-        if current_user.is_authenticated and current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
+        if current_user.is_authenticated and current_user.role.name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
             # Nur für Coaches (alle anderen Rollen, die coachen können)
             from app.models import AssignedCoaching
             count = AssignedCoaching.query.filter_by(coach_id=current_user.id, status='pending').count()
