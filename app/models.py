@@ -39,16 +39,41 @@ class Project(db.Model):
     def __repr__(self):
         return f'<Project {self.name}>'
 
+
+class Permission(db.Model):
+    __tablename__ = 'permissions'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.String(255))
+
+    def __repr__(self):
+        return f'<Permission {self.name}>'
+
+
+class Role(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.String(255))
+
+    permissions = db.relationship('Permission', secondary='role_permissions', backref='roles')
+    projects = db.relationship('Project', secondary='role_projects', backref='roles')
+
+    def __repr__(self):
+        return f'<Role {self.name}>'
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True, nullable=False)
     email = db.Column(db.String(120), index=True, unique=False, nullable=True)
     password_hash = db.Column(db.String(256), nullable=True)
-    role = db.Column(db.String(20), nullable=False, default='Teammitglied')
     team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id', name='fk_user_team_id_if_leader'), nullable=True)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False)
 
+    role = db.relationship('Role', backref='users')
     coachings_done = db.relationship('Coaching', foreign_keys='Coaching.coach_id', backref='coach', lazy='dynamic')
     teams_led = db.relationship('Team', secondary=team_leaders, back_populates='leaders', lazy='dynamic')
     workshops_given = db.relationship('Workshop', backref='coach', lazy='dynamic')
@@ -65,26 +90,36 @@ class User(UserMixin, db.Model):
 
     @property
     def has_multiple_projects(self):
-        if self.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+        if self.role.name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
             return False
-        if self.role == ROLE_ABTEILUNGSLEITER:
+        if self.role.name == ROLE_ABTEILUNGSLEITER:
             return self.projects.count() > 1
         else:
             from app.models import Project
             return Project.query.count() > 1
 
     def get_allowed_project_ids(self):
-        if self.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        if self.role.name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             from app.models import Project
             return [p.id for p in Project.query.all()]
-        elif self.role == ROLE_ABTEILUNGSLEITER:
+        elif self.role.name == ROLE_ABTEILUNGSLEITER:
             return [p.id for p in self.projects]
         else:
             return [self.project_id] if self.project_id else []
 
+    def has_permission(self, permission_name):
+        """Check if user's role has the given permission."""
+        if not self.role:
+            return False
+        # Admin role gets all permissions
+        if self.role.name == ROLE_ADMIN:
+            return True
+        return any(p.name == permission_name for p in self.role.permissions)
+
 @login_manager.user_loader
 def load_user(id):
     return User.query.get(int(id))
+
 
 class Team(db.Model):
     __tablename__ = 'teams'
@@ -104,6 +139,7 @@ class Team(db.Model):
     def __repr__(self):
         return f'<Team {self.name}>'
 
+
 class TeamMember(db.Model):
     __tablename__ = 'team_members'
     id = db.Column(db.Integer, primary_key=True)
@@ -122,6 +158,7 @@ class TeamMember(db.Model):
 
     def __repr__(self):
         return f'<TeamMember {self.name} (Team ID: {self.team_id})>'
+
 
 class Coaching(db.Model):
     __tablename__ = 'coachings'
@@ -208,6 +245,7 @@ class Coaching(db.Model):
     def __repr__(self):
         return f'<Coaching {self.id} for TeamMember {self.team_member_id} on {self.coaching_date}>'
 
+
 class Workshop(db.Model):
     __tablename__ = 'workshops'
     id = db.Column(db.Integer, primary_key=True)
@@ -251,10 +289,10 @@ class AssignedCoaching(db.Model):
 
     @property
     def is_overdue(self):
-        # Use naive UTC datetime to compare with deadline (which is stored as naive)
         return datetime.utcnow() > self.deadline and self.status not in ['completed', 'expired']
 
     def __repr__(self):
         return f'<AssignedCoaching {self.id} to {self.coach.username} for {self.team_member.name}>'
+
 
 print("<<<< ENDE models.py (ARCHIV-HISTORIE) GELADEN >>>>")
