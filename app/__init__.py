@@ -1,4 +1,4 @@
-# app/__init__.py
+# app/__init__.py (full corrected version with proper column checks)
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -95,7 +95,6 @@ def create_app(config_class=Config):
             print("✅ Tabelle 'user_projects' erstellt.")
 
             # Für alle bestehenden Abteilungsleiter die Zuordnung zum aktuellen Projekt eintragen
-            # Check if 'role' column still exists in users table
             columns_users = [col['name'] for col in inspector.get_columns('users')]
             if 'role' in columns_users:
                 res = conn.execute(text("SELECT id, project_id FROM users WHERE role = 'Abteilungsleiter' AND project_id IS NOT NULL"))
@@ -328,7 +327,6 @@ def create_app(config_class=Config):
                 print(f"✅ Rolle '{role_name}' hinzugefügt.")
 
         # 15. Assign permissions to roles
-        # Fetch all permissions
         all_perms = conn.execute(text("SELECT id, name FROM permissions")).fetchall()
         perm_map = {p[1]: p[0] for p in all_perms}
 
@@ -460,34 +458,35 @@ def create_app(config_class=Config):
                         )
             print("✅ Abteilungsleiter Berechtigungen gesetzt.")
 
-        # 16. Migrate existing users to role_id
-        # First, get all users that have role_id still null
-        users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
-        if users_to_migrate:
-            print(f"⚠️ {len(users_to_migrate)} Benutzer ohne Rolle gefunden – wird migriert...")
-            for user_id, old_role in users_to_migrate:
-                # Map old role string to new role name
-                role_name = old_role  # since we kept the same names
-                role_id = conn.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}).fetchone()
-                if role_id:
-                    conn.execute(
-                        text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
-                        {"role_id": role_id[0], "user_id": user_id}
-                    )
-                    print(f"✅ Benutzer ID {user_id} zu Rolle '{role_name}' zugewiesen.")
-                else:
-                    print(f"⚠️ Keine Rolle für '{old_role}' gefunden, Benutzer ID {user_id} wird auf Standard gesetzt.")
-                    # Set to a default role (e.g., 'Teamleiter')
-                    default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
-                    if default_role:
+        # 16. Migrate existing users to role_id (only if 'role' column still exists)
+        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        if 'role' in columns_users:
+            users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
+            if users_to_migrate:
+                print(f"⚠️ {len(users_to_migrate)} Benutzer ohne Rolle gefunden – wird migriert...")
+                for user_id, old_role in users_to_migrate:
+                    role_name = old_role
+                    role_id = conn.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}).fetchone()
+                    if role_id:
                         conn.execute(
                             text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
-                            {"role_id": default_role[0], "user_id": user_id}
+                            {"role_id": role_id[0], "user_id": user_id}
                         )
-            conn.commit()
-            print("✅ Migration der Benutzer abgeschlossen.")
+                        print(f"✅ Benutzer ID {user_id} zu Rolle '{role_name}' zugewiesen.")
+                    else:
+                        print(f"⚠️ Keine Rolle für '{old_role}' gefunden, Benutzer ID {user_id} wird auf Standard gesetzt.")
+                        default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
+                        if default_role:
+                            conn.execute(
+                                text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
+                                {"role_id": default_role[0], "user_id": user_id}
+                            )
+                conn.commit()
+                print("✅ Migration der Benutzer abgeschlossen.")
+            else:
+                print("✅ Alle Benutzer haben bereits eine Rolle.")
         else:
-            print("✅ Alle Benutzer haben bereits eine Rolle.")
+            print("✅ Alte Spalte 'role' existiert nicht mehr, überspringe Benutzermigration.")
 
         # 17. Drop old 'role' column if it exists
         columns_users = [col['name'] for col in inspector.get_columns('users')]
@@ -540,7 +539,6 @@ def create_app(config_class=Config):
     def inject_assigned_count():
         from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER
         if current_user.is_authenticated and current_user.role.name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
-            # Nur für Coaches (alle anderen Rollen, die coachen können)
             from app.models import AssignedCoaching
             count = AssignedCoaching.query.filter_by(coach_id=current_user.id, status='pending').count()
         else:
