@@ -1,4 +1,4 @@
-# app/__init__.py (with fix to assign default roles to users with NULL role_id AND invalid role_id)
+# app/__init__.py (with fixed step 16.5)
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -482,8 +482,8 @@ def create_app(config_class=Config):
             # Build a query with placeholders for each ID
             placeholders = ','.join(['?'] * len(valid_role_ids))
             query = text(f"SELECT id, role_id FROM users WHERE role_id IS NOT NULL AND role_id NOT IN ({placeholders})")
-            # Pass the list of valid IDs as parameters
-            invalid_users = conn.execute(query, valid_role_ids).fetchall()
+            # Pass parameters as a tuple (critical fix!)
+            invalid_users = conn.execute(query, tuple(valid_role_ids)).fetchall()
             if invalid_users:
                 print(f"⚠️ {len(invalid_users)} Benutzer haben ungültige role_id. Setze Standardrolle 'Teamleiter'...")
                 default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
