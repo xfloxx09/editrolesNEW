@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, abort, current_app, jsonify, session
 from flask_login import login_required, current_user
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, AssignedCoaching
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, AssignedCoaching, Role
 from app.forms import CoachingForm, ProjectLeaderNoteForm, PasswordChangeForm, WorkshopForm, AssignedCoachingForm
 from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ARCHIV_TEAM_NAME
 from sqlalchemy import desc, func, or_, and_, false
@@ -104,7 +104,6 @@ def get_coaching_subject_distribution(period_filter_str=None, selected_team_id_s
     return {'labels':[r.subject for r in res if r.subject],'values':[r.count for r in res if r.subject]}
 
 def get_visible_project_id():
-    # current_user.role is a Role object, we need role_name
     if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
         return request.args.get('project', type=int) or session.get('active_project')
     else:
@@ -1027,7 +1026,8 @@ def assigned_coachings():
         teams_q = Team.query.filter(Team.project_id.in_(project_ids), Team.name != ARCHIV_TEAM_NAME).order_by(Team.name)
         all_teams = teams_q.all()
         
-        coaches_q = User.query.filter(User.role_name.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username)
+        # Fixed: Use join with Role to filter by role name
+        coaches_q = User.query.join(User.role).filter(Role.name.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username)
         all_coaches = coaches_q.all()
         
         members_q = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
