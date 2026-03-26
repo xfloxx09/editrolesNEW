@@ -1,4 +1,4 @@
-# app/__init__.py (with simplified role validation)
+# app/__init__.py
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -10,6 +10,7 @@ import os
 from datetime import datetime, timezone
 import pytz
 from sqlalchemy import inspect, text
+from app.constants import ARCHIV_TEAM_NAME
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -564,7 +565,7 @@ def create_app(config_class=Config):
     @app.context_processor
     def inject_user_allowed_projects():
         from app.models import Project
-        from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
+        from app.utils import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
         if current_user.is_authenticated:
             if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
                 projects = Project.query.order_by(Project.name).all()
@@ -579,7 +580,7 @@ def create_app(config_class=Config):
     # Kontextprozessor für die Anzahl ausstehender zugewiesener Coachings (für Badge)
     @app.context_processor
     def inject_assigned_count():
-        from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER
+        from app.utils import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER
         if current_user.is_authenticated and current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
             from app.models import AssignedCoaching
             count = AssignedCoaching.query.filter_by(coach_id=current_user.id, status='pending').count()
