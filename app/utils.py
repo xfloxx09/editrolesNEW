@@ -3,7 +3,8 @@ from functools import wraps
 from flask_login import current_user
 from flask import abort, flash, redirect, url_for
 from app import db
-from app.models import Team, ARCHIV_TEAM_NAME
+from app.models import Team
+from app.constants import ARCHIV_TEAM_NAME
 
 # Role constants (must match the names in the roles table)
 ROLE_ADMIN = 'Admin'
@@ -14,8 +15,6 @@ ROLE_TEAMLEITER = 'Teamleiter'
 ROLE_QM = 'Qualitätsmanager'
 ROLE_SALESCOACH = 'SalesCoach'
 ROLE_TRAINER = 'Trainer'
-
-ARCHIV_TEAM_NAME = "ARCHIV"
 
 def role_required(role_name_or_list):
     """
