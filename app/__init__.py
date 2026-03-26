@@ -1,4 +1,4 @@
-# app/__init__.py (with fixed step 16.5)
+# app/__init__.py (with simplified role validation)
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -479,11 +479,9 @@ def create_app(config_class=Config):
         # 16.5. Ensure all role_id values are valid (point to existing roles)
         valid_role_ids = [row[0] for row in conn.execute(text("SELECT id FROM roles")).fetchall()]
         if valid_role_ids:
-            # Build a query with placeholders for each ID
-            placeholders = ','.join(['?'] * len(valid_role_ids))
-            query = text(f"SELECT id, role_id FROM users WHERE role_id IS NOT NULL AND role_id NOT IN ({placeholders})")
-            # Pass parameters as a tuple (critical fix!)
-            invalid_users = conn.execute(query, tuple(valid_role_ids)).fetchall()
+            # Get all users with role_id set
+            users_with_role = conn.execute(text("SELECT id, role_id FROM users WHERE role_id IS NOT NULL")).fetchall()
+            invalid_users = [(user_id, role_id) for user_id, role_id in users_with_role if role_id not in valid_role_ids]
             if invalid_users:
                 print(f"⚠️ {len(invalid_users)} Benutzer haben ungültige role_id. Setze Standardrolle 'Teamleiter'...")
                 default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
