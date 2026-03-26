@@ -1,4 +1,4 @@
-# app/__init__.py (with fix to assign default roles to users with NULL role_id)
+# app/__init__.py (with fix to assign default roles to users with NULL role_id AND invalid role_id)
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -475,6 +475,34 @@ def create_app(config_class=Config):
                 print("❌ Standardrolle 'Teamleiter' nicht gefunden.")
         else:
             print("✅ Alle Benutzer haben bereits eine Rolle.")
+
+        # 16.5. Ensure all role_id values are valid (point to existing roles)
+        valid_role_ids = [row[0] for row in conn.execute(text("SELECT id FROM roles")).fetchall()]
+        if valid_role_ids:
+            # Find users with role_id not in valid_role_ids
+            # Use text with bindparams because we need to pass a tuple
+            # We'll construct the query with the tuple directly
+            placeholders = ','.join(['?'] * len(valid_role_ids))
+            query = text(f"SELECT id, role_id FROM users WHERE role_id IS NOT NULL AND role_id NOT IN ({placeholders})")
+            # Execute with the tuple
+            invalid_users = conn.execute(query, valid_role_ids).fetchall()
+            if invalid_users:
+                print(f"⚠️ {len(invalid_users)} Benutzer haben ungültige role_id. Setze Standardrolle 'Teamleiter'...")
+                default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
+                if default_role:
+                    for user_id, old_role_id in invalid_users:
+                        conn.execute(
+                            text("UPDATE users SET role_id = :new_role_id WHERE id = :user_id"),
+                            {"new_role_id": default_role[0], "user_id": user_id}
+                        )
+                    conn.commit()
+                    print(f"✅ {len(invalid_users)} Benutzer korrigiert.")
+                else:
+                    print("❌ Standardrolle 'Teamleiter' nicht gefunden.")
+            else:
+                print("✅ Alle Benutzer haben gültige role_id.")
+        else:
+            print("⚠️ Keine Rollen in der Datenbank gefunden.")
 
         # 17. Migrate existing users to role_id (only if 'role' column still exists)
         columns_users = [col['name'] for col in inspector.get_columns('users')]
