@@ -18,28 +18,28 @@
             <tbody>
                 {% for role in roles %}
                  …
-                    <td>{{ role.name }}</td>
-                    <td>{{ role.description }}</td>
-                    <td>
+                     <td>{{ role.name }}</td>
+                     <td>{{ role.description }}</td>
+                     <td>
                         {% for perm in role.permissions %}
                             <span class="badge badge-secondary">{{ perm.name }}</span>
                         {% endfor %}
-                    </td>
-                    <td>
+                     </td>
+                     <td>
                         {% for proj in role.projects %}
                             <span class="badge badge-info">{{ proj.name }}</span>
                         {% endfor %}
-                    </td>
-                    <td>{{ role.users|length }}</td>  <!-- Fixed: count() -> length -->
-                    <td>
+                     </td>
+                     <td>{{ role.users|length }}</td>
+                     <td>
                         <a href="{{ url_for('admin.edit_role', role_id=role.id) }}" class="btn btn-sm btn-primary">Bearbeiten</a>
-                        {% if role.name not in ['Admin', 'Betriebsleiter'] and role.users.count() == 0 %}
+                        {% if role.name not in ['Admin', 'Betriebsleiter'] and role.users|length == 0 %}
                         <form action="{{ url_for('admin.delete_role', role_id=role.id) }}" method="POST" style="display: inline;">
                             <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Rolle wirklich löschen?')">Löschen</button>
                         </form>
                         {% endif %}
-                    </td>
-                 </tr>
+                     </td>
+                  </tr>
                 {% endfor %}
             </tbody>
         </table>
