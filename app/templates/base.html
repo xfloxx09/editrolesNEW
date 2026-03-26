@@ -19,11 +19,11 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
-                    {% if current_user.role_name == 'Teamleiter' and current_user.teams_led.count() > 0 %}
+                    {% if has_perm('view_own_team') and current_user.teams_led.count() > 0 %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}
-                    {% if current_user.role_name in ['Projektleiter', 'Qualitätsmanager', 'Abteilungsleiter', 'Admin', 'Betriebsleiter'] %} 
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.pl_qm_dashboard') }}">Teams</a></li> 
+                    {% if has_perm('view_pl_qm_dashboard') %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.pl_qm_dashboard') }}">Teams</a></li>
                     {% endif %}
                     {% if current_user.role_name in ['Admin', 'Betriebsleiter'] %}
                         <li class="nav-item dropdown">
@@ -44,8 +44,8 @@
             </ul>
             <ul class="navbar-nav">
                 {% if current_user.is_authenticated %}
-                    <!-- "Jetzt coachen" Button -->
-                    {% if current_user.role_name in ['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Admin', 'Betriebsleiter'] %}
+                    <!-- "Jetzt coachen" Button – permission based -->
+                    {% if has_perm('coach') %}
                         <li class="nav-item dropdown mr-2">
                             <a class="nav-link dropdown-toggle telekom-button" href="#" id="coachDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="background-color: #e20074; border-radius: 20px; padding: 5px 15px; color: white;">
                                 <i class="fas fa-plus-circle"></i> Neues Coaching
