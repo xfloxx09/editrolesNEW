@@ -104,7 +104,8 @@ def get_coaching_subject_distribution(period_filter_str=None, selected_team_id_s
     return {'labels':[r.subject for r in res if r.subject],'values':[r.count for r in res if r.subject]}
 
 def get_visible_project_id():
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+    # current_user.role is a Role object, we need role_name
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
         return request.args.get('project', type=int) or session.get('active_project')
     else:
         return current_user.project_id
@@ -183,7 +184,7 @@ def coaching_dashboard():
     if ls_d: list_q = list_q.filter(Coaching.coaching_date >= ls_d)
     if le_d: list_q = list_q.filter(Coaching.coaching_date <= le_d)
 
-    if current_user.role == ROLE_TEAMLEITER:
+    if current_user.role_name == ROLE_TEAMLEITER:
         led_team_ids = [team.id for team in current_user.teams_led]
         if not led_team_ids:
             flash("Sie leiten derzeit kein Team.", "warning")
@@ -235,8 +236,8 @@ def coaching_dashboard():
             })
 
     all_projects = None
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
-        if current_user.role == ROLE_ABTEILUNGSLEITER:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+        if current_user.role_name == ROLE_ABTEILUNGSLEITER:
             all_projects = current_user.projects.order_by(Project.name).all()
         else:
             all_projects = Project.query.order_by(Project.name).all()
@@ -273,7 +274,7 @@ def team_view():
     project_filter = get_visible_project_id()
     page_title = "Team Ansicht"
 
-    if current_user.role == ROLE_TEAMLEITER and not view_team_id_arg:
+    if current_user.role_name == ROLE_TEAMLEITER and not view_team_id_arg:
         led_team_ids = [team.id for team in current_user.teams_led]
         if not led_team_ids:
             flash("Sie leiten derzeit kein Team.", "warning")
@@ -285,13 +286,13 @@ def team_view():
             flash("Zugewiesenes Team nicht gefunden.", "danger")
             return redirect(url_for('main.index'))
     elif view_team_id_arg:
-        if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
+        if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
             abort(403)
         selected_team_object = Team.query.get(view_team_id_arg)
         if selected_team_object:
             page_title = f"Team Ansicht: {selected_team_object.name}"
     else:
-        if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
+        if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
             teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
             if project_filter:
                 teams_query = teams_query.filter(Team.project_id == project_filter)
@@ -302,7 +303,7 @@ def team_view():
     if not selected_team_object:
         flash("Kein Team zum Anzeigen ausgewählt oder vorhanden.", "info")
         all_teams_for_selection = []
-        if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
+        if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
             teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
             if project_filter:
                 teams_query = teams_query.filter(Team.project_id == project_filter)
@@ -324,7 +325,7 @@ def team_view():
         team_members_stats.append({'id': member.id, 'name': member.name, 'avg_score': round(avg_score_val, 2), 'avg_leitfaden_adherence': round(avg_leitfaden_adherence_val, 1), 'total_coachings': len(member_coachings_list), 'raw_total_coaching_time': total_coaching_time_minutes_val, 'formatted_total_coaching_time': formatted_time_str})
 
     all_teams_for_dropdown = []
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
         teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
         if project_filter:
             teams_query = teams_query.filter(Team.project_id == project_filter)
@@ -341,16 +342,16 @@ def team_view():
 @login_required
 @role_required([ROLE_TEAMLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def add_coaching():
-    if current_user.role == ROLE_TEAMLEITER:
+    if current_user.role_name == ROLE_TEAMLEITER:
         user_team_ids = [team.id for team in current_user.teams_led]
     else:
         user_team_ids = []
 
-    form = CoachingForm(current_user_role=current_user.role, current_user_team_ids=user_team_ids)
+    form = CoachingForm(current_user_role=current_user.role_name, current_user_team_ids=user_team_ids)
 
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
         selected_project_id = request.args.get('project', type=int) or session.get('active_project') or current_user.project_id
-        if current_user.role == ROLE_ABTEILUNGSLEITER and selected_project_id not in current_user.get_allowed_project_ids():
+        if current_user.role_name == ROLE_ABTEILUNGSLEITER and selected_project_id not in current_user.get_allowed_project_ids():
             allowed = current_user.get_allowed_project_ids()
             selected_project_id = allowed[0] if allowed else None
     else:
@@ -417,16 +418,16 @@ def add_coaching():
 @login_required
 @role_required([ROLE_TEAMLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def add_workshop():
-    if current_user.role == ROLE_TEAMLEITER:
+    if current_user.role_name == ROLE_TEAMLEITER:
         user_team_ids = [team.id for team in current_user.teams_led]
     else:
         user_team_ids = []
 
-    form = WorkshopForm(current_user_role=current_user.role, current_user_team_ids=user_team_ids)
+    form = WorkshopForm(current_user_role=current_user.role_name, current_user_team_ids=user_team_ids)
 
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
         selected_project_id = request.args.get('project', type=int) or session.get('active_project') or current_user.project_id
-        if current_user.role == ROLE_ABTEILUNGSLEITER and selected_project_id not in current_user.get_allowed_project_ids():
+        if current_user.role_name == ROLE_ABTEILUNGSLEITER and selected_project_id not in current_user.get_allowed_project_ids():
             allowed = current_user.get_allowed_project_ids()
             selected_project_id = allowed[0] if allowed else None
     else:
@@ -485,19 +486,19 @@ def add_workshop():
 def edit_workshop(workshop_id):
     workshop_to_edit = Workshop.query.get_or_404(workshop_id)
 
-    if not (current_user.id == workshop_to_edit.coach_id or current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]):
+    if not (current_user.id == workshop_to_edit.coach_id or current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]):
         flash('Sie haben keine Berechtigung, diesen Workshop zu bearbeiten.', 'danger')
         abort(403)
 
-    if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and current_user.project_id != workshop_to_edit.project_id:
+    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and current_user.project_id != workshop_to_edit.project_id:
         abort(403)
 
-    if current_user.role == ROLE_TEAMLEITER:
+    if current_user.role_name == ROLE_TEAMLEITER:
         user_team_ids = [team.id for team in current_user.teams_led]
     else:
         user_team_ids = []
 
-    form = WorkshopForm(obj=workshop_to_edit, current_user_role=current_user.role, current_user_team_ids=user_team_ids)
+    form = WorkshopForm(obj=workshop_to_edit, current_user_role=current_user.role_name, current_user_team_ids=user_team_ids)
     form.update_participant_choices(project_id=workshop_to_edit.project_id)
 
     existing_participant_ids = [p.id for p in workshop_to_edit.participants]
@@ -597,8 +598,8 @@ def workshop_dashboard():
             })
 
     all_projects = None
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
-        if current_user.role == ROLE_ABTEILUNGSLEITER:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+        if current_user.role_name == ROLE_ABTEILUNGSLEITER:
             all_projects = current_user.projects.order_by(Project.name).all()
         else:
             all_projects = Project.query.order_by(Project.name).all()
@@ -636,19 +637,19 @@ def profile():
 def edit_coaching(coaching_id):
     coaching_to_edit = Coaching.query.get_or_404(coaching_id)
 
-    if not (current_user.id == coaching_to_edit.coach_id or current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]):
+    if not (current_user.id == coaching_to_edit.coach_id or current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]):
         flash('Sie haben keine Berechtigung, dieses Coaching zu bearbeiten.', 'danger')
         abort(403)
 
-    if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and current_user.project_id != coaching_to_edit.project_id:
+    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and current_user.project_id != coaching_to_edit.project_id:
         abort(403)
 
-    if current_user.role == ROLE_TEAMLEITER:
+    if current_user.role_name == ROLE_TEAMLEITER:
         user_team_ids = [team.id for team in current_user.teams_led]
     else:
         user_team_ids = []
 
-    form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role, current_user_team_ids=user_team_ids)
+    form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role_name, current_user_team_ids=user_team_ids)
     form.update_team_member_choices(exclude_archiv=False, project_id=coaching_to_edit.project_id)
 
     # --- Pre-populate assignment choices on POST before validation ---
@@ -707,13 +708,13 @@ def pl_qm_dashboard():
     coachings_paginated = coachings_query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=10, error_out=False)
     note_form = ProjectLeaderNoteForm()
     title = "Notizen Dashboard"
-    if current_user.role == ROLE_QM:
+    if current_user.role_name == ROLE_QM:
         title = "Quality Coach Dashboard"
-    elif current_user.role == ROLE_PROJEKTLEITER:
+    elif current_user.role_name == ROLE_PROJEKTLEITER:
         title = "Projektleiter Dashboard"
-    elif current_user.role == ROLE_ABTEILUNGSLEITER:
+    elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
         title = "Abteilungsleiter Dashboard"
-    elif current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+    elif current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         title = "Dashboard (Alle Projekte)"
 
     if request.method == 'POST' and 'submit_note' in request.form:
@@ -724,7 +725,7 @@ def pl_qm_dashboard():
         elif form_val.validate():
             try:
                 coaching = Coaching.query.get_or_404(int(coaching_id_str))
-                if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.project_id != project_filter:
+                if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.project_id != project_filter:
                     abort(403)
                 coaching.project_leader_notes = form_val.notes.data
                 db.session.commit()
@@ -771,7 +772,7 @@ def pl_qm_dashboard():
         selected_team_id = int(selected_team_id_filter_str)
         selected_team_object_for_cards = Team.query.get(selected_team_id)
         if selected_team_object_for_cards:
-            if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and selected_team_object_for_cards.project_id != project_filter:
+            if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and selected_team_object_for_cards.project_id != project_filter:
                 abort(403)
             for member in selected_team_object_for_cards.members.all():
                 member_coachings_list = Coaching.query.filter_by(team_member_id=member.id).all()
@@ -889,9 +890,9 @@ def assigned_coachings():
         tab_active = 'completed'
     
     # Build base query
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER]:
         view_type = 'pl'
-        if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             query = AssignedCoaching.query
         else:
             query = AssignedCoaching.query.filter_by(project_leader_id=current_user.id)
@@ -900,9 +901,9 @@ def assigned_coachings():
         
         # --- Fetch member performance data for quick overview (only for PL) ---
         # Get allowed project IDs
-        if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             allowed_project_ids = [p.id for p in Project.query.all()]
-        elif current_user.role == ROLE_ABTEILUNGSLEITER:
+        elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
             allowed_project_ids = current_user.get_allowed_project_ids()
         else:
             allowed_project_ids = [current_user.project_id]
@@ -1016,9 +1017,9 @@ def assigned_coachings():
     all_coaches = []
     all_members = []
     if view_type == 'pl':
-        if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             project_ids = [p.id for p in Project.query.all()]
-        elif current_user.role == ROLE_ABTEILUNGSLEITER:
+        elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
             project_ids = current_user.get_allowed_project_ids()
         else:
             project_ids = [current_user.project_id]
@@ -1026,7 +1027,7 @@ def assigned_coachings():
         teams_q = Team.query.filter(Team.project_id.in_(project_ids), Team.name != ARCHIV_TEAM_NAME).order_by(Team.name)
         all_teams = teams_q.all()
         
-        coaches_q = User.query.filter(User.role.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username)
+        coaches_q = User.query.filter(User.role_name.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username)
         all_coaches = coaches_q.all()
         
         members_q = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
@@ -1036,9 +1037,9 @@ def assigned_coachings():
         all_members = members_q.all()
     
     all_projects = []
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         all_projects = Project.query.order_by(Project.name).all()
-    elif current_user.role == ROLE_ABTEILUNGSLEITER:
+    elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
         all_projects = current_user.projects.order_by(Project.name).all()
     
     return render_template('main/assigned_coachings.html',
@@ -1068,9 +1069,9 @@ def assigned_coachings():
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER])
 def create_assigned_coaching():
     # Get list of project IDs the current user can see
-    if current_user.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         allowed_project_ids = [p.id for p in Project.query.all()]
-    elif current_user.role == ROLE_ABTEILUNGSLEITER:
+    elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
         allowed_project_ids = current_user.get_allowed_project_ids()
     else:
         allowed_project_ids = [current_user.project_id]
@@ -1166,7 +1167,7 @@ def reject_assigned_coaching(assignment_id):
 @login_required
 def cancel_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
-    if assignment.project_leader_id != current_user.id and current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+    if assignment.project_leader_id != current_user.id and current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         flash('Sie haben keine Berechtigung, diese Aufgabe zu stornieren.', 'danger')
         return redirect(url_for('main.assigned_coachings'))
     if assignment.status in ['completed', 'expired', 'cancelled']:
@@ -1182,7 +1183,7 @@ def cancel_assigned_coaching(assignment_id):
 @login_required
 def assigned_coaching_report(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
-    if assignment.project_leader_id != current_user.id and current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+    if assignment.project_leader_id != current_user.id and current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         abort(403)
 
     coachings = assignment.coachings.order_by(Coaching.coaching_date).all()
@@ -1228,13 +1229,13 @@ def api_coach_team_members(coach_id):
         project_filter = request.args.get('project', type=int)
 
         # Determine which team members this coach can coach
-        if coach.role in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        if coach.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             # Admin/Betriebsleiter can coach any member in the project (if project filter active)
             query = TeamMember.query.join(Team, TeamMember.team_id == Team.id)
             if project_filter:
                 query = query.filter(Team.project_id == project_filter)
             query = query.filter(Team.name != ARCHIV_TEAM_NAME)
-        elif coach.role == ROLE_ABTEILUNGSLEITER:
+        elif coach.role_name == ROLE_ABTEILUNGSLEITER:
             # Abteilungsleiter can coach members in projects they are assigned to
             allowed_project_ids = coach.get_allowed_project_ids()
             if project_filter and project_filter in allowed_project_ids:
@@ -1242,7 +1243,7 @@ def api_coach_team_members(coach_id):
             if not allowed_project_ids:
                 return jsonify([])
             query = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.project_id.in_(allowed_project_ids), Team.name != ARCHIV_TEAM_NAME)
-        elif coach.role == ROLE_TEAMLEITER:
+        elif coach.role_name == ROLE_TEAMLEITER:
             # Teamleiter can coach members of teams they lead
             led_team_ids = [team.id for team in coach.teams_led]
             if not led_team_ids:
@@ -1295,7 +1296,7 @@ def get_member_coaching_trend():
     except ValueError:
         return jsonify({"error": "Invalid Team Member ID format"}), 400
     member = TeamMember.query.get_or_404(team_member_id)
-    if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and member.team.project_id != current_user.project_id:
+    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and member.team.project_id != current_user.project_id:
         return jsonify({"error": "Access denied"}), 403
 
     query = Coaching.query.filter_by(team_member_id=team_member_id).order_by(Coaching.coaching_date.desc())
@@ -1324,10 +1325,10 @@ def get_member_coaching_trend():
 @bp.route('/set-project/<int:project_id>')
 @login_required
 def set_project(project_id):
-    if current_user.role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
+    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
         abort(403)
     project = Project.query.get_or_404(project_id)
-    if current_user.role == ROLE_ABTEILUNGSLEITER:
+    if current_user.role_name == ROLE_ABTEILUNGSLEITER:
         if project not in current_user.projects:
             abort(403)
     session['active_project'] = project_id
