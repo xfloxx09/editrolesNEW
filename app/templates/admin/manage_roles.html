@@ -30,7 +30,7 @@
                             <span class="badge badge-info">{{ proj.name }}</span>
                         {% endfor %}
                     </td>
-                    <td>{{ role.users.count() }}</td>
+                    <td>{{ role.users|length }}</td>  <!-- Fixed: count() -> length -->
                     <td>
                         <a href="{{ url_for('admin.edit_role', role_id=role.id) }}" class="btn btn-sm btn-primary">Bearbeiten</a>
                         {% if role.name not in ['Admin', 'Betriebsleiter'] and role.users.count() == 0 %}
