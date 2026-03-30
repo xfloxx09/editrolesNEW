@@ -128,6 +128,7 @@ def index():
 
 @bp.route('/coaching-dashboard')
 @login_required
+@permission_required('view_coaching_dashboard')
 def coaching_dashboard():
     page = request.args.get('page', 1, type=int)
     period_arg = request.args.get('period', 'all')
@@ -136,6 +137,7 @@ def coaching_dashboard():
     member_filter = request.args.get('member_id', type=int)
     project_filter = get_visible_project_id()
 
+    # --- Globale Statistiken (mit allen Filtern) ---
     global_base = Coaching.query.join(Team, Coaching.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME)
 
     if project_filter:
@@ -261,7 +263,7 @@ def coaching_dashboard():
 
 @bp.route('/team_view', methods=['GET'])
 @login_required
-@role_required([ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_ABTEILUNGSLEITER])
+@permission_required('view_team_view')
 def team_view():
     selected_team_object = None
     team_coachings_list_for_display = []
@@ -336,7 +338,7 @@ def team_view():
 
 @bp.route('/coaching/add', methods=['GET', 'POST'])
 @login_required
-@role_required([ROLE_TEAMLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+@permission_required('add_coaching')
 def add_coaching():
     if current_user.role_name == ROLE_TEAMLEITER:
         user_team_ids = [team.id for team in current_user.teams_led]
@@ -410,7 +412,7 @@ def add_coaching():
 
 @bp.route('/workshop/add', methods=['GET', 'POST'])
 @login_required
-@role_required([ROLE_TEAMLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+@permission_required('add_workshop')
 def add_workshop():
     if current_user.role_name == ROLE_TEAMLEITER:
         user_team_ids = [team.id for team in current_user.teams_led]
@@ -477,6 +479,7 @@ def add_workshop():
 
 @bp.route('/workshop/<int:workshop_id>/edit', methods=['GET', 'POST'])
 @login_required
+@permission_required('edit_workshop')
 def edit_workshop(workshop_id):
     workshop_to_edit = Workshop.query.get_or_404(workshop_id)
 
@@ -551,7 +554,7 @@ def edit_workshop(workshop_id):
 
 @bp.route('/workshop-dashboard', methods=['GET'])
 @login_required
-@role_required([ROLE_TEAMLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER])
+@permission_required('view_workshop_dashboard')
 def workshop_dashboard():
     page = request.args.get('page', 1, type=int)
     period_arg = request.args.get('period', 'all')
@@ -628,6 +631,7 @@ def profile():
 
 @bp.route('/coaching/<int:coaching_id>/edit', methods=['GET', 'POST'])
 @login_required
+@permission_required('edit_coaching')
 def edit_coaching(coaching_id):
     coaching_to_edit = Coaching.query.get_or_404(coaching_id)
 
@@ -883,7 +887,7 @@ def assigned_coachings():
         if project_filter:
             query = query.join(AssignedCoaching.team_member).join(TeamMember.team).filter(Team.project_id == project_filter)
         
-        # --- Optimized member performance data (single query for all coachings) ---
+        # Optimized member performance data (single query for all coachings)
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             allowed_project_ids = [p.id for p in Project.query.all()]
         elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
