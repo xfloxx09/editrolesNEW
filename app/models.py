@@ -103,12 +103,10 @@ class User(UserMixin, db.Model):
 
     @property
     def role_name(self):
-        """Return the name of the user's role."""
         return self.role.name if self.role else None
 
     @cached_property
     def permission_names(self):
-        """Return a set of permission names this user has (cached after first access)."""
         if not self.role:
             return set()
         if self.role.name == ROLE_ADMIN:
@@ -135,7 +133,6 @@ class User(UserMixin, db.Model):
             return [self.project_id] if self.project_id else []
 
     def has_permission(self, permission_name):
-        """Check if user's role has the given permission."""
         if not self.role:
             return False
         if self.role.name == ROLE_ADMIN:
@@ -180,9 +177,14 @@ class TeamMember(db.Model):
     original_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=True)
     original_project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
     
-    # NEW: link to user account
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, unique=True)
     user = db.relationship('User', backref='team_member', uselist=False)
+    
+    # NEW fields
+    pylon = db.Column(db.String(50), nullable=True)
+    plt_id = db.Column(db.String(50), nullable=True)
+    ma_kennung = db.Column(db.String(50), nullable=True)
+    dag_id = db.Column(db.String(50), nullable=True)
 
     original_team = db.relationship('Team', foreign_keys=[original_team_id])
     original_project = db.relationship('Project', foreign_keys=[original_project_id])
