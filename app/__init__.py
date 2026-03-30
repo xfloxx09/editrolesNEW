@@ -1,4 +1,4 @@
-# app/__init__.py (user creation disabled)
+# app/__init__.py
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 import pytz
 from sqlalchemy import inspect, text
 from app.constants import ARCHIV_TEAM_NAME
-from werkzeug.security import generate_password_hash
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -453,11 +452,11 @@ def create_app(config_class=Config):
                         text("SELECT 1 FROM role_permissions WHERE role_id = :role_id AND permission_id = :perm_id"),
                         {"role_id": abt_id, "perm_id": perm_id}
                     ).fetchone()
-                        if not exists:
-                            conn.execute(
-                                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
-                                {"role_id": abt_id, "perm_id": perm_id}
-                            )
+                    if not exists:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                            {"role_id": abt_id, "perm_id": perm_id}
+                        )
             print("✅ Abteilungsleiter Berechtigungen gesetzt.")
 
         # 16. Ensure all users have a role_id (assign default if NULL)
@@ -578,8 +577,8 @@ def create_app(config_class=Config):
             print("✅ Rolle 'Mitarbeiter' existiert bereits.")
 
         # ========== User creation block REMOVED ==========
-        # To create users for team members, run a separate script or use admin panel.
-        print("ℹ️ Benutzer für Teammitglieder müssen manuell erstellt werden (z.B. über Admin Panel).")
+        # You will manually create users for team members using the admin panel or a SQL script.
+        print("ℹ️ Benutzer für Teammitglieder müssen manuell erstellt werden (Admin Panel -> Team mit Benutzer erstellen).")
 
         print("--- Migration abgeschlossen ---")
 
