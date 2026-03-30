@@ -4,7 +4,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching
-from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm
+from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm
 from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
@@ -528,6 +528,48 @@ def delete_team_member_permanently(member_id):
     return redirect(url_for('admin.panel'))
 
 
+# NEW: Create team member with optional user account
+@bp.route('/teammembers/create-with-user', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def create_team_member_with_user():
+    form = TeamMemberWithUserForm()
+    if form.validate_on_submit():
+        try:
+            # Create team member
+            team_member = TeamMember(name=form.name.data, team_id=form.team_id.data)
+            db.session.add(team_member)
+            db.session.flush()
+
+            if form.create_user.data and form.username.data:
+                # Get the "Mitarbeiter" role
+                role = Role.query.filter_by(name='Mitarbeiter').first()
+                if not role:
+                    flash('Die Rolle "Mitarbeiter" existiert nicht. Bitte zuerst erstellen.', 'danger')
+                    db.session.rollback()
+                    return redirect(url_for('admin.create_team_member_with_user'))
+                # Create user
+                user = User(
+                    username=form.username.data,
+                    email=form.email.data if form.email.data else None,
+                    role_id=role.id,
+                    project_id=team_member.team.project_id  # Use the team's project
+                )
+                user.set_password(form.password.data)
+                db.session.add(user)
+                db.session.flush()
+                # Link user to team member
+                team_member.user_id = user.id
+            db.session.commit()
+            flash('Teammitglied erfolgreich erstellt!', 'success')
+            return redirect(url_for('admin.panel'))
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Fehler beim Erstellen des Teammitglieds mit Benutzer: {e}")
+            flash(f'Fehler: {str(e)}', 'danger')
+    return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
+
+
 # --- Coaching Management (Admin) ---
 @bp.route('/manage_coachings', methods=['GET', 'POST'])
 @login_required
@@ -971,7 +1013,6 @@ def manage_assigned_coachings():
             if assignment_ids_to_delete:
                 try:
                     assignment_ids_to_delete_int = [int(id_str) for id_str in assignment_ids_to_delete]
-                    # Clear references in coachings
                     Coaching.query.filter(Coaching.assigned_coaching_id.in_(assignment_ids_to_delete_int)).update({Coaching.assigned_coaching_id: None}, synchronize_session='fetch')
                     deleted_count = AssignedCoaching.query.filter(AssignedCoaching.id.in_(assignment_ids_to_delete_int)).delete(synchronize_session='fetch')
                     db.session.commit()
@@ -988,11 +1029,8 @@ def manage_assigned_coachings():
 
     assignments_paginated = query.order_by(AssignedCoaching.deadline.desc()).paginate(page=page, per_page=15, error_out=False)
 
-    # Prepare filter dropdowns
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
-    # FIXED: Use join with Role to filter coaches by role name
     all_coaches = User.query.join(User.role).filter(Role.name.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username).all()
-    # FIXED: Explicit join condition to avoid ambiguous foreign key
     all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name, TeamMember.name).all()
     all_projects = Project.query.order_by(Project.name).all()
     status_choices = [
@@ -1031,7 +1069,6 @@ def edit_assigned_coaching(assignment_id):
     if form.validate_on_submit():
         assignment.coach_id = form.coach_id.data
         assignment.team_member_id = form.team_member_id.data
-        # Convert date to datetime with end of day
         deadline_datetime = datetime.combine(form.deadline.data, time(23, 59, 59))
         assignment.deadline = deadline_datetime
         assignment.expected_coaching_count = form.expected_coaching_count.data
@@ -1056,7 +1093,6 @@ def edit_assigned_coaching(assignment_id):
 def delete_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
     try:
-        # Clear references in coachings
         Coaching.query.filter_by(assigned_coaching_id=assignment_id).update({Coaching.assigned_coaching_id: None})
         db.session.delete(assignment)
         db.session.commit()
