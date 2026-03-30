@@ -12,7 +12,7 @@ from calendar import monthrange
 
 bp = Blueprint('main', __name__)
 
-# --- HILFSFUNKTIONEN ---
+# --- HILFSFUNKTIONEN (unchanged) ---
 def get_month_name_german(month_number):
     months_german = {1:"Januar",2:"Februar",3:"März",4:"April",5:"Mai",6:"Juni",7:"Juli",8:"August",9:"September",10:"Oktober",11:"November",12:"Dezember"}
     return months_german.get(month_number, "")
@@ -120,7 +120,6 @@ def update_assignment_progress(assignment_id):
         db.session.commit()
 
 # --- ROUTEN ---
-
 @bp.route('/')
 @bp.route('/index')
 @login_required
@@ -137,7 +136,6 @@ def coaching_dashboard():
     member_filter = request.args.get('member_id', type=int)
     project_filter = get_visible_project_id()
 
-    # --- Globale Statistiken (mit allen Filtern) ---
     global_base = Coaching.query.join(Team, Coaching.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME)
 
     if project_filter:
@@ -735,7 +733,6 @@ def pl_qm_dashboard():
                                 page=request.args.get('page', 1, type=int),
                                 team_id_filter=selected_team_id_filter_str))
 
-    # Team-Statistiken (for Top/Flop)
     all_teams_data = []
     teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
     if project_filter:
@@ -859,8 +856,7 @@ def assigned_coachings():
     page = request.args.get('page', 1, type=int)
     project_filter = get_visible_project_id()
     
-    # Get filter parameters for assignments
-    status_filter = request.args.get('status', 'current')  # 'current' or 'completed'
+    status_filter = request.args.get('status', 'current')
     team_filter = request.args.get('team', type=int)
     coach_filter = request.args.get('coach', type=int)
     member_filter = request.args.get('member', type=int)
@@ -868,11 +864,9 @@ def assigned_coachings():
     sort_by = request.args.get('sort_by', 'deadline')
     sort_dir = request.args.get('sort_dir', 'asc')
     
-    # Define status groups
     current_statuses = ['pending', 'accepted', 'in_progress']
     completed_statuses = ['completed', 'expired', 'cancelled', 'rejected']
     
-    # Determine which statuses to show based on tab
     if status_filter == 'current':
         statuses_to_show = current_statuses
         tab_active = 'current'
@@ -880,7 +874,6 @@ def assigned_coachings():
         statuses_to_show = completed_statuses
         tab_active = 'completed'
     
-    # Build base query – decide view_type based on permission to create assignments
     if current_user.has_permission('create_assigned_coaching'):
         view_type = 'pl'
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
@@ -890,8 +883,7 @@ def assigned_coachings():
         if project_filter:
             query = query.join(AssignedCoaching.team_member).join(TeamMember.team).filter(Team.project_id == project_filter)
         
-        # --- Fetch member performance data for quick overview (only for PL) ---
-        # Get allowed project IDs
+        # --- Optimized member performance data (single query for all coachings) ---
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             allowed_project_ids = [p.id for p in Project.query.all()]
         elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
@@ -899,39 +891,45 @@ def assigned_coachings():
         else:
             allowed_project_ids = [current_user.project_id]
         
-        # If project filter is active, restrict to that project
         if project_filter and project_filter in allowed_project_ids:
             allowed_project_ids = [project_filter]
         
-        # Get all members from allowed projects, excluding archiv
         members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
             Team.project_id.in_(allowed_project_ids),
             Team.name != ARCHIV_TEAM_NAME
         ).order_by(Team.name, TeamMember.name).all()
         
-        # Compute performance for each member with combined score
+        member_ids = [m.id for m in members]
+        coachings = Coaching.query.filter(Coaching.team_member_id.in_(member_ids)).all()
+        
+        member_stats = {m.id: {'coachings': [], 'total_time': 0, 'avg_score': 0, 'last_date': None} for m in members}
+        for c in coachings:
+            stats = member_stats[c.team_member_id]
+            stats['coachings'].append(c)
+            stats['total_time'] += (c.time_spent or 0)
+            if c.coaching_date and (stats['last_date'] is None or c.coaching_date > stats['last_date']):
+                stats['last_date'] = c.coaching_date
+        
         member_performance = []
         all_scores = []
         for member in members:
-            coachings = Coaching.query.filter_by(team_member_id=member.id).all()
+            stats = member_stats[member.id]
+            coachings_list = stats['coachings']
+            coaching_count = len(coachings_list)
             avg_score = 0
-            coaching_count = len(coachings)
-            total_time = 0
-            if coachings:
-                avg_score = sum(c.overall_score for c in coachings) / coaching_count
-                total_time = sum(c.time_spent for c in coachings)
+            if coaching_count > 0:
+                avg_score = sum(c.overall_score for c in coachings_list) / coaching_count
             member_performance.append({
                 'id': member.id,
                 'name': member.name,
                 'team_name': member.team.name,
                 'avg_score': round(avg_score, 2),
                 'coaching_count': coaching_count,
-                'total_time': total_time,
-                'last_coaching_date': coachings[-1].coaching_date if coachings else None
+                'total_time': stats['total_time'],
+                'last_coaching_date': stats['last_date']
             })
             all_scores.append(avg_score)
         
-        # Calculate combined score (weighted: 40% performance, 30% coaching count, 30% total time)
         if member_performance:
             max_avg_score = max(m['avg_score'] for m in member_performance) or 1
             max_coaching_count = max(m['coaching_count'] for m in member_performance) or 1
@@ -955,10 +953,8 @@ def assigned_coachings():
         top_performers = []
         bottom_performers = []
     
-    # Apply status filter
     query = query.filter(AssignedCoaching.status.in_(statuses_to_show))
     
-    # Apply additional filters
     if team_filter:
         query = query.join(AssignedCoaching.team_member).join(TeamMember.team).filter(Team.id == team_filter)
     if coach_filter:
@@ -979,7 +975,6 @@ def assigned_coachings():
             )
         )
     
-    # Apply sorting
     sort_column = {
         'deadline': AssignedCoaching.deadline,
         'member_name': TeamMember.name,
@@ -1001,7 +996,6 @@ def assigned_coachings():
     
     assignments = query.paginate(page=page, per_page=10, error_out=False)
     
-    # Prepare filter dropdowns
     all_teams = []
     all_coaches = []
     all_members = []
@@ -1056,7 +1050,6 @@ def assigned_coachings():
 @login_required
 @permission_required('create_assigned_coaching')
 def create_assigned_coaching():
-    # Get list of project IDs the current user can see
     if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         allowed_project_ids = [p.id for p in Project.query.all()]
     elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
@@ -1064,17 +1057,14 @@ def create_assigned_coaching():
     else:
         allowed_project_ids = [current_user.project_id]
 
-    # If a project filter is set in session (active project), use it to restrict further
     project_filter = session.get('active_project')
     if project_filter and project_filter in allowed_project_ids:
         allowed_project_ids = [project_filter]
 
     form = AssignedCoachingForm(allowed_project_ids=allowed_project_ids)
 
-    # Pre-select member if member_id is in URL
     pre_select_member_id = request.args.get('member_id', type=int)
     if pre_select_member_id and request.method == 'GET':
-        # Check if the member is in allowed projects
         member = TeamMember.query.get(pre_select_member_id)
         if member and member.team.project_id in allowed_project_ids:
             form.team_member_id.data = pre_select_member_id
@@ -1086,7 +1076,6 @@ def create_assigned_coaching():
         if member_coachings:
             current_avg_score = sum(c.overall_score for c in member_coachings) / len(member_coachings)
 
-        # Convert date to datetime at end of day
         deadline_date = form.deadline.data
         deadline_datetime = datetime.combine(deadline_date, time(23, 59, 59))
 
@@ -1210,7 +1199,6 @@ def api_coach_team_members(coach_id):
         coach = User.query.get_or_404(coach_id)
         project_filter = request.args.get('project', type=int)
 
-        # Determine which team members this coach can coach
         if coach.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             query = TeamMember.query.join(Team, TeamMember.team_id == Team.id)
             if project_filter:
