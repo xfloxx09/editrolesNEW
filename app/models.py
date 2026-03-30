@@ -3,6 +3,7 @@ print("<<<< START models.py (ARCHIV-HISTORIE) GELADEN >>>>")
 
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import cached_property
 from app import db, login_manager
 from datetime import datetime, timezone
 from app.roles import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
@@ -105,6 +106,14 @@ class User(UserMixin, db.Model):
         """Return the name of the user's role."""
         return self.role.name if self.role else None
 
+    @cached_property
+    def permission_names(self):
+        """Return a set of permission names this user has (cached after first access)."""
+        if not self.role:
+            return set()
+        # Admin has all permissions; we handle this in has_permission
+        return {p.name for p in self.role.permissions}
+
     @property
     def has_multiple_projects(self):
         if self.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER]:
@@ -128,10 +137,9 @@ class User(UserMixin, db.Model):
         """Check if user's role has the given permission."""
         if not self.role:
             return False
-        # Admin role gets all permissions
         if self.role.name == ROLE_ADMIN:
             return True
-        return any(p.name == permission_name for p in self.role.permissions)
+        return permission_name in self.permission_names
 
 
 @login_manager.user_loader
