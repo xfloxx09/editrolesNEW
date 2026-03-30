@@ -12,7 +12,7 @@ from calendar import monthrange
 
 bp = Blueprint('main', __name__)
 
-# --- HILFSFUNKTIONEN (unchanged) ---
+# --- HILFSFUNKTIONEN ---
 def get_month_name_german(month_number):
     months_german = {1:"Januar",2:"Februar",3:"März",4:"April",5:"Mai",6:"Juni",7:"Juli",8:"August",9:"September",10:"Oktober",11:"November",12:"Dezember"}
     return months_german.get(month_number, "")
@@ -272,6 +272,7 @@ def team_view():
     project_filter = get_visible_project_id()
     page_title = "Team Ansicht"
 
+    # Teamleiter without team_id: show their own team
     if current_user.role_name == ROLE_TEAMLEITER and not view_team_id_arg:
         led_team_ids = [team.id for team in current_user.teams_led]
         if not led_team_ids:
@@ -283,13 +284,13 @@ def team_view():
         else:
             flash("Zugewiesenes Team nicht gefunden.", "danger")
             return redirect(url_for('main.index'))
+    # If team_id is provided, fetch that team (any user with permission can try)
     elif view_team_id_arg:
-        if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
-            abort(403)
         selected_team_object = Team.query.get(view_team_id_arg)
         if selected_team_object:
             page_title = f"Team Ansicht: {selected_team_object.name}"
     else:
+        # No team_id and not teamleiter: show first team in allowed projects
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER]:
             teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
             if project_filter:
@@ -307,6 +308,10 @@ def team_view():
                 teams_query = teams_query.filter(Team.project_id == project_filter)
             all_teams_for_selection = teams_query.order_by(Team.name).all()
         return render_template('main/team_view.html', title="Team Auswählen", team=None, all_teams_list=all_teams_for_selection, team_members_performance=[], team_coachings=[], config=current_app.config)
+
+    # After we have selected_team_object, check project access
+    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and selected_team_object.project_id != project_filter:
+        abort(403)
 
     team_member_ids_in_selected_team = [member.id for member in selected_team_object.members]
     if team_member_ids_in_selected_team:
