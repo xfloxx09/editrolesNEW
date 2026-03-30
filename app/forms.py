@@ -265,7 +265,6 @@ class RoleForm(FlaskForm):
         self.projects.choices = [(p.id, p.name) for p in Project.query.order_by(Project.name).all()]
 
 
-# NEW: Form for admin editing of assigned coachings
 class AdminAssignedCoachingForm(FlaskForm):
     coach_id = SelectField('Coach', coerce=int, validators=[DataRequired()], choices=[])
     team_member_id = SelectField('Teammitglied', coerce=int, validators=[DataRequired()], choices=[])
@@ -287,3 +286,26 @@ class AdminAssignedCoachingForm(FlaskForm):
         super(AdminAssignedCoachingForm, self).__init__(*args, **kwargs)
         self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in User.query.order_by(User.username).all()]
         self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in TeamMember.query.join(Team).order_by(Team.name, TeamMember.name).all()]
+
+
+# NEW: Form for creating a team member with optional user account
+class TeamMemberWithUserForm(FlaskForm):
+    name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
+    team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
+    create_user = BooleanField('Benutzerkonto erstellen')
+    username = StringField('Benutzername', validators=[Length(min=3, max=64)])
+    email = StringField('E-Mail (Optional)')
+    password = PasswordField('Passwort', validators=[Length(min=6)])
+    password2 = PasswordField('Passwort wiederholen', validators=[EqualTo('password', message='Passwörter müssen übereinstimmen.')])
+    submit = SubmitField('Teammitglied erstellen')
+
+    def __init__(self, *args, **kwargs):
+        super(TeamMemberWithUserForm, self).__init__(*args, **kwargs)
+        active_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
+        self.team_id.choices = [(t.id, t.name) for t in active_teams]
+
+    def validate_username(self, field):
+        if self.create_user.data and field.data:
+            user = User.query.filter_by(username=field.data).first()
+            if user:
+                raise ValidationError('Dieser Benutzername ist bereits vergeben.')
