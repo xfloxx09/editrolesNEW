@@ -111,7 +111,11 @@ class User(UserMixin, db.Model):
         """Return a set of permission names this user has (cached after first access)."""
         if not self.role:
             return set()
-        # Admin has all permissions; we handle this in has_permission
+        # Admin gets all permissions, but we handle that in has_permission
+        if self.role.name == ROLE_ADMIN:
+            # For admin, we could return all, but it's not needed; has_permission will return True.
+            # We'll keep an empty set for admin (not used because has_permission shortcuts).
+            return set()
         return {p.name for p in self.role.permissions}
 
     @property
@@ -139,6 +143,8 @@ class User(UserMixin, db.Model):
             return False
         if self.role.name == ROLE_ADMIN:
             return True
+        # Debug print to see what permissions the user actually has
+        print(f"DEBUG: User {self.username} role {self.role.name} permissions: {self.permission_names}")
         return permission_name in self.permission_names
 
 
