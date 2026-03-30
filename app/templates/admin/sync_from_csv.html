@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>CSV-Synchronisation (Team-Mitglieder, Projekte, Teams)</h2>
+    <div class="card">
+        <div class="card-body">
+            <p>Laden Sie eine CSV-Datei hoch. Wählen Sie die Spalten aus, die importiert werden sollen.</p>
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="csv_file">CSV-Datei auswählen</label>
+                    <input type="file" name="csv_file" id="csv_file" class="form-control-file" accept=".csv" required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Zu importierende Spalten (alle anderen werden ignoriert)</label>
+                    <div class="row">
+                        {% for field in all_fields %}
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="csv_fields" value="{{ field }}" id="field_{{ loop.index }}" {% if field in default_selected %}checked{% endif %}>
+                                <label class="form-check-label" for="field_{{ loop.index }}">
+                                    {{ field }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <small class="form-text text-muted">Mindestens 'Pylon-Nr' muss ausgewählt sein, um Mitglieder zu identifizieren.</small>
+                </div>
+                
+                <button type="submit" class="btn telekom-button">Hochladen und synchronisieren</button>
+                <a href="{{ url_for('admin.panel') }}" class="btn btn-secondary">Abbrechen</a>
+            </form>
+        </div>
+    </div>
+    <hr>
+    <h4>Funktionsweise</h4>
+    <ul>
+        <li>Die CSV muss eine Kopfzeile mit den exakten Spaltennamen enthalten.</li>
+        <li>Jeder Datensatz wird anhand der <strong>Pylon-Nr</strong> identifiziert (muss ausgewählt sein).</li>
+        <li>Existiert das Teammitglied noch nicht, wird es neu angelegt (inkl. Benutzerkonto mit Passwort <code>Start123</code>).</li>
+        <li>Existiert es bereits, werden Team, Projekt, MA-Kennung, DAG-ID aktualisiert (je nach Auswahl).</li>
+        <li>Bei <strong>PLT aktiv? = 0</strong> wird das Mitglied ins ARCHIV-Team verschoben.</li>
+        <li>Neue Projekte und Teams werden automatisch erstellt.</li>
+        <li>Die CSV kann mehrfach ausgeführt werden – sie dient als synchroner Abgleich.</li>
+    </ul>
+</div>
+{% endblock %}
