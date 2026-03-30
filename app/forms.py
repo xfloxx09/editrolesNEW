@@ -78,7 +78,7 @@ class TeamForm(FlaskForm):
         if Team.query.filter(Team.name.ilike(name_field.data)).first():
             raise ValidationError('Ein Team mit diesem Namen existiert bereits.')
         if name_field.data.strip().upper() == ARCHIV_TEAM_NAME:
-            raise ValidationError(f'Der Teamname \"{ARCHIV_TEAM_NAME}\" ist für das System reserviert.')
+            raise ValidationError(f'Der Teamname \\\"{ARCHIV_TEAM_NAME}\\\" ist für das System reserviert.')
 
 
 class TeamMemberForm(FlaskForm):
@@ -153,7 +153,6 @@ class CoachingForm(FlaskForm):
         self.team_member_id.choices = generated_choices
 
     def update_assignment_choices(self, team_member_id, coach_id):
-        """Populate assigned_coaching_id choices with active assignments for this member and coach."""
         from app.models import AssignedCoaching
         assignments = AssignedCoaching.query.filter(
             AssignedCoaching.team_member_id == team_member_id,
@@ -228,30 +227,24 @@ class AssignedCoachingForm(FlaskForm):
     def __init__(self, allowed_project_ids=None, *args, **kwargs):
         super(AssignedCoachingForm, self).__init__(*args, **kwargs)
         if allowed_project_ids:
-            # Coaches: users with roles that can coach and belong to at least one allowed project
-            # Exclude Admin role (Admins should not be assignable as coaches)
             coach_roles = ['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter']
             coaches = User.query.filter(User.role.has(Role.name.in_(coach_roles))).all()
             filtered_coaches = []
             for coach in coaches:
-                if coach.role.name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
-                    # Betriebsleiter can be coaches; Admins excluded
-                    if coach.role.name == ROLE_ADMIN:
+                if coach.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+                    if coach.role_name == ROLE_ADMIN:
                         continue
                     filtered_coaches.append(coach)
-                elif coach.role.name == ROLE_TEAMLEITER:
-                    # Teamleiter: include if they lead a team in one of the allowed projects
+                elif coach.role_name == ROLE_TEAMLEITER:
                     led_teams = coach.teams_led.all()
                     if any(team.project_id in allowed_project_ids for team in led_teams):
                         filtered_coaches.append(coach)
                 else:
-                    # Other coaches have a project_id – include if it's in allowed projects
                     if coach.project_id in allowed_project_ids:
                         filtered_coaches.append(coach)
             filtered_coaches.sort(key=lambda u: u.username)
-            self.coach_id.choices = [(u.id, f"{u.username} ({u.role.name})") for u in filtered_coaches]
+            self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in filtered_coaches]
 
-            # Team members: from all allowed projects, excluding archiv, grouped by team
             members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
                 Team.project_id.in_(allowed_project_ids),
                 Team.name != ARCHIV_TEAM_NAME
@@ -270,3 +263,27 @@ class RoleForm(FlaskForm):
         super(RoleForm, self).__init__(*args, **kwargs)
         self.permissions.choices = [(p.id, f"{p.name} - {p.description}") for p in Permission.query.order_by(Permission.name).all()]
         self.projects.choices = [(p.id, p.name) for p in Project.query.order_by(Project.name).all()]
+
+
+# NEW: Form for admin editing of assigned coachings
+class AdminAssignedCoachingForm(FlaskForm):
+    coach_id = SelectField('Coach', coerce=int, validators=[DataRequired()], choices=[])
+    team_member_id = SelectField('Teammitglied', coerce=int, validators=[DataRequired()], choices=[])
+    deadline = DateField('Deadline', format='%Y-%m-%d', validators=[DataRequired()])
+    expected_coaching_count = IntegerField('Erwartete Coachings', validators=[DataRequired(), NumberRange(min=1, max=50)], default=1)
+    desired_performance_note = IntegerField('Gewünschte Performance Note (0-10)', validators=[Optional(), NumberRange(min=0, max=10)], default=None)
+    status = SelectField('Status', choices=[
+        ('pending', 'Ausstehend'),
+        ('accepted', 'Angenommen'),
+        ('in_progress', 'In Bearbeitung'),
+        ('completed', 'Abgeschlossen'),
+        ('expired', 'Abgelaufen'),
+        ('rejected', 'Abgelehnt'),
+        ('cancelled', 'Storniert')
+    ], validators=[DataRequired()])
+    submit = SubmitField('Speichern')
+
+    def __init__(self, *args, **kwargs):
+        super(AdminAssignedCoachingForm, self).__init__(*args, **kwargs)
+        self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in User.query.order_by(User.username).all()]
+        self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in TeamMember.query.join(Team).order_by(Team.name, TeamMember.name).all()]
