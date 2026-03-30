@@ -541,6 +541,42 @@ def create_app(config_class=Config):
         else:
             print("✅ Alte Spalte 'role' existiert nicht mehr.")
 
+        # ========== NEW: Add user_id to team_members ==========
+        columns_team_members = [col['name'] for col in inspector.get_columns('team_members')]
+        if 'user_id' not in columns_team_members:
+            print("⚠️ Spalte 'user_id' in team_members fehlt – wird hinzugefügt...")
+            conn.execute(text('ALTER TABLE team_members ADD COLUMN user_id INTEGER UNIQUE REFERENCES users(id)'))
+            conn.commit()
+            print("✅ Spalte 'user_id' in team_members hinzugefügt.")
+        else:
+            print("✅ Spalte 'user_id' in team_members existiert bereits.")
+
+        # ========== NEW: Add permission view_own_coachings ==========
+        res = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()
+        if not res:
+            conn.execute(
+                text("INSERT INTO permissions (name, description) VALUES ('view_own_coachings', 'View own coachings')")
+            )
+            print("✅ Permission 'view_own_coachings' hinzugefügt.")
+        else:
+            print("✅ Permission 'view_own_coachings' existiert bereits.")
+
+        # ========== NEW: Add role 'Mitarbeiter' ==========
+        res = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()
+        if not res:
+            conn.execute(
+                text("INSERT INTO roles (name, description) VALUES ('Mitarbeiter', 'Team member with limited access')")
+            )
+            role_id = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()[0]
+            perm_id = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()[0]
+            conn.execute(
+                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                {"role_id": role_id, "perm_id": perm_id}
+            )
+            print("✅ Rolle 'Mitarbeiter' mit Berechtigung 'view_own_coachings' hinzugefügt.")
+        else:
+            print("✅ Rolle 'Mitarbeiter' existiert bereits.")
+
         print("--- Migration abgeschlossen ---")
 
     # Blueprints registrieren
