@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import pytz
 from sqlalchemy import inspect, text
 from app.constants import ARCHIV_TEAM_NAME
+from werkzeug.security import generate_password_hash
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -480,7 +481,6 @@ def create_app(config_class=Config):
         # 16.5. Ensure all role_id values are valid (point to existing roles)
         valid_role_ids = [row[0] for row in conn.execute(text("SELECT id FROM roles")).fetchall()]
         if valid_role_ids:
-            # Get all users with role_id set
             users_with_role = conn.execute(text("SELECT id, role_id FROM users WHERE role_id IS NOT NULL")).fetchall()
             invalid_users = [(user_id, role_id) for user_id, role_id in users_with_role if role_id not in valid_role_ids]
             if invalid_users:
@@ -576,6 +576,49 @@ def create_app(config_class=Config):
             print("✅ Rolle 'Mitarbeiter' mit Berechtigung 'view_own_coachings' hinzugefügt.")
         else:
             print("✅ Rolle 'Mitarbeiter' existiert bereits.")
+
+        # ========== NEW: Create user accounts for existing team members without user_id ==========
+        team_members_without_user = conn.execute(text("SELECT id, name, team_id FROM team_members WHERE user_id IS NULL")).fetchall()
+        if team_members_without_user:
+            print(f"⚠️ {len(team_members_without_user)} Teammitglieder ohne Benutzerkonto gefunden. Erstelle Konten mit Passwort 'Start123'...")
+            mitarbeiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()
+            if not mitarbeiter_role:
+                print("❌ Rolle 'Mitarbeiter' nicht gefunden. Überspringe Erstellung.")
+            else:
+                role_id = mitarbeiter_role[0]
+                for tm_id, tm_name, team_id in team_members_without_user:
+                    # Get project_id from the team
+                    project_id = conn.execute(text("SELECT project_id FROM teams WHERE id = :team_id"), {"team_id": team_id}).fetchone()
+                    if not project_id:
+                        print(f"⚠️ Kein Projekt für Team ID {team_id}, überspringe Teammitglied {tm_name}")
+                        continue
+                    # Generate a unique username from the team member's name
+                    base_username = tm_name.lower().replace(" ", ".").replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+                    base_username = ''.join(c for c in base_username if c.isalnum() or c == '.')
+                    existing = conn.execute(text("SELECT id FROM users WHERE username = :uname"), {"uname": base_username}).fetchone()
+                    counter = 1
+                    username = base_username
+                    while existing:
+                        username = f"{base_username}{counter}"
+                        existing = conn.execute(text("SELECT id FROM users WHERE username = :uname"), {"uname": username}).fetchone()
+                        counter += 1
+                    password_hash = generate_password_hash("Start123")
+                    conn.execute(
+                        text("""
+                            INSERT INTO users (username, password_hash, role_id, project_id)
+                            VALUES (:username, :password_hash, :role_id, :project_id)
+                        """),
+                        {"username": username, "password_hash": password_hash, "role_id": role_id, "project_id": project_id[0]}
+                    )
+                    user_id = conn.execute(text("SELECT id FROM users WHERE username = :uname"), {"uname": username}).fetchone()[0]
+                    conn.execute(
+                        text("UPDATE team_members SET user_id = :user_id WHERE id = :tm_id"),
+                        {"user_id": user_id, "tm_id": tm_id}
+                    )
+                    print(f"✅ Benutzer '{username}' für Teammitglied '{tm_name}' erstellt (Passwort: Start123).")
+                conn.commit()
+        else:
+            print("✅ Alle Teammitglieder haben bereits ein Benutzerkonto.")
 
         print("--- Migration abgeschlossen ---")
 
