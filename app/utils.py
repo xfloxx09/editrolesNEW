@@ -38,7 +38,6 @@ def role_required(role_name_or_list):
             else:
                 return abort(500)
             if user_role_name not in required_roles:
-                print(f"DEBUG: user role = {user_role_name}, required = {required_roles}")
                 abort(403)
             return f(*args, **kwargs)
         return decorated_function
@@ -52,11 +51,8 @@ def permission_required(permission_name):
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
                 abort(401)
-            print(f"DEBUG: permission_required checking '{permission_name}' for user {current_user.username} (role {current_user.role_name})")
             if not current_user.has_permission(permission_name):
-                print(f"DEBUG: permission denied for '{permission_name}'")
                 abort(403)
-            print(f"DEBUG: permission granted for '{permission_name}'")
             return f(*args, **kwargs)
         return decorated_function
     return decorator
