@@ -3,11 +3,11 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission
-from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching
+from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm
 from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from app.main_routes import calculate_date_range, get_month_name_german
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
 
 bp = Blueprint('admin', __name__)
 
@@ -21,7 +21,6 @@ def panel():
     page_members = request.args.get('page_members', 1, type=int)
     page_archiv = request.args.get('page_archiv', 1, type=int)
     
-    # Filter-Parameter
     user_project_filter = request.args.get('user_project', type=int)
     user_role_filter = request.args.get('user_role', default='', type=str)
     user_search = request.args.get('user_search', default='', type=str).strip()
@@ -37,13 +36,11 @@ def panel():
     archiv_team_filter = request.args.get('archiv_team', type=int)
     archiv_search = request.args.get('archiv_search', default='', type=str).strip()
 
-    # --- Flags, ob Filter aktiv sind ---
     user_filter_active = any([user_project_filter, user_role_filter, user_search])
     team_filter_active = any([team_project_filter, team_search])
     member_filter_active = any([member_project_filter, member_team_filter, member_search])
     archiv_filter_active = any([archiv_project_filter, archiv_team_filter, archiv_search])
 
-    # --- Benutzer Query ---
     users_query = User.query
     if not user_filter_active:
         users_query = users_query.filter(false())
@@ -51,7 +48,6 @@ def panel():
         if user_project_filter:
             users_query = users_query.filter(User.project_id == user_project_filter)
         if user_role_filter:
-            # Filter by role name (since we have role relationship)
             users_query = users_query.join(User.role).filter(Role.name == user_role_filter)
         if user_search:
             users_query = users_query.filter(
@@ -62,7 +58,6 @@ def panel():
             )
     users_paginated = users_query.order_by(User.username).paginate(page=page_users, per_page=20, error_out=False)
 
-    # --- Teams Query ---
     teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
     if not team_filter_active:
         teams_query = teams_query.filter(false())
@@ -73,7 +68,6 @@ def panel():
             teams_query = teams_query.filter(Team.name.ilike(f'%{team_search}%'))
     teams_paginated = teams_query.order_by(Team.name).paginate(page=page_teams, per_page=20, error_out=False)
 
-    # --- Aktive Teammitglieder Query ---
     members_query = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME)
     if not member_filter_active:
         members_query = members_query.filter(false())
@@ -86,7 +80,6 @@ def panel():
             members_query = members_query.filter(TeamMember.name.ilike(f'%{member_search}%'))
     members_paginated = members_query.order_by(TeamMember.name).paginate(page=page_members, per_page=20, error_out=False)
 
-    # --- Archivierte Mitglieder Query ---
     archiv_team = get_or_create_archiv_team()
     archiv_query = TeamMember.query.filter_by(team_id=archiv_team.id)
     if not archiv_filter_active:
@@ -100,7 +93,6 @@ def panel():
             archiv_query = archiv_query.filter(TeamMember.name.ilike(f'%{archiv_search}%'))
     archiv_paginated = archiv_query.order_by(TeamMember.name).paginate(page=page_archiv, per_page=20, error_out=False)
 
-    # Listen für Filter-Dropdowns
     all_projects = Project.query.order_by(Project.name).all()
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
     all_roles = [role.name for role in Role.query.order_by(Role.name).all()]
@@ -133,7 +125,7 @@ def panel():
                            config=current_app.config)
 
 
-# --- Projekt Management ---
+# --- Project Management ---
 @bp.route('/projects')
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -198,7 +190,6 @@ def create_user():
                 flash('Ungültige Rolle.', 'danger')
                 return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
 
-            # Abteilungsleiter: set project_id to first selected project
             if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
@@ -221,14 +212,12 @@ def create_user():
             db.session.add(user)
             db.session.flush()
 
-            # Teamleiter: assign teams
             if role.name == ROLE_TEAMLEITER and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user.teams_led = selected_teams
             else:
                 user.teams_led = []
 
-            # Abteilungsleiter: assign all selected projects
             if role.name == ROLE_ABTEILUNGSLEITER and form.project_ids.data:
                 selected_projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
                 user.projects = selected_projects
@@ -271,7 +260,6 @@ def edit_user(user_id):
             user_to_edit.email = form.email.data if form.email.data else None
             user_to_edit.role_id = form.role_id.data
 
-            # Handle project assignment based on role
             if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
@@ -287,7 +275,6 @@ def edit_user(user_id):
             if form.password.data:
                 user_to_edit.set_password(form.password.data)
 
-            # Teamleiter: assign teams
             if role.name == ROLE_TEAMLEITER and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user_to_edit.teams_led = selected_teams
@@ -350,7 +337,7 @@ def create_team():
     all_team_leaders = User.query.filter(User.role.has(name=ROLE_TEAMLEITER)).order_by(User.username).all()
     if form.validate_on_submit():
         if form.name.data.strip().upper() == ARCHIV_TEAM_NAME:
-            flash(f'Der Teamname \"{ARCHIV_TEAM_NAME}\" ist für das System reserviert.', 'danger')
+            flash(f'Der Teamname \\\"{ARCHIV_TEAM_NAME}\\\" ist für das System reserviert.', 'danger')
             return render_template('admin/create_team.html', title='Team erstellen', form=form, config=current_app.config)
         try:
             team = Team(
@@ -512,7 +499,7 @@ def move_to_archiv(member_id):
         member_to_move.original_project_id = member_to_move.team.project_id
         member_to_move.team_id = archiv_team.id
         db.session.commit()
-        flash(f'Mitglied \"{member_to_move.name}\" wurde von Team \"{original_team_name}\" ins ARCHIV verschoben.', 'success')
+        flash(f'Mitglied \\\"{member_to_move.name}\\\" wurde von Team \\\"{original_team_name}\\\" ins ARCHIV verschoben.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim Verschieben von Mitglied {member_id} ins Archiv: {e}")
@@ -532,7 +519,7 @@ def delete_team_member_permanently(member_id):
         db.session.execute(workshop_participants.delete().where(workshop_participants.c.team_member_id == member_id))
         db.session.delete(member)
         db.session.commit()
-        flash(f'Mitglied \"{member_name}\" wurde endgültig gelöscht.', 'success')
+        flash(f'Mitglied \\\"{member_name}\\\" wurde endgültig gelöscht.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim endgültigen Löschen von Mitglied {member_id}: {e}")
@@ -889,11 +876,9 @@ def create_role():
         role = Role(name=form.name.data, description=form.description.data)
         db.session.add(role)
         db.session.flush()
-        # Assign permissions
         if form.permissions.data:
             perms = Permission.query.filter(Permission.id.in_(form.permissions.data)).all()
             role.permissions = perms
-        # Assign projects
         if form.projects.data:
             projs = Project.query.filter(Project.id.in_(form.projects.data)).all()
             role.projects = projs
@@ -912,12 +897,10 @@ def edit_role(role_id):
     if form.validate_on_submit():
         role.name = form.name.data
         role.description = form.description.data
-        # Update permissions
         role.permissions = []
         if form.permissions.data:
             perms = Permission.query.filter(Permission.id.in_(form.permissions.data)).all()
             role.permissions = perms
-        # Update projects
         role.projects = []
         if form.projects.data:
             projs = Project.query.filter(Project.id.in_(form.projects.data)).all()
@@ -925,7 +908,6 @@ def edit_role(role_id):
         db.session.commit()
         flash('Rolle aktualisiert.', 'success')
         return redirect(url_for('admin.manage_roles'))
-    # Pre-populate form
     form.permissions.data = [p.id for p in role.permissions]
     form.projects.data = [p.id for p in role.projects]
     return render_template('admin/edit_role.html', form=form, role=role, config=current_app.config)
@@ -946,3 +928,139 @@ def delete_role(role_id):
     db.session.commit()
     flash('Rolle gelöscht.', 'success')
     return redirect(url_for('admin.manage_roles'))
+
+
+# --- Assigned Coachings Management (Admin) ---
+@bp.route('/manage_assigned_coachings', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def manage_assigned_coachings():
+    page = request.args.get('page', 1, type=int)
+    team_filter = request.args.get('team', type=int)
+    coach_filter = request.args.get('coach', type=int)
+    member_filter = request.args.get('member', type=int)
+    status_filter = request.args.get('status', default='')
+    search_term = request.args.get('search', default="", type=str).strip()
+    project_filter = request.args.get('project', type=int) or session.get('active_project')
+
+    query = AssignedCoaching.query
+
+    if project_filter:
+        query = query.join(AssignedCoaching.team_member).join(TeamMember.team).filter(Team.project_id == project_filter)
+
+    if team_filter:
+        query = query.join(AssignedCoaching.team_member).join(TeamMember.team).filter(Team.id == team_filter)
+    if coach_filter:
+        query = query.filter(AssignedCoaching.coach_id == coach_filter)
+    if member_filter:
+        query = query.filter(AssignedCoaching.team_member_id == member_filter)
+    if status_filter:
+        query = query.filter(AssignedCoaching.status == status_filter)
+    if search_term:
+        search_pattern = f"%{search_term}%"
+        query = query.join(AssignedCoaching.team_member).join(AssignedCoaching.coach).filter(
+            or_(
+                TeamMember.name.ilike(search_pattern),
+                User.username.ilike(search_pattern)
+            )
+        )
+
+    if request.method == 'POST':
+        if 'delete_selected' in request.form:
+            assignment_ids_to_delete = request.form.getlist('assignment_ids')
+            if assignment_ids_to_delete:
+                try:
+                    assignment_ids_to_delete_int = [int(id_str) for id_str in assignment_ids_to_delete]
+                    # Clear references in coachings
+                    Coaching.query.filter(Coaching.assigned_coaching_id.in_(assignment_ids_to_delete_int)).update({Coaching.assigned_coaching_id: None}, synchronize_session='fetch')
+                    deleted_count = AssignedCoaching.query.filter(AssignedCoaching.id.in_(assignment_ids_to_delete_int)).delete(synchronize_session='fetch')
+                    db.session.commit()
+                    flash(f'{deleted_count} Coaching-Aufgabe(n) erfolgreich gelöscht.', 'success')
+                except ValueError:
+                    flash('Ungültige IDs zum Löschen ausgewählt.', 'danger')
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Fehler beim Löschen von zugewiesenen Coachings: {e}")
+                    flash(f'Fehler beim Löschen: {str(e)}', 'danger')
+                return redirect(url_for('admin.manage_assigned_coachings', page=page, team=team_filter, coach=coach_filter, member=member_filter, status=status_filter, search=search_term))
+            else:
+                flash('Keine Coachings zum Löschen ausgewählt.', 'info')
+
+    assignments_paginated = query.order_by(AssignedCoaching.deadline.desc()).paginate(page=page, per_page=15, error_out=False)
+
+    # Prepare filter dropdowns
+    all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
+    all_coaches = User.query.filter(User.role_name.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username).all()
+    all_members = TeamMember.query.join(Team).filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name, TeamMember.name).all()
+    all_projects = Project.query.order_by(Project.name).all()
+    status_choices = [
+        ('', 'Alle Status'),
+        ('pending', 'Ausstehend'),
+        ('accepted', 'Angenommen'),
+        ('in_progress', 'In Bearbeitung'),
+        ('completed', 'Abgeschlossen'),
+        ('expired', 'Abgelaufen'),
+        ('rejected', 'Abgelehnt'),
+        ('cancelled', 'Storniert')
+    ]
+
+    return render_template('admin/manage_assigned_coachings.html',
+                           assignments=assignments_paginated,
+                           all_teams=all_teams,
+                           all_coaches=all_coaches,
+                           all_members=all_members,
+                           all_projects=all_projects,
+                           status_choices=status_choices,
+                           team_filter=team_filter,
+                           coach_filter=coach_filter,
+                           member_filter=member_filter,
+                           status_filter=status_filter,
+                           search_term=search_term,
+                           current_project_filter=project_filter,
+                           config=current_app.config)
+
+
+@bp.route('/assigned_coaching/<int:assignment_id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def edit_assigned_coaching(assignment_id):
+    assignment = AssignedCoaching.query.get_or_404(assignment_id)
+    form = AdminAssignedCoachingForm(obj=assignment)
+    if form.validate_on_submit():
+        assignment.coach_id = form.coach_id.data
+        assignment.team_member_id = form.team_member_id.data
+        # Convert date to datetime with end of day
+        deadline_datetime = datetime.combine(form.deadline.data, time(23, 59, 59))
+        assignment.deadline = deadline_datetime
+        assignment.expected_coaching_count = form.expected_coaching_count.data
+        assignment.desired_performance_note = form.desired_performance_note.data
+        assignment.status = form.status.data
+        db.session.commit()
+        flash('Coaching-Aufgabe erfolgreich aktualisiert.', 'success')
+        return redirect(url_for('admin.manage_assigned_coachings'))
+    elif request.method == 'GET':
+        form.coach_id.data = assignment.coach_id
+        form.team_member_id.data = assignment.team_member_id
+        form.deadline.data = assignment.deadline.date()
+        form.expected_coaching_count.data = assignment.expected_coaching_count
+        form.desired_performance_note.data = assignment.desired_performance_note
+        form.status.data = assignment.status
+    return render_template('admin/edit_assigned_coaching.html', form=form, assignment=assignment, config=current_app.config)
+
+
+@bp.route('/assigned_coaching/<int:assignment_id>/delete', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def delete_assigned_coaching(assignment_id):
+    assignment = AssignedCoaching.query.get_or_404(assignment_id)
+    try:
+        # Clear references in coachings
+        Coaching.query.filter_by(assigned_coaching_id=assignment_id).update({Coaching.assigned_coaching_id: None})
+        db.session.delete(assignment)
+        db.session.commit()
+        flash('Coaching-Aufgabe gelöscht.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Fehler beim Löschen von zugewiesener Coaching-Aufgabe {assignment_id}: {e}")
+        flash('Fehler beim Löschen.', 'danger')
+    return redirect(url_for('admin.manage_assigned_coachings'))
