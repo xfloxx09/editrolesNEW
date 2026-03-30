@@ -51,7 +51,6 @@
             </ul>
             <ul class="navbar-nav">
                 {% if current_user.is_authenticated %}
-                    <!-- "Jetzt coachen" Button – permission based -->
                     {% if has_perm('coach') %}
                         <li class="nav-item dropdown mr-2">
                             <a class="nav-link dropdown-toggle telekom-button" href="#" id="coachDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" style="background-color: #e20074; border-radius: 20px; padding: 5px 15px; color: white;">
