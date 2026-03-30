@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2>Zugewiesene Coachings verwalten</h2>
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('admin.manage_assigned_coachings') }}" class="form-inline">
+                <div class="form-group mr-2">
+                    <label for="project_filter" class="mr-2">Projekt:</label>
+                    <select name="project" id="project_filter" class="form-control custom-select form-control-sm">
+                        <option value="">-- Alle Projekte --</option>
+                        {% for p in all_projects %}
+                            <option value="{{ p.id }}" {% if current_project_filter == p.id %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mr-2">
+                    <label for="team_filter" class="mr-2">Team:</label>
+                    <select name="team" id="team_filter" class="form-control custom-select form-control-sm">
+                        <option value="">-- Alle Teams --</option>
+                        {% for t in all_teams %}
+                            <option value="{{ t.id }}" {% if team_filter == t.id %}selected{% endif %}>{{ t.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mr-2">
+                    <label for="coach_filter" class="mr-2">Coach:</label>
+                    <select name="coach" id="coach_filter" class="form-control custom-select form-control-sm">
+                        <option value="">-- Alle Coaches --</option>
+                        {% for c in all_coaches %}
+                            <option value="{{ c.id }}" {% if coach_filter == c.id %}selected{% endif %}>{{ c.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mr-2">
+                    <label for="member_filter" class="mr-2">Teammitglied:</label>
+                    <select name="member" id="member_filter" class="form-control custom-select form-control-sm">
+                        <option value="">-- Alle Mitglieder --</option>
+                        {% for m in all_members %}
+                            <option value="{{ m.id }}" {% if member_filter == m.id %}selected{% endif %}>{{ m.name }} ({{ m.team.name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mr-2">
+                    <label for="status_filter" class="mr-2">Status:</label>
+                    <select name="status" id="status_filter" class="form-control custom-select form-control-sm">
+                        {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group mr-2">
+                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Suche (Name, Coach)" value="{{ search_term }}">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary btn-sm">Filtern</button>
+                    <a href="{{ url_for('admin.manage_assigned_coachings') }}" class="btn btn-secondary btn-sm">Zurücksetzen</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('admin.manage_assigned_coachings') }}" id="bulkDeleteForm">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="selectAll"></th>
+                        <th>ID</th>
+                        <th>Coach</th>
+                        <th>Teammitglied</th>
+                        <th>Team</th>
+                        <th>Deadline</th>
+                        <th>Erwartete Coachings</th>
+                        <th>Fortschritt</th>
+                        <th>Status</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for assignment in assignments.items %}
+                    <tr>
+                        <td><input type="checkbox" name="assignment_ids" value="{{ assignment.id }}"></td>
+                        <td>{{ assignment.id }}</td>
+                        <td>{{ assignment.coach.username }}</td>
+                        <td>{{ assignment.team_member.name }}</td>
+                        <td>{{ assignment.team_member.team.name }}</td>
+                        <td>{{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}</td>
+                        <td>{{ assignment.expected_coaching_count }}</td>
+                        <td>{{ assignment.progress }}%</td>
+                        <td><span class="assignment-status status-{{ assignment.status }}">{{ assignment.status|status_de }}</span></td>
+                        <td>
+                            <a href="{{ url_for('admin.edit_assigned_coaching', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary">Bearbeiten</a>
+                            <form action="{{ url_for('admin.delete_assigned_coaching', assignment_id=assignment.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Diese Aufgabe wirklich löschen?');">
+                                <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="row">
+            <div class="col-md-6">
+                <button type="submit" name="delete_selected" class="btn btn-danger btn-sm" onclick="return confirm('Ausgewählte Aufgaben wirklich löschen?');">Ausgewählte löschen</button>
+            </div>
+            <div class="col-md-6">
+                <nav aria-label="Assignment Navigation">
+                    <ul class="pagination justify-content-end">
+                        {% if assignments.has_prev %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('admin.manage_assigned_coachings', page=assignments.prev_num, team=team_filter, coach=coach_filter, member=member_filter, status=status_filter, search=search_term, project=current_project_filter) }}">Vorherige</a></li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">Vorherige</span></li>
+                        {% endif %}
+                        {% for page_num in assignments.iter_pages() %}
+                            {% if page_num %}
+                                <li class="page-item {% if assignments.page == page_num %}active{% endif %}">
+                                    <a class="page-link" href="{{ url_for('admin.manage_assigned_coachings', page=page_num, team=team_filter, coach=coach_filter, member=member_filter, status=status_filter, search=search_term, project=current_project_filter) }}">{{ page_num }}</a>
+                                </li>
+                            {% else %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        {% if assignments.has_next %}
+                        <li class="page-item"><a class="page-link" href="{{ url_for('admin.manage_assigned_coachings', page=assignments.next_num, team=team_filter, coach=coach_filter, member=member_filter, status=status_filter, search=search_term, project=current_project_filter) }}">Nächste</a></li>
+                        {% else %}
+                        <li class="page-item disabled"><span class="page-link">Nächste</span></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    document.getElementById('selectAll').addEventListener('change', function() {
+        var checkboxes = document.querySelectorAll('input[name="assignment_ids"]');
+        checkboxes.forEach(cb => cb.checked = this.checked);
+    });
+</script>
+{% endblock %}
