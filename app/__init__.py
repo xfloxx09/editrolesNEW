@@ -550,6 +550,17 @@ def create_app(config_class=Config):
         else:
             print("✅ Spalte 'user_id' in team_members existiert bereits.")
 
+        # ========== NEW: Add custom fields to team_members ==========
+        new_fields = ['pylon', 'plt_id', 'ma_kennung', 'dag_id']
+        for field in new_fields:
+            if field not in columns_team_members:
+                print(f"⚠️ Spalte '{field}' in team_members fehlt – wird hinzugefügt...")
+                conn.execute(text(f'ALTER TABLE team_members ADD COLUMN {field} VARCHAR(50)'))
+                conn.commit()
+                print(f"✅ Spalte '{field}' in team_members hinzugefügt.")
+            else:
+                print(f"✅ Spalte '{field}' in team_members existiert bereits.")
+
         # ========== NEW: Add permission view_own_coachings ==========
         res = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()
         if not res:
@@ -575,10 +586,6 @@ def create_app(config_class=Config):
             print("✅ Rolle 'Mitarbeiter' mit Berechtigung 'view_own_coachings' hinzugefügt.")
         else:
             print("✅ Rolle 'Mitarbeiter' existiert bereits.")
-
-        # ========== User creation block REMOVED ==========
-        # You will manually create users for team members using the admin panel or a SQL script.
-        print("ℹ️ Benutzer für Teammitglieder müssen manuell erstellt werden (Admin Panel -> Team mit Benutzer erstellen).")
 
         print("--- Migration abgeschlossen ---")
 
