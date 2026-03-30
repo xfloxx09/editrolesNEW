@@ -992,7 +992,8 @@ def manage_assigned_coachings():
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
     # FIXED: Use join with Role to filter coaches by role name
     all_coaches = User.query.join(User.role).filter(Role.name.in_(['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter'])).order_by(User.username).all()
-    all_members = TeamMember.query.join(Team).filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name, TeamMember.name).all()
+    # FIXED: Explicit join condition to avoid ambiguous foreign key
+    all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name, TeamMember.name).all()
     all_projects = Project.query.order_by(Project.name).all()
     status_choices = [
         ('', 'Alle Status'),
