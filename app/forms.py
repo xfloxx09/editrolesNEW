@@ -288,7 +288,6 @@ class AdminAssignedCoachingForm(FlaskForm):
         self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in TeamMember.query.join(Team).order_by(Team.name, TeamMember.name).all()]
 
 
-# NEW: Form for creating a team member with optional user account
 class TeamMemberWithUserForm(FlaskForm):
     name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
     team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
