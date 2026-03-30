@@ -179,6 +179,10 @@ class TeamMember(db.Model):
 
     original_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=True)
     original_project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
+    
+    # NEW: link to user account
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True, unique=True)
+    user = db.relationship('User', backref='team_member', uselist=False)
 
     original_team = db.relationship('Team', foreign_keys=[original_team_id])
     original_project = db.relationship('Project', foreign_keys=[original_project_id])
