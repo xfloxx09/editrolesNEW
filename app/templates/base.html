@@ -19,6 +19,9 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    {% if has_perm('view_own_coachings') %}
+                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.coaching_dashboard') }}">Meine Coachings</a></li>
+                    {% endif %}
                     {% if has_perm('view_own_team') and current_user.teams_led.count() > 0 %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}
@@ -39,6 +42,8 @@
                                 <a class="dropdown-item" href="{{ url_for('admin.manage_roles') }}">Rollen verwalten</a>
                                 <div class="dropdown-divider"></div>
                                 <a class="dropdown-item" href="{{ url_for('admin.manage_assigned_coachings') }}">Zugewiesene Coachings verwalten</a>
+                                <div class="dropdown-divider"></div>
+                                <a class="dropdown-item" href="{{ url_for('admin.create_team_member_with_user') }}">Team mit Benutzer erstellen</a>
                             </div>
                         </li>
                     {% endif %}
