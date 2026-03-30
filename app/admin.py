@@ -8,6 +8,8 @@ from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, 
 from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
+import csv
+from io import TextIOWrapper
 
 bp = Blueprint('admin', __name__)
 
@@ -526,48 +528,6 @@ def delete_team_member_permanently(member_id):
         flash(f'Fehler beim Löschen: {str(e)}', 'danger')
     
     return redirect(url_for('admin.panel'))
-
-
-# NEW: Create team member with optional user account
-@bp.route('/teammembers/create-with-user', methods=['GET', 'POST'])
-@login_required
-@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
-def create_team_member_with_user():
-    form = TeamMemberWithUserForm()
-    if form.validate_on_submit():
-        try:
-            # Create team member
-            team_member = TeamMember(name=form.name.data, team_id=form.team_id.data)
-            db.session.add(team_member)
-            db.session.flush()
-
-            if form.create_user.data and form.username.data:
-                # Get the "Mitarbeiter" role
-                role = Role.query.filter_by(name='Mitarbeiter').first()
-                if not role:
-                    flash('Die Rolle "Mitarbeiter" existiert nicht. Bitte zuerst erstellen.', 'danger')
-                    db.session.rollback()
-                    return redirect(url_for('admin.create_team_member_with_user'))
-                # Create user
-                user = User(
-                    username=form.username.data,
-                    email=form.email.data if form.email.data else None,
-                    role_id=role.id,
-                    project_id=team_member.team.project_id  # Use the team's project
-                )
-                user.set_password(form.password.data)
-                db.session.add(user)
-                db.session.flush()
-                # Link user to team member
-                team_member.user_id = user.id
-            db.session.commit()
-            flash('Teammitglied erfolgreich erstellt!', 'success')
-            return redirect(url_for('admin.panel'))
-        except Exception as e:
-            db.session.rollback()
-            current_app.logger.error(f"Fehler beim Erstellen des Teammitglieds mit Benutzer: {e}")
-            flash(f'Fehler: {str(e)}', 'danger')
-    return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
 # --- Coaching Management (Admin) ---
@@ -1102,3 +1062,255 @@ def delete_assigned_coaching(assignment_id):
         current_app.logger.error(f"Fehler beim Löschen von zugewiesener Coaching-Aufgabe {assignment_id}: {e}")
         flash('Fehler beim Löschen.', 'danger')
     return redirect(url_for('admin.manage_assigned_coachings'))
+
+
+# --- Team Member with User Creation ---
+@bp.route('/teammembers/create-with-user', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def create_team_member_with_user():
+    form = TeamMemberWithUserForm()
+    if form.validate_on_submit():
+        try:
+            team_member = TeamMember(name=form.name.data, team_id=form.team_id.data)
+            db.session.add(team_member)
+            db.session.flush()
+
+            if form.create_user.data and form.username.data:
+                role = Role.query.filter_by(name='Mitarbeiter').first()
+                if not role:
+                    flash('Die Rolle "Mitarbeiter" existiert nicht. Bitte zuerst erstellen.', 'danger')
+                    db.session.rollback()
+                    return redirect(url_for('admin.create_team_member_with_user'))
+                user = User(
+                    username=form.username.data,
+                    email=form.email.data if form.email.data else None,
+                    role_id=role.id,
+                    project_id=team_member.team.project_id
+                )
+                user.set_password(form.password.data)
+                db.session.add(user)
+                db.session.flush()
+                team_member.user_id = user.id
+            db.session.commit()
+            flash('Teammitglied erfolgreich erstellt!', 'success')
+            return redirect(url_for('admin.panel'))
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Fehler beim Erstellen des Teammitglieds mit Benutzer: {e}")
+            flash(f'Fehler: {str(e)}', 'danger')
+    return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
+
+
+# --- CSV Sync Route ---
+@bp.route('/sync_from_csv', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def sync_from_csv():
+    if request.method == 'POST':
+        file = request.files.get('csv_file')
+        if not file or not file.filename.endswith('.csv'):
+            flash('Bitte eine CSV-Datei hochladen.', 'danger')
+            return redirect(url_for('admin.sync_from_csv'))
+
+        selected_fields = request.form.getlist('csv_fields')
+        if not selected_fields:
+            flash('Bitte wählen Sie mindestens eine Spalte aus.', 'danger')
+            return redirect(url_for('admin.sync_from_csv'))
+
+        try:
+            content = TextIOWrapper(file.stream, encoding='utf-8-sig')
+            sample = content.read(1024)
+            content.seek(0)
+            sniffer = csv.Sniffer()
+            dialect = sniffer.sniff(sample)
+            reader = csv.DictReader(content, dialect=dialect)
+            
+            csv_columns = reader.fieldnames
+            if not csv_columns:
+                flash('CSV enthält keine Kopfzeile.', 'danger')
+                return redirect(url_for('admin.sync_from_csv'))
+            
+            missing_fields = [f for f in selected_fields if f not in csv_columns]
+            if missing_fields:
+                flash(f'Folgende Spalten wurden in der CSV nicht gefunden: {", ".join(missing_fields)}', 'warning')
+            
+            use_pylon = 'Pylon-Nr' in selected_fields
+            use_plt_id = 'PLT-ID' in selected_fields
+            use_first_name = 'Vorname' in selected_fields
+            use_last_name = 'Nachname' in selected_fields
+            use_project = 'Projekt Schichtplan' in selected_fields
+            use_team = 'Team' in selected_fields
+            use_ma_kennung = 'MA-Kennung' in selected_fields
+            use_dag_id = 'DAG-ID' in selected_fields
+            use_email = 'eMail' in selected_fields
+            use_active = 'PLT aktiv?' in selected_fields
+            
+            archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
+            if not archiv_team:
+                default_project = Project.query.first()
+                if not default_project:
+                    flash('Kein Projekt vorhanden. Bitte zuerst ein Projekt erstellen.', 'danger')
+                    return redirect(url_for('admin.sync_from_csv'))
+                archiv_team = Team(name=ARCHIV_TEAM_NAME, project_id=default_project.id)
+                db.session.add(archiv_team)
+                db.session.commit()
+            
+            mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
+            if not mitarbeiter_role:
+                flash('Rolle "Mitarbeiter" nicht gefunden. Bitte zuerst erstellen.', 'danger')
+                return redirect(url_for('admin.sync_from_csv'))
+            
+            created_members = 0
+            updated_members = 0
+            archived_members = 0
+            created_projects = 0
+            created_teams = 0
+            created_users = 0
+            errors = 0
+            
+            for row in reader:
+                try:
+                    if use_pylon:
+                        pylon = row.get('Pylon-Nr', '').strip()
+                        if not pylon:
+                            errors += 1
+                            continue
+                    else:
+                        continue
+                    
+                    first_name = row.get('Vorname', '').strip() if use_first_name else ''
+                    last_name = row.get('Nachname', '').strip() if use_last_name else ''
+                    full_name = f"{first_name} {last_name}".strip()
+                    if not full_name:
+                        full_name = pylon
+                    
+                    plt_id = row.get('PLT-ID', '').strip() if use_plt_id else None
+                    ma_kennung = row.get('MA-Kennung', '').strip() if use_ma_kennung else None
+                    dag_id = row.get('DAG-ID', '').strip() if use_dag_id else None
+                    email = row.get('eMail', '').strip() if use_email else None
+                    
+                    is_active = True
+                    if use_active:
+                        active_val = row.get('PLT aktiv?', '').strip()
+                        is_active = (active_val == '1')
+                    
+                    project = None
+                    if use_project:
+                        project_name = row.get('Projekt Schichtplan', '').strip()
+                        if project_name:
+                            project = Project.query.filter_by(name=project_name).first()
+                            if not project:
+                                project = Project(name=project_name)
+                                db.session.add(project)
+                                db.session.flush()
+                                created_projects += 1
+                    if not project:
+                        project = Project.query.first()
+                        if not project:
+                            errors += 1
+                            continue
+                    
+                    team = None
+                    if use_team:
+                        team_name = row.get('Team', '').strip()
+                        if team_name:
+                            team = Team.query.filter_by(name=team_name, project_id=project.id).first()
+                            if not team:
+                                team = Team(name=team_name, project_id=project.id)
+                                db.session.add(team)
+                                db.session.flush()
+                                created_teams += 1
+                    if not team:
+                        errors += 1
+                        continue
+                    
+                    team_member = TeamMember.query.filter_by(pylon=pylon).first()
+                    
+                    if team_member:
+                        if not is_active and team_member.team_id != archiv_team.id:
+                            team_member.original_team_id = team_member.team_id
+                            team_member.original_project_id = team_member.team.project_id
+                            team_member.team_id = archiv_team.id
+                            archived_members += 1
+                        elif is_active and team_member.team_id == archiv_team.id:
+                            if team_member.original_team_id:
+                                team_member.team_id = team_member.original_team_id
+                                team_member.original_team_id = None
+                                team_member.original_project_id = None
+                            else:
+                                team_member.team_id = team.id
+                        elif is_active:
+                            team_member.team_id = team.id
+                        
+                        team_member.name = full_name
+                        if use_plt_id:
+                            team_member.plt_id = plt_id
+                        if use_ma_kennung:
+                            team_member.ma_kennung = ma_kennung
+                        if use_dag_id:
+                            team_member.dag_id = dag_id
+                        updated_members += 1
+                    else:
+                        team_member = TeamMember(
+                            name=full_name,
+                            team_id=team.id,
+                            pylon=pylon,
+                            plt_id=plt_id,
+                            ma_kennung=ma_kennung,
+                            dag_id=dag_id
+                        )
+                        db.session.add(team_member)
+                        db.session.flush()
+                        created_members += 1
+                        
+                        if not team_member.user_id:
+                            base = full_name.lower().replace(' ', '.').replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss')
+                            base = ''.join(c for c in base if c.isalnum() or c=='.')
+                            existing = User.query.filter_by(username=base).first()
+                            counter = 1
+                            username = base
+                            while existing:
+                                username = f"{base}{counter}"
+                                existing = User.query.filter_by(username=username).first()
+                                counter += 1
+                            password = "Start123"
+                            user = User(
+                                username=username,
+                                email=email,
+                                role_id=mitarbeiter_role.id,
+                                project_id=project.id
+                            )
+                            user.set_password(password)
+                            db.session.add(user)
+                            db.session.flush()
+                            team_member.user_id = user.id
+                            created_users += 1
+                    
+                    db.session.commit()
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Fehler in Zeile: {e}")
+                    errors += 1
+                    continue
+            
+            flash(f'Import abgeschlossen: {created_members} neu, {updated_members} aktualisiert, {archived_members} archiviert, {created_projects} Projekte, {created_teams} Teams, {created_users} Benutzer, {errors} Fehler.', 'success')
+            return redirect(url_for('admin.sync_from_csv'))
+            
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"CSV Import Fehler: {e}")
+            flash(f'Fehler beim Verarbeiten der CSV: {str(e)}', 'danger')
+            return redirect(url_for('admin.sync_from_csv'))
+    
+    all_possible_fields = [
+        'PLT-ID', 'Pylon-Nr', 'Anrede', 'Vorname', 'Nachname', 'Agent-Typ', 'Agent-Status',
+        'Projekt Schichtplan', 'Projekt Reporting', 'Team', 'Kunde', 'Zahlungsart', 'Aktiv',
+        'A-Kennung', 'B-Kennung', 'C-Kennung', 'MA-Kennung', 'DAG-ID', 'VAT', 'Status',
+        'FTE', 'Tarifgr', 'Firma', 'Standort', 'eMail', 'CHT/MHT/WHT', 'Gruppe',
+        'Gültig ab', 'Erstellt am', 'Eingeladen am', 'Bemerkung', 'Stat', 'PLT aktiv?',
+        'Dock-Layout', 'Tagging'
+    ]
+    default_selected = ['Pylon-Nr', 'PLT-ID', 'Vorname', 'Nachname', 'Projekt Schichtplan', 'Team', 'MA-Kennung', 'DAG-ID', 'eMail', 'PLT aktiv?']
+    return render_template('admin/sync_from_csv.html', all_fields=all_possible_fields, default_selected=default_selected, config=current_app.config)
