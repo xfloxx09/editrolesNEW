@@ -8,7 +8,7 @@ from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAML
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
-from io import TextIOWrapper, StringIO
+from io import StringIO
 
 bp = Blueprint('admin', __name__)
 
@@ -1101,7 +1101,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (Improved) ---
+# --- CSV Sync Route (Improved with fix for SpooledTemporaryFile) ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1114,16 +1114,17 @@ def sync_from_csv():
             return redirect(url_for('admin.sync_from_csv'))
 
         delimiter = request.form.get('delimiter', 'auto')
-        content = TextIOWrapper(file.stream, encoding='utf-8-sig')
-        sample = content.read(1024)
-        content.seek(0)
+        # Read file as bytes, decode to string
+        file_bytes = file.read()
+        content_str = file_bytes.decode('utf-8-sig')
+        sample = content_str[:1024]
+        content_io = StringIO(content_str)
 
         if delimiter == 'auto':
             delimiter = ';' if ';' in sample else ','
 
-        reader = csv.DictReader(content, delimiter=delimiter)
+        reader = csv.DictReader(content_io, delimiter=delimiter)
         headers = reader.fieldnames
-        # Remove empty first column if present
         if headers and headers[0] == '':
             headers = headers[1:]
 
@@ -1136,9 +1137,8 @@ def sync_from_csv():
                 if len(preview_rows) >= 5:
                     break
 
-        content.seek(0)
-        csv_content = content.read()
-        session['csv_content'] = csv_content
+        # Store CSV content and delimiter in session for processing after mapping
+        session['csv_content'] = content_str
         session['csv_delimiter'] = delimiter
 
         mapping = {
@@ -1177,8 +1177,8 @@ def sync_from_csv():
             flash('Keine CSV-Daten gefunden. Bitte erneut hochladen.', 'danger')
             return redirect(url_for('admin.sync_from_csv'))
 
-        content = StringIO(csv_content)
-        reader = csv.DictReader(content, delimiter=delimiter)
+        content_io = StringIO(csv_content)
+        reader = csv.DictReader(content_io, delimiter=delimiter)
 
         archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
         if not archiv_team:
