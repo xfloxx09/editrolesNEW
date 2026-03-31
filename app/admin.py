@@ -1143,10 +1143,31 @@ def create_team_member_with_user():
     form = TeamMemberWithUserForm()
     if form.validate_on_submit():
         try:
-            team_member = TeamMember(name=form.name.data, team_id=form.team_id.data)
+            team = Team.query.get(form.team_id.data)
+            if not team:
+                flash('Team nicht gefunden.', 'danger')
+                return redirect(url_for('admin.create_team_member_with_user'))
+            
+            # Create team member with all fields
+            team_member = TeamMember(
+                name=form.name.data,
+                team_id=form.team_id.data,
+                pylon=form.pylon.data,
+                plt_id=form.plt_id.data,
+                ma_kennung=form.ma_kennung.data,
+                dag_id=form.dag_id.data
+            )
             db.session.add(team_member)
             db.session.flush()
-
+            
+            # Handle active status: if not active, move to ARCHIV
+            if not form.active.data:
+                archiv_team = get_or_create_archiv_team()
+                team_member.original_team_id = team_member.team_id
+                team_member.original_project_id = team_member.team.project_id
+                team_member.team_id = archiv_team.id
+            
+            # Create user if requested
             if form.create_user.data and form.username.data:
                 role = Role.query.filter_by(name='Mitarbeiter').first()
                 if not role:
@@ -1157,12 +1178,13 @@ def create_team_member_with_user():
                     username=form.username.data,
                     email=form.email.data if form.email.data else None,
                     role_id=role.id,
-                    project_id=team_member.team.project_id
+                    project_id=team.project_id
                 )
                 user.set_password(form.password.data)
                 db.session.add(user)
                 db.session.flush()
                 team_member.user_id = user.id
+            
             db.session.commit()
             flash('Teammitglied erfolgreich erstellt!', 'success')
             return redirect(url_for('admin.panel'))
