@@ -236,8 +236,9 @@ def create_user():
                 db.session.rollback()
                 return redirect(url_for('admin.create_user'))
 
+            full_name = f"{form.first_name.data} {form.last_name.data}".strip()
             member = TeamMember(
-                name=form.name.data,
+                name=full_name,
                 team_id=team.id,
                 pylon=form.pylon.data,
                 plt_id=form.plt_id.data,
@@ -286,7 +287,10 @@ def edit_user(user_id):
 
     # Pre‑populate team member fields if editing
     if request.method == 'GET' and team_member:
-        form.name.data = team_member.name
+        # Split full name into first and last (simple: first space separates)
+        parts = team_member.name.split(' ', 1)
+        form.first_name.data = parts[0] if parts else ''
+        form.last_name.data = parts[1] if len(parts) > 1 else ''
         form.pylon.data = team_member.pylon
         form.plt_id.data = team_member.plt_id
         form.ma_kennung.data = team_member.ma_kennung
@@ -296,6 +300,8 @@ def edit_user(user_id):
         form.active.data = team_member.team_id != archiv_team.id
     elif request.method == 'GET':
         # No team member yet – set defaults
+        form.first_name.data = ''
+        form.last_name.data = ''
         form.active.data = True
         if form.team_id_for_member.choices:
             form.team_id_for_member.data = form.team_id_for_member.choices[0][0]
@@ -337,7 +343,8 @@ def edit_user(user_id):
             if team_member is None:
                 team_member = TeamMember(user_id=user_to_edit.id)
 
-            team_member.name = form.name.data
+            full_name = f"{form.first_name.data} {form.last_name.data}".strip()
+            team_member.name = full_name
             team_member.pylon = form.pylon.data
             team_member.plt_id = form.plt_id.data
             team_member.ma_kennung = form.ma_kennung.data
@@ -519,7 +526,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management (kept for compatibility but not used in new workflow) ---
+# --- Team Member Management (kept for compatibility, but not used in new workflow) ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -534,9 +541,9 @@ def create_team_member():
                 flash('Team nicht gefunden.', 'danger')
                 return redirect(url_for('admin.create_team_member'))
             
-            # Create new member
+            full_name = f"{form.first_name.data} {form.last_name.data}".strip()
             member = TeamMember(
-                name=form.name.data,
+                name=full_name,
                 team_id=form.team_id.data,
                 pylon=form.pylon.data,
                 plt_id=form.plt_id.data,
@@ -574,17 +581,23 @@ def edit_team_member(member_id):
     projects = Project.query.order_by(Project.name).all()
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
     
+    # Split existing name into first and last for display
+    if request.method == 'GET':
+        parts = member.name.split(' ', 1)
+        form.first_name.data = parts[0] if parts else ''
+        form.last_name.data = parts[1] if len(parts) > 1 else ''
+    
     # Determine active status: not in ARCHIV
     archiv_team = get_or_create_archiv_team()
     is_active = member.team_id != archiv_team.id
     if request.method == 'GET':
         form.active.data = is_active
-        # Pre-populate form fields (already done by obj=member)
     
     if form.validate_on_submit():
         try:
             # Update basic fields
-            member.name = form.name.data
+            full_name = f"{form.first_name.data} {form.last_name.data}".strip()
+            member.name = full_name
             member.pylon = form.pylon.data
             member.plt_id = form.plt_id.data
             member.ma_kennung = form.ma_kennung.data
@@ -1233,9 +1246,9 @@ def create_team_member_with_user():
                 flash('Team nicht gefunden.', 'danger')
                 return redirect(url_for('admin.create_team_member_with_user'))
             
-            # Create team member with all fields
+            full_name = f"{form.first_name.data} {form.last_name.data}".strip()
             team_member = TeamMember(
-                name=form.name.data,
+                name=full_name,
                 team_id=form.team_id.data,
                 pylon=form.pylon.data,
                 plt_id=form.plt_id.data,
