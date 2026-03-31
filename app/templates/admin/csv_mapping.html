@@ -16,7 +16,8 @@
                             {% for header in headers %}
                                 <th>{{ header }}</th>
                             {% endfor %}
-                        </thead>
+                        </tr>
+                    </thead>
                     <tbody>
                         {% for row in preview_rows %}
                         <tr>
@@ -143,6 +144,15 @@
                         <option value="">-- Ignorieren --</option>
                         {% for header in headers %}
                             <option value="{{ header }}" {% if mapping.agent_status == header %}selected{% endif %}>{{ header }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Rolle (optional, aus Agent-Status)</label>
+                    <select name="map_role" class="form-control">
+                        <option value="">-- Ignorieren (Mitarbeiter) --</option>
+                        {% for header in headers %}
+                            <option value="{{ header }}" {% if mapping.role == header %}selected{% endif %}>{{ header }}</option>
                         {% endfor %}
                     </select>
                 </div>
