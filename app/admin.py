@@ -1205,8 +1205,12 @@ def sync_from_csv():
             created_teams = 0
             created_users = 0
             errors = 0
+            processed = 0
+            batch = []
+            BATCH_SIZE = 100
 
             for row in reader:
+                processed += 1
                 try:
                     pylon = row.get(mapping.get('pylon', ''), '').strip() if mapping.get('pylon') else None
                     if not pylon:
@@ -1231,7 +1235,6 @@ def sync_from_csv():
                         if not project:
                             project = Project(name=project_name)
                             db.session.add(project)
-                            db.session.flush()
                             created_projects += 1
                     else:
                         project = Project.query.first()
@@ -1246,14 +1249,12 @@ def sync_from_csv():
                         if not team:
                             team = Team(name=team_name, project_id=project.id)
                             db.session.add(team)
-                            db.session.flush()
                             created_teams += 1
                     else:
                         team = Team.query.filter_by(project_id=project.id).first()
                         if not team:
                             team = Team(name="Default", project_id=project.id)
                             db.session.add(team)
-                            db.session.flush()
                             created_teams += 1
 
                     active_str = row.get(mapping.get('active_status', ''), '').strip() if mapping.get('active_status') else '1'
@@ -1295,7 +1296,6 @@ def sync_from_csv():
                             dag_id=dag_id
                         )
                         db.session.add(team_member)
-                        db.session.flush()
                         created_members += 1
 
                         # Create user account if not already linked
@@ -1329,17 +1329,26 @@ def sync_from_csv():
                             )
                             user.set_password("Start123")
                             db.session.add(user)
-                            db.session.flush()
                             team_member.user_id = user.id
                             created_users += 1
 
-                    db.session.commit()
+                    # Batch commit
+                    batch.append(team_member)
+                    if len(batch) >= BATCH_SIZE:
+                        db.session.commit()
+                        batch = []
+                        current_app.logger.info(f"Committed {processed} rows so far")
 
                 except Exception as e:
                     db.session.rollback()
-                    current_app.logger.error(f"Fehler in Zeile: {e}")
+                    current_app.logger.error(f"Fehler in Zeile {processed}: {e}")
                     errors += 1
                     continue
+
+            # Final commit
+            if batch:
+                db.session.commit()
+            current_app.logger.info(f"Import finished. Processed {processed} rows, errors {errors}")
 
         # Clean up temp file
         try:
@@ -1351,5 +1360,4 @@ def sync_from_csv():
         flash(f'Import abgeschlossen: {created_members} neu, {updated_members} aktualisiert, {archived_members} archiviert, {created_projects} Projekte, {created_teams} Teams, {created_users} Benutzer, {errors} Fehler.', 'success')
         return redirect(url_for('admin.sync_from_csv'))
 
-    # GET request: show upload form
     return render_template('admin/sync_from_csv.html', config=current_app.config)
