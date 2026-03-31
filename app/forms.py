@@ -26,8 +26,9 @@ class RegistrationForm(FlaskForm):
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
 
-    # Team member fields (for all users)
-    name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
+    # Team member fields (first name, last name, and custom fields)
+    first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
+    last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
     pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
     plt_id = StringField('PLT-ID', validators=[Length(max=50)])
     ma_kennung = StringField('MA-Kennung', validators=[Length(max=50)])
@@ -93,7 +94,8 @@ class TeamForm(FlaskForm):
 
 
 class TeamMemberForm(FlaskForm):
-    name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
+    first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
+    last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
     team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
     
     # New fields from CSV
@@ -309,7 +311,8 @@ class AdminAssignedCoachingForm(FlaskForm):
 
 # Note: TeamMemberWithUserForm is kept for backwards compatibility but not used in new workflow
 class TeamMemberWithUserForm(FlaskForm):
-    name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
+    first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
+    last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
     team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
     pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
     plt_id = StringField('PLT-ID', validators=[Length(max=50)])
