@@ -562,12 +562,28 @@ def create_app(config_class=Config):
 
         # ========== FIX: Change team name uniqueness to be per project ==========
         try:
-            conn.execute(text('ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_name_key'))
-            conn.execute(text('ALTER TABLE teams ADD CONSTRAINT teams_name_project_id_key UNIQUE (name, project_id)'))
-            conn.commit()
-            print("✅ Unique constraint on teams updated to (name, project_id).")
+            # Check if the composite constraint already exists
+            check_constraint = conn.execute(text("""
+                SELECT 1 FROM information_schema.table_constraints 
+                WHERE constraint_name = 'teams_name_project_id_key' 
+                AND table_name = 'teams'
+            """)).fetchone()
+            if not check_constraint:
+                # Drop old unique constraint if it exists (ignore if not)
+                try:
+                    conn.execute(text('ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_name_key'))
+                except Exception:
+                    pass
+                # Add composite unique constraint
+                conn.execute(text('ALTER TABLE teams ADD CONSTRAINT teams_name_project_id_key UNIQUE (name, project_id)'))
+                conn.commit()
+                print("✅ Unique constraint on teams updated to (name, project_id).")
+            else:
+                print("✅ Composite unique constraint (name, project_id) already exists.")
         except Exception as e:
-            print(f"ℹ️ Note on team constraint: {e}")
+            # Rollback the failed part of the transaction
+            conn.rollback()
+            print(f"⚠️ Could not update team constraint: {e}")
 
         # ========== NEW: Add permission view_own_coachings ==========
         res = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()
