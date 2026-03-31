@@ -1,78 +1,55 @@
-# app/utils.py
 from functools import wraps
 from flask_login import current_user
-from flask import abort, flash, redirect, url_for
+from flask import flash, redirect, url_for
 from app import db
-from app.models import Team
-from app.constants import ARCHIV_TEAM_NAME
+from app.models import Team, Project, User, Role, Permission
 
-# Role constants (must match the names in the roles table)
+# Role constants
 ROLE_ADMIN = 'Admin'
 ROLE_BETRIEBSLEITER = 'Betriebsleiter'
 ROLE_PROJEKTLEITER = 'Projektleiter'
-ROLE_ABTEILUNGSLEITER = 'Abteilungsleiter'
 ROLE_TEAMLEITER = 'Teamleiter'
-ROLE_QM = 'Qualitätsmanager'
+ROLE_QUALITÄTSMANAGER = 'Qualitätsmanager'
 ROLE_SALESCOACH = 'SalesCoach'
 ROLE_TRAINER = 'Trainer'
+ROLE_ABTEILUNGSLEITER = 'Abteilungsleiter'
+ROLE_MITARBEITER = 'Mitarbeiter'
 
-def role_required(role_name_or_list):
-    """
-    Decorator to require that the current user has at least one of the specified roles.
-    Accepts a single role name string or a list of role names.
-    """
+ARCHIV_TEAM_NAME = "ARCHIV"
+
+def role_required(allowed_roles):
+    """Decorator to check if current user has one of the allowed roles."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
-                abort(401)
-            user_role_name = current_user.role_name
-            if not user_role_name:
-                flash("Ihre Rolle konnte nicht ermittelt werden.", "danger")
-                abort(403)
-            required_roles = []
-            if isinstance(role_name_or_list, str):
-                required_roles.append(role_name_or_list)
-            elif isinstance(role_name_or_list, list):
-                required_roles = role_name_or_list
-            else:
-                return abort(500)
-            if user_role_name not in required_roles:
-                abort(403)
+                flash('Bitte melden Sie sich an.', 'warning')
+                return redirect(url_for('auth.login'))
+            if current_user.role_name not in allowed_roles:
+                flash('Sie haben keine Berechtigung für diese Seite.', 'danger')
+                return redirect(url_for('main.index'))
             return f(*args, **kwargs)
         return decorated_function
     return decorator
-
-
-def permission_required(permission_name):
-    """Decorator to check if current user has a specific permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated:
-                abort(401)
-            if not current_user.has_permission(permission_name):
-                abort(403)
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
 
 def get_or_create_archiv_team():
-    """Get or create the special ARCHIV team."""
+    """Get or create the ARCHIV team (for inactive members)."""
     archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
     if not archiv_team:
-        print(f"INFO: Erstelle das spezielle Team: {ARCHIV_TEAM_NAME}")
-        archiv_team = Team(name=ARCHIV_TEAM_NAME)
+        # Get a default project (first project) or create a dummy one
+        default_project = Project.query.first()
+        if not default_project:
+            # Create a fallback project if none exists
+            default_project = Project(name="Default Project")
+            db.session.add(default_project)
+            db.session.commit()
+        archiv_team = Team(name=ARCHIV_TEAM_NAME, project_id=default_project.id)
         db.session.add(archiv_team)
         db.session.commit()
     return archiv_team
 
-
-def user_can_access_project(user, project_id):
-    """Check if user can access a given project."""
-    if user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
-        return True
-    if user.role_name == ROLE_ABTEILUNGSLEITER:
-        return project_id in user.get_allowed_project_ids()
-    return user.project_id == project_id
+def has_permission(user, permission_name):
+    """Check if a user has a specific permission (via role)."""
+    if not user or not user.role:
+        return False
+    return user.role.has_permission(permission_name)
