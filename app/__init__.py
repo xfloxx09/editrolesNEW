@@ -1,4 +1,3 @@
-# app/__init__.py
 print("<<<< START __init__.py wird GELADEN >>>>")
 
 from flask import Flask
@@ -560,6 +559,15 @@ def create_app(config_class=Config):
                 print(f"✅ Spalte '{field}' in team_members hinzugefügt.")
             else:
                 print(f"✅ Spalte '{field}' in team_members existiert bereits.")
+
+        # ========== FIX: Change team name uniqueness to be per project ==========
+        try:
+            conn.execute(text('ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_name_key'))
+            conn.execute(text('ALTER TABLE teams ADD CONSTRAINT teams_name_project_id_key UNIQUE (name, project_id)'))
+            conn.commit()
+            print("✅ Unique constraint on teams updated to (name, project_id).")
+        except Exception as e:
+            print(f"ℹ️ Note on team constraint: {e}")
 
         # ========== NEW: Add permission view_own_coachings ==========
         res = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()
