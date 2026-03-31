@@ -25,6 +25,16 @@ class RegistrationForm(FlaskForm):
     team_ids = SelectMultipleField('Zugeordnete Teams (nur für Teamleiter)', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
+
+    # Team member fields (for all users)
+    name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
+    pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
+    plt_id = StringField('PLT-ID', validators=[Length(max=50)])
+    ma_kennung = StringField('MA-Kennung', validators=[Length(max=50)])
+    dag_id = StringField('DAG-ID', validators=[Length(max=50)])
+    team_id_for_member = SelectField('Team des Mitglieds', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
+    active = BooleanField('Aktiv (nicht im Archiv)', default=True)
+
     submit = SubmitField('Benutzer registrieren/aktualisieren')
 
     def __init__(self, original_username=None, *args, **kwargs):
@@ -32,6 +42,7 @@ class RegistrationForm(FlaskForm):
         self.original_username = original_username
         active_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
         self.team_ids.choices = [(t.id, t.name) for t in active_teams]
+        self.team_id_for_member.choices = [(t.id, t.name) for t in active_teams]
         all_projects = Project.query.order_by(Project.name).all()
         self.project_id.choices = [(p.id, p.name) for p in all_projects]
         self.project_ids.choices = [(p.id, p.name) for p in all_projects]
@@ -296,10 +307,10 @@ class AdminAssignedCoachingForm(FlaskForm):
         self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in TeamMember.query.join(Team).order_by(Team.name, TeamMember.name).all()]
 
 
+# Note: TeamMemberWithUserForm is kept for backwards compatibility but not used in new workflow
 class TeamMemberWithUserForm(FlaskForm):
     name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
     team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
-    # New fields from CSV
     pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
     plt_id = StringField('PLT-ID', validators=[Length(max=50)])
     ma_kennung = StringField('MA-Kennung', validators=[Length(max=50)])
