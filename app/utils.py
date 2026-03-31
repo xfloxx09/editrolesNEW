@@ -10,6 +10,7 @@ ROLE_BETRIEBSLEITER = 'Betriebsleiter'
 ROLE_PROJEKTLEITER = 'Projektleiter'
 ROLE_TEAMLEITER = 'Teamleiter'
 ROLE_QUALITÄTSMANAGER = 'Qualitätsmanager'
+ROLE_QM = ROLE_QUALITÄTSMANAGER   # alias for compatibility
 ROLE_SALESCOACH = 'SalesCoach'
 ROLE_TRAINER = 'Trainer'
 ROLE_ABTEILUNGSLEITER = 'Abteilungsleiter'
@@ -27,6 +28,21 @@ def role_required(allowed_roles):
                 return redirect(url_for('auth.login'))
             if current_user.role_name not in allowed_roles:
                 flash('Sie haben keine Berechtigung für diese Seite.', 'danger')
+                return redirect(url_for('main.index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def permission_required(permission_name):
+    """Decorator to check if current user has a specific permission."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                flash('Bitte melden Sie sich an.', 'warning')
+                return redirect(url_for('auth.login'))
+            if not current_user.has_permission(permission_name):
+                flash('Sie haben keine Berechtigung für diese Aktion.', 'danger')
                 return redirect(url_for('main.index'))
             return f(*args, **kwargs)
         return decorated_function
