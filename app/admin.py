@@ -1,3 +1,4 @@
+# app/admin.py
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
@@ -339,7 +340,7 @@ def create_team():
     all_team_leaders = User.query.filter(User.role.has(name=ROLE_TEAMLEITER)).order_by(User.username).all()
     if form.validate_on_submit():
         if form.name.data.strip().upper() == ARCHIV_TEAM_NAME:
-            flash(f'Der Teamname \"{ARCHIV_TEAM_NAME}\" ist für das System reserviert.', 'danger')
+            flash(f'Der Teamname \\\"{ARCHIV_TEAM_NAME}\\\" ist für das System reserviert.', 'danger')
             return render_template('admin/create_team.html', title='Team erstellen', form=form, config=current_app.config)
         try:
             team = Team(
@@ -447,8 +448,27 @@ def create_team_member():
             if not team:
                 flash('Team nicht gefunden.', 'danger')
                 return redirect(url_for('admin.create_team_member'))
-            member = TeamMember(name=form.name.data, team_id=form.team_id.data)
+            
+            # Create new member
+            member = TeamMember(
+                name=form.name.data,
+                team_id=form.team_id.data,
+                pylon=form.pylon.data,
+                plt_id=form.plt_id.data,
+                ma_kennung=form.ma_kennung.data,
+                dag_id=form.dag_id.data
+            )
             db.session.add(member)
+            db.session.flush()
+            
+            # Handle active status: if not active, move to ARCHIV
+            if not form.active.data:
+                archiv_team = get_or_create_archiv_team()
+                member.original_team_id = member.team_id
+                member.original_project_id = member.team.project_id
+                member.team_id = archiv_team.id
+            # else: stay in the selected team, no archive record needed
+            
             db.session.commit()
             flash('Teammitglied erfolgreich erstellt!', 'success')
             return redirect(url_for('admin.panel'))
@@ -468,19 +488,70 @@ def edit_team_member(member_id):
     form = TeamMemberForm(obj=member)
     projects = Project.query.order_by(Project.name).all()
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
+    
+    # Determine active status: not in ARCHIV
+    archiv_team = get_or_create_archiv_team()
+    is_active = member.team_id != archiv_team.id
+    if request.method == 'GET':
+        form.active.data = is_active
+        # Pre-populate form fields (already done by obj=member)
+    
     if form.validate_on_submit():
         try:
+            # Update basic fields
             member.name = form.name.data
-            member.team_id = form.team_id.data
+            member.pylon = form.pylon.data
+            member.plt_id = form.plt_id.data
+            member.ma_kennung = form.ma_kennung.data
+            member.dag_id = form.dag_id.data
+            
+            # Handle active status change
+            if form.active.data:
+                # If moving from inactive to active
+                if not is_active:
+                    # Restore original team if available, else use selected team
+                    if member.original_team_id:
+                        member.team_id = member.original_team_id
+                        member.original_team_id = None
+                        member.original_project_id = None
+                    else:
+                        # No original team – use selected team
+                        member.team_id = form.team_id.data
+                else:
+                    # Already active – update team normally
+                    member.team_id = form.team_id.data
+            else:
+                # Moving to inactive
+                if is_active:
+                    # Store original team/project before moving
+                    member.original_team_id = member.team_id
+                    member.original_project_id = member.team.project_id
+                    member.team_id = archiv_team.id
+                # else already inactive – keep as is (no change)
+            
             db.session.commit()
             flash('Teammitglied erfolgreich aktualisiert!', 'success')
-            return redirect(url_for('admin.edit_team', team_id=member.team_id))
+            # Redirect to the team view of the team the member belongs to after update
+            if form.active.data:
+                target_team_id = member.team_id
+            else:
+                target_team_id = member.original_team_id or form.team_id.data
+            return redirect(url_for('admin.edit_team', team_id=target_team_id))
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"Fehler beim Bearbeiten des Teammitglieds {member_id}: {e}")
             flash(f'Fehler beim Bearbeiten des Teammitglieds: {str(e)}', 'danger')
     elif request.method == 'GET':
-        form.team_id.data = member.team_id
+        # Set team dropdown to current team (if active) or original team (if archived)
+        if is_active:
+            form.team_id.data = member.team_id
+        else:
+            # If archived, the selected team should be the original team if known, else first in list
+            if member.original_team_id:
+                form.team_id.data = member.original_team_id
+            else:
+                form.team_id.data = all_teams[0].id if all_teams else None
+    
     return render_template('admin/edit_team_member.html', title='Teammitglied bearbeiten',
                            form=form, member=member, projects=projects, all_teams=all_teams, config=current_app.config)
 
@@ -501,7 +572,7 @@ def move_to_archiv(member_id):
         member_to_move.original_project_id = member_to_move.team.project_id
         member_to_move.team_id = archiv_team.id
         db.session.commit()
-        flash(f'Mitglied \"{member_to_move.name}\" wurde von Team \"{original_team_name}\" ins ARCHIV verschoben.', 'success')
+        flash(f'Mitglied \\\"{member_to_move.name}\\\" wurde von Team \\\"{original_team_name}\\\" ins ARCHIV verschoben.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim Verschieben von Mitglied {member_id} ins Archiv: {e}")
@@ -521,7 +592,7 @@ def delete_team_member_permanently(member_id):
         db.session.execute(workshop_participants.delete().where(workshop_participants.c.team_member_id == member_id))
         db.session.delete(member)
         db.session.commit()
-        flash(f'Mitglied \"{member_name}\" wurde endgültig gelöscht.', 'success')
+        flash(f'Mitglied \\\"{member_name}\\\" wurde endgültig gelöscht.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim endgültigen Löschen von Mitglied {member_id}: {e}")
@@ -1079,7 +1150,7 @@ def create_team_member_with_user():
             if form.create_user.data and form.username.data:
                 role = Role.query.filter_by(name='Mitarbeiter').first()
                 if not role:
-                    flash('Die Rolle "Mitarbeiter" existiert nicht. Bitte zuerst erstellen.', 'danger')
+                    flash('Die Rolle \"Mitarbeiter\" existiert nicht. Bitte zuerst erstellen.', 'danger')
                     db.session.rollback()
                     return redirect(url_for('admin.create_team_member_with_user'))
                 user = User(
@@ -1195,7 +1266,7 @@ def sync_from_csv():
 
             mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
             if not mitarbeiter_role:
-                flash('Rolle "Mitarbeiter" nicht gefunden. Bitte zuerst erstellen.', 'danger')
+                flash('Rolle \"Mitarbeiter\" nicht gefunden. Bitte zuerst erstellen.', 'danger')
                 return redirect(url_for('admin.sync_from_csv'))
 
             created_members = 0
@@ -1300,20 +1371,17 @@ def sync_from_csv():
 
                         # Create user account if not already linked
                         if not team_member.user_id:
-                            # NEW: Username = first 4 letters of first name + full last name
+                            # Username = first 4 letters of first name + full last name
                             first_part = first_name[:4].lower() if first_name else ''
                             last_part = last_name.lower() if last_name else ''
                             username_base = f"{first_part}{last_part}"
-                            # Remove any non-alphanumeric characters except dot
                             username_base = ''.join(c for c in username_base if c.isalnum() or c == '.')
                             if not username_base:
-                                # fallback to email or pylon
                                 if email:
                                     username_base = email.split('@')[0]
                                 else:
                                     username_base = pylon.lower()
                             username = username_base
-                            # Ensure uniqueness
                             existing = User.query.filter_by(username=username).first()
                             counter = 1
                             orig_username = username
