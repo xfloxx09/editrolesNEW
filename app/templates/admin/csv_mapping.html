@@ -16,18 +16,17 @@
                             {% for header in headers %}
                                 <th>{{ header }}</th>
                             {% endfor %}
-                        </tr>
-                    </thead>
+                        </thead>
                     <tbody>
                         {% for row in preview_rows %}
-                        <tr>
+                         <tr>
                             {% for header in headers %}
-                                <td>{{ row[header] }}</td>
+                                 <td>{{ row[header] }}</td>
                             {% endfor %}
-                        </tr>
+                         </tr>
                         {% endfor %}
                     </tbody>
-                </table>
+                 </table>
             </div>
         </div>
         <div class="col-md-6">
