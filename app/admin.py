@@ -8,7 +8,8 @@ from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAML
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
-from io import StringIO
+import tempfile
+import os
 
 bp = Blueprint('admin', __name__)
 
@@ -1101,7 +1102,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (Improved with fix for SpooledTemporaryFile) ---
+# --- CSV Sync Route (with temp file storage to handle large CSV) ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1114,31 +1115,34 @@ def sync_from_csv():
             return redirect(url_for('admin.sync_from_csv'))
 
         delimiter = request.form.get('delimiter', 'auto')
-        # Read file as bytes, decode to string
-        file_bytes = file.read()
-        content_str = file_bytes.decode('utf-8-sig')
-        sample = content_str[:1024]
-        content_io = StringIO(content_str)
-
-        if delimiter == 'auto':
-            delimiter = ';' if ';' in sample else ','
-
-        reader = csv.DictReader(content_io, delimiter=delimiter)
-        headers = reader.fieldnames
-        if headers and headers[0] == '':
-            headers = headers[1:]
-
-        preview_rows = []
-        for row in reader:
-            if row.get('Pylon-Nr', '').strip():
-                if '' in row:
-                    del row['']
-                preview_rows.append(row)
-                if len(preview_rows) >= 5:
-                    break
-
-        # Store CSV content and delimiter in session for processing after mapping
-        session['csv_content'] = content_str
+        
+        # Save uploaded file to a temporary file
+        temp_fd, temp_path = tempfile.mkstemp(suffix='.csv')
+        os.close(temp_fd)
+        file.save(temp_path)
+        
+        # Read first few rows for preview
+        with open(temp_path, 'r', encoding='utf-8-sig') as f:
+            sample = f.read(1024)
+            f.seek(0)
+            if delimiter == 'auto':
+                delimiter = ';' if ';' in sample else ','
+            reader = csv.DictReader(f, delimiter=delimiter)
+            headers = reader.fieldnames
+            if headers and headers[0] == '':
+                headers = headers[1:]
+            
+            preview_rows = []
+            for row in reader:
+                if row.get('Pylon-Nr', '').strip():
+                    if '' in row:
+                        del row['']
+                    preview_rows.append(row)
+                    if len(preview_rows) >= 5:
+                        break
+        
+        # Store temp file path and delimiter in session
+        session['csv_temp_file'] = temp_path
         session['csv_delimiter'] = delimiter
 
         mapping = {
@@ -1170,164 +1174,171 @@ def sync_from_csv():
             if col_name:
                 mapping[field] = col_name
 
-        import_columns = request.form.getlist('import_columns')
         delimiter = session.get('csv_delimiter', ';')
-        csv_content = session.get('csv_content')
-        if not csv_content:
+        temp_path = session.get('csv_temp_file')
+        if not temp_path or not os.path.exists(temp_path):
             flash('Keine CSV-Daten gefunden. Bitte erneut hochladen.', 'danger')
             return redirect(url_for('admin.sync_from_csv'))
 
-        content_io = StringIO(csv_content)
-        reader = csv.DictReader(content_io, delimiter=delimiter)
+        # Open the temporary file for reading
+        with open(temp_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f, delimiter=delimiter)
+            
+            archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
+            if not archiv_team:
+                default_project = Project.query.first()
+                if not default_project:
+                    flash('Kein Projekt vorhanden. Bitte zuerst ein Projekt erstellen.', 'danger')
+                    return redirect(url_for('admin.sync_from_csv'))
+                archiv_team = Team(name=ARCHIV_TEAM_NAME, project_id=default_project.id)
+                db.session.add(archiv_team)
+                db.session.commit()
 
-        archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
-        if not archiv_team:
-            default_project = Project.query.first()
-            if not default_project:
-                flash('Kein Projekt vorhanden. Bitte zuerst ein Projekt erstellen.', 'danger')
+            mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
+            if not mitarbeiter_role:
+                flash('Rolle "Mitarbeiter" nicht gefunden. Bitte zuerst erstellen.', 'danger')
                 return redirect(url_for('admin.sync_from_csv'))
-            archiv_team = Team(name=ARCHIV_TEAM_NAME, project_id=default_project.id)
-            db.session.add(archiv_team)
-            db.session.commit()
 
-        mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
-        if not mitarbeiter_role:
-            flash('Rolle "Mitarbeiter" nicht gefunden. Bitte zuerst erstellen.', 'danger')
-            return redirect(url_for('admin.sync_from_csv'))
+            created_members = 0
+            updated_members = 0
+            archived_members = 0
+            created_projects = 0
+            created_teams = 0
+            created_users = 0
+            errors = 0
 
-        created_members = 0
-        updated_members = 0
-        archived_members = 0
-        created_projects = 0
-        created_teams = 0
-        created_users = 0
-        errors = 0
-
-        for row in reader:
-            try:
-                pylon = row.get(mapping.get('pylon', ''), '').strip() if mapping.get('pylon') else None
-                if not pylon:
-                    errors += 1
-                    continue
-
-                first_name = row.get(mapping.get('first_name', ''), '').strip() if mapping.get('first_name') else ''
-                last_name = row.get(mapping.get('last_name', ''), '').strip() if mapping.get('last_name') else ''
-                full_name = f"{first_name} {last_name}".strip()
-                if not full_name:
-                    full_name = pylon
-
-                plt_id = row.get(mapping.get('plt_id', ''), '').strip() if mapping.get('plt_id') else None
-                ma_kennung = row.get(mapping.get('ma_kennung', ''), '').strip() if mapping.get('ma_kennung') else None
-                dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
-                email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
-
-                project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
-                project = None
-                if project_name:
-                    project = Project.query.filter_by(name=project_name).first()
-                    if not project:
-                        project = Project(name=project_name)
-                        db.session.add(project)
-                        db.session.flush()
-                        created_projects += 1
-                else:
-                    project = Project.query.first()
-                    if not project:
+            for row in reader:
+                try:
+                    pylon = row.get(mapping.get('pylon', ''), '').strip() if mapping.get('pylon') else None
+                    if not pylon:
                         errors += 1
                         continue
 
-                team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
-                team = None
-                if team_name:
-                    team = Team.query.filter_by(name=team_name, project_id=project.id).first()
-                    if not team:
-                        team = Team(name=team_name, project_id=project.id)
-                        db.session.add(team)
-                        db.session.flush()
-                        created_teams += 1
-                else:
-                    team = Team.query.filter_by(project_id=project.id).first()
-                    if not team:
-                        team = Team(name="Default", project_id=project.id)
-                        db.session.add(team)
-                        db.session.flush()
-                        created_teams += 1
+                    first_name = row.get(mapping.get('first_name', ''), '').strip() if mapping.get('first_name') else ''
+                    last_name = row.get(mapping.get('last_name', ''), '').strip() if mapping.get('last_name') else ''
+                    full_name = f"{first_name} {last_name}".strip()
+                    if not full_name:
+                        full_name = pylon
 
-                active_str = row.get(mapping.get('active_status', ''), '').strip() if mapping.get('active_status') else '1'
-                is_active = active_str in ['1', 'true', 'True', 'aktiv', 'yes']
+                    plt_id = row.get(mapping.get('plt_id', ''), '').strip() if mapping.get('plt_id') else None
+                    ma_kennung = row.get(mapping.get('ma_kennung', ''), '').strip() if mapping.get('ma_kennung') else None
+                    dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
+                    email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
 
-                team_member = TeamMember.query.filter_by(pylon=pylon).first()
+                    project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
+                    project = None
+                    if project_name:
+                        project = Project.query.filter_by(name=project_name).first()
+                        if not project:
+                            project = Project(name=project_name)
+                            db.session.add(project)
+                            db.session.flush()
+                            created_projects += 1
+                    else:
+                        project = Project.query.first()
+                        if not project:
+                            errors += 1
+                            continue
 
-                if team_member:
-                    if not is_active and team_member.team_id != archiv_team.id:
-                        team_member.original_team_id = team_member.team_id
-                        team_member.original_project_id = team_member.team.project_id
-                        team_member.team_id = archiv_team.id
-                        archived_members += 1
-                    elif is_active and team_member.team_id == archiv_team.id:
-                        if team_member.original_team_id:
-                            team_member.team_id = team_member.original_team_id
-                            team_member.original_team_id = None
-                            team_member.original_project_id = None
-                        else:
+                    team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
+                    team = None
+                    if team_name:
+                        team = Team.query.filter_by(name=team_name, project_id=project.id).first()
+                        if not team:
+                            team = Team(name=team_name, project_id=project.id)
+                            db.session.add(team)
+                            db.session.flush()
+                            created_teams += 1
+                    else:
+                        team = Team.query.filter_by(project_id=project.id).first()
+                        if not team:
+                            team = Team(name="Default", project_id=project.id)
+                            db.session.add(team)
+                            db.session.flush()
+                            created_teams += 1
+
+                    active_str = row.get(mapping.get('active_status', ''), '').strip() if mapping.get('active_status') else '1'
+                    is_active = active_str in ['1', 'true', 'True', 'aktiv', 'yes']
+
+                    team_member = TeamMember.query.filter_by(pylon=pylon).first()
+
+                    if team_member:
+                        if not is_active and team_member.team_id != archiv_team.id:
+                            team_member.original_team_id = team_member.team_id
+                            team_member.original_project_id = team_member.team.project_id
+                            team_member.team_id = archiv_team.id
+                            archived_members += 1
+                        elif is_active and team_member.team_id == archiv_team.id:
+                            if team_member.original_team_id:
+                                team_member.team_id = team_member.original_team_id
+                                team_member.original_team_id = None
+                                team_member.original_project_id = None
+                            else:
+                                team_member.team_id = team.id
+                        elif is_active:
                             team_member.team_id = team.id
-                    elif is_active:
-                        team_member.team_id = team.id
 
-                    team_member.name = full_name
-                    if plt_id is not None:
-                        team_member.plt_id = plt_id
-                    if ma_kennung is not None:
-                        team_member.ma_kennung = ma_kennung
-                    if dag_id is not None:
-                        team_member.dag_id = dag_id
-                    updated_members += 1
-                else:
-                    team_member = TeamMember(
-                        name=full_name,
-                        team_id=team.id,
-                        pylon=pylon,
-                        plt_id=plt_id,
-                        ma_kennung=ma_kennung,
-                        dag_id=dag_id
-                    )
-                    db.session.add(team_member)
-                    db.session.flush()
-                    created_members += 1
-
-                    if not team_member.user_id:
-                        if email:
-                            username = email.split('@')[0]
-                        else:
-                            base = full_name.lower().replace(' ', '.').replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss')
-                            base = ''.join(c for c in base if c.isalnum() or c=='.')
-                            username = base
-                        existing = User.query.filter_by(username=username).first()
-                        counter = 1
-                        orig_username = username
-                        while existing:
-                            username = f"{orig_username}{counter}"
-                            existing = User.query.filter_by(username=username).first()
-                            counter += 1
-                        user = User(
-                            username=username,
-                            email=email,
-                            role_id=mitarbeiter_role.id,
-                            project_id=project.id
+                        team_member.name = full_name
+                        if plt_id is not None:
+                            team_member.plt_id = plt_id
+                        if ma_kennung is not None:
+                            team_member.ma_kennung = ma_kennung
+                        if dag_id is not None:
+                            team_member.dag_id = dag_id
+                        updated_members += 1
+                    else:
+                        team_member = TeamMember(
+                            name=full_name,
+                            team_id=team.id,
+                            pylon=pylon,
+                            plt_id=plt_id,
+                            ma_kennung=ma_kennung,
+                            dag_id=dag_id
                         )
-                        user.set_password("Start123")
-                        db.session.add(user)
+                        db.session.add(team_member)
                         db.session.flush()
-                        team_member.user_id = user.id
-                        created_users += 1
+                        created_members += 1
 
-                db.session.commit()
+                        if not team_member.user_id:
+                            if email:
+                                username = email.split('@')[0]
+                            else:
+                                base = full_name.lower().replace(' ', '.').replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss')
+                                base = ''.join(c for c in base if c.isalnum() or c=='.')
+                                username = base
+                            existing = User.query.filter_by(username=username).first()
+                            counter = 1
+                            orig_username = username
+                            while existing:
+                                username = f"{orig_username}{counter}"
+                                existing = User.query.filter_by(username=username).first()
+                                counter += 1
+                            user = User(
+                                username=username,
+                                email=email,
+                                role_id=mitarbeiter_role.id,
+                                project_id=project.id
+                            )
+                            user.set_password("Start123")
+                            db.session.add(user)
+                            db.session.flush()
+                            team_member.user_id = user.id
+                            created_users += 1
 
-            except Exception as e:
-                db.session.rollback()
-                current_app.logger.error(f"Fehler in Zeile: {e}")
-                errors += 1
-                continue
+                    db.session.commit()
+
+                except Exception as e:
+                    db.session.rollback()
+                    current_app.logger.error(f"Fehler in Zeile: {e}")
+                    errors += 1
+                    continue
+
+        # Clean up temp file
+        try:
+            os.unlink(temp_path)
+        except:
+            pass
+        session.pop('csv_temp_file', None)
 
         flash(f'Import abgeschlossen: {created_members} neu, {updated_members} aktualisiert, {archived_members} archiviert, {created_projects} Projekte, {created_teams} Teams, {created_users} Benutzer, {errors} Fehler.', 'success')
         return redirect(url_for('admin.sync_from_csv'))
