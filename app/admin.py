@@ -193,6 +193,7 @@ def create_user():
                 flash('Ungültige Rolle.', 'danger')
                 return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
 
+            # Create user
             if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
@@ -215,6 +216,7 @@ def create_user():
             db.session.add(user)
             db.session.flush()
 
+            # Set team leader assignments
             if role.name == ROLE_TEAMLEITER and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user.teams_led = selected_teams
@@ -227,13 +229,40 @@ def create_user():
             else:
                 user.projects = []
 
+            # Create linked team member
+            team = Team.query.get(form.team_id_for_member.data)
+            if not team:
+                flash('Team für das Mitglied nicht gefunden.', 'danger')
+                db.session.rollback()
+                return redirect(url_for('admin.create_user'))
+
+            member = TeamMember(
+                name=form.name.data,
+                team_id=team.id,
+                pylon=form.pylon.data,
+                plt_id=form.plt_id.data,
+                ma_kennung=form.ma_kennung.data,
+                dag_id=form.dag_id.data,
+                user_id=user.id
+            )
+            db.session.add(member)
+            db.session.flush()
+
+            # Handle active status
+            if not form.active.data:
+                archiv_team = get_or_create_archiv_team()
+                member.original_team_id = member.team_id
+                member.original_project_id = member.team.project_id
+                member.team_id = archiv_team.id
+            # else: stay in the selected team
+
             db.session.commit()
-            flash('Benutzer erfolgreich erstellt!', 'success')
+            flash('Benutzer und Teammitglied erfolgreich erstellt!', 'success')
             return redirect(url_for('admin.panel'))
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"FEHLER beim Erstellen des Benutzers: {str(e)}")
-            flash(f'Fehler beim Erstellen des Benutzers: {str(e)}', 'danger')
+            flash(f'Fehler beim Erstellen: {str(e)}', 'danger')
     elif request.method == 'POST':
         for field, errors in form.errors.items():
             for error in errors:
@@ -246,11 +275,30 @@ def create_user():
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_user(user_id):
     user_to_edit = User.query.get_or_404(user_id)
+    # Get the linked team member (if any)
+    team_member = TeamMember.query.filter_by(user_id=user_to_edit.id).first()
+
     form = RegistrationForm(obj=user_to_edit, original_username=user_to_edit.username)
 
     if not form.password.data:
         form.password.validators = []
         form.password2.validators = []
+
+    # Pre‑populate team member fields if editing
+    if request.method == 'GET' and team_member:
+        form.name.data = team_member.name
+        form.pylon.data = team_member.pylon
+        form.plt_id.data = team_member.plt_id
+        form.ma_kennung.data = team_member.ma_kennung
+        form.dag_id.data = team_member.dag_id
+        form.team_id_for_member.data = team_member.team_id
+        archiv_team = get_or_create_archiv_team()
+        form.active.data = team_member.team_id != archiv_team.id
+    elif request.method == 'GET':
+        # No team member yet – set defaults
+        form.active.data = True
+        if form.team_id_for_member.choices:
+            form.team_id_for_member.data = form.team_id_for_member.choices[0][0]
 
     if form.validate_on_submit():
         try:
@@ -259,6 +307,7 @@ def edit_user(user_id):
                 flash('Ungültige Rolle.', 'danger')
                 return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
 
+            # Update user
             user_to_edit.username = form.username.data
             user_to_edit.email = form.email.data if form.email.data else None
             user_to_edit.role_id = form.role_id.data
@@ -284,14 +333,52 @@ def edit_user(user_id):
             else:
                 user_to_edit.teams_led = []
 
+            # Update or create team member
+            if team_member is None:
+                team_member = TeamMember(user_id=user_to_edit.id)
+
+            team_member.name = form.name.data
+            team_member.pylon = form.pylon.data
+            team_member.plt_id = form.plt_id.data
+            team_member.ma_kennung = form.ma_kennung.data
+            team_member.dag_id = form.dag_id.data
+
+            new_team = Team.query.get(form.team_id_for_member.data)
+            if not new_team:
+                flash('Team nicht gefunden.', 'danger')
+                return redirect(url_for('admin.edit_user', user_id=user_id))
+
+            archiv_team = get_or_create_archiv_team()
+            is_active = form.active.data
+
+            if is_active:
+                # Moving to active
+                if team_member.team_id == archiv_team.id and team_member.original_team_id:
+                    # Restore original team
+                    team_member.team_id = team_member.original_team_id
+                    team_member.original_team_id = None
+                    team_member.original_project_id = None
+                else:
+                    team_member.team_id = new_team.id
+            else:
+                # Moving to inactive
+                if team_member.team_id != archiv_team.id:
+                    team_member.original_team_id = team_member.team_id
+                    team_member.original_project_id = team_member.team.project_id
+                    team_member.team_id = archiv_team.id
+
+            if team_member.id is None:
+                db.session.add(team_member)
             db.session.commit()
-            flash('Benutzer erfolgreich aktualisiert!', 'success')
+
+            flash('Benutzer und Teammitglied erfolgreich aktualisiert!', 'success')
             return redirect(url_for('admin.panel'))
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"FEHLER beim Aktualisieren des Benutzers: {str(e)}")
-            flash(f'Fehler beim Aktualisieren des Benutzers: {str(e)}', 'danger')
+            flash(f'Fehler beim Aktualisieren: {str(e)}', 'danger')
     elif request.method == 'GET':
+        # Populate user fields
         form.username.data = user_to_edit.username
         form.email.data = user_to_edit.email
         form.role_id.data = user_to_edit.role_id
@@ -301,10 +388,6 @@ def edit_user(user_id):
             form.project_id.data = user_to_edit.project_id
         else:
             form.project_ids.data = [p.id for p in user_to_edit.projects]
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"Fehler im Feld '{form[field].label.text if hasattr(form[field], 'label') else field}': {error}", 'danger')
 
     return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
 
@@ -319,11 +402,13 @@ def delete_user(user_id):
         return redirect(url_for('admin.panel'))
 
     try:
+        # Delete linked team member first
+        TeamMember.query.filter_by(user_id=user_id).delete()
         user.teams_led = []
         Coaching.query.filter_by(coach_id=user_id).update({"coach_id": None})
         db.session.delete(user)
         db.session.commit()
-        flash('Benutzer gelöscht.', 'success')
+        flash('Benutzer und zugehöriges Teammitglied gelöscht.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim Löschen von User ID {user_id}: {e}")
@@ -434,7 +519,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management ---
+# --- Team Member Management (kept for compatibility but not used in new workflow) ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1135,7 +1220,7 @@ def delete_assigned_coaching(assignment_id):
     return redirect(url_for('admin.manage_assigned_coachings'))
 
 
-# --- Team Member with User Creation ---
+# --- Team Member with User Creation (kept for compatibility, but not used in new workflow) ---
 @bp.route('/teammembers/create-with-user', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1195,7 +1280,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (fixed for large files, team uniqueness, and username rule) ---
+# --- CSV Sync Route ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
