@@ -193,7 +193,6 @@ def create_user():
                 flash('Ungültige Rolle.', 'danger')
                 return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
 
-            # Create user
             if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
@@ -216,7 +215,6 @@ def create_user():
             db.session.add(user)
             db.session.flush()
 
-            # Set team leader assignments
             if role.name == ROLE_TEAMLEITER and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user.teams_led = selected_teams
@@ -249,13 +247,11 @@ def create_user():
             db.session.add(member)
             db.session.flush()
 
-            # Handle active status
             if not form.active.data:
                 archiv_team = get_or_create_archiv_team()
                 member.original_team_id = member.team_id
                 member.original_project_id = member.team.project_id
                 member.team_id = archiv_team.id
-            # else: stay in the selected team
 
             db.session.commit()
             flash('Benutzer und Teammitglied erfolgreich erstellt!', 'success')
@@ -276,7 +272,6 @@ def create_user():
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_user(user_id):
     user_to_edit = User.query.get_or_404(user_id)
-    # Get the linked team member (if any)
     team_member = TeamMember.query.filter_by(user_id=user_to_edit.id).first()
 
     form = RegistrationForm(obj=user_to_edit, original_username=user_to_edit.username)
@@ -285,9 +280,7 @@ def edit_user(user_id):
         form.password.validators = []
         form.password2.validators = []
 
-    # Pre‑populate team member fields if editing
     if request.method == 'GET' and team_member:
-        # Split full name into first and last (simple: first space separates)
         parts = team_member.name.split(' ', 1)
         form.first_name.data = parts[0] if parts else ''
         form.last_name.data = parts[1] if len(parts) > 1 else ''
@@ -299,7 +292,6 @@ def edit_user(user_id):
         archiv_team = get_or_create_archiv_team()
         form.active.data = team_member.team_id != archiv_team.id
     elif request.method == 'GET':
-        # No team member yet – set defaults
         form.first_name.data = ''
         form.last_name.data = ''
         form.active.data = True
@@ -313,7 +305,6 @@ def edit_user(user_id):
                 flash('Ungültige Rolle.', 'danger')
                 return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
 
-            # Update user
             user_to_edit.username = form.username.data
             user_to_edit.email = form.email.data if form.email.data else None
             user_to_edit.role_id = form.role_id.data
@@ -339,7 +330,6 @@ def edit_user(user_id):
             else:
                 user_to_edit.teams_led = []
 
-            # Update or create team member
             if team_member is None:
                 team_member = TeamMember(user_id=user_to_edit.id)
 
@@ -359,16 +349,13 @@ def edit_user(user_id):
             is_active = form.active.data
 
             if is_active:
-                # Moving to active
                 if team_member.team_id == archiv_team.id and team_member.original_team_id:
-                    # Restore original team
                     team_member.team_id = team_member.original_team_id
                     team_member.original_team_id = None
                     team_member.original_project_id = None
                 else:
                     team_member.team_id = new_team.id
             else:
-                # Moving to inactive
                 if team_member.team_id != archiv_team.id:
                     team_member.original_team_id = team_member.team_id
                     team_member.original_project_id = team_member.team.project_id
@@ -385,7 +372,6 @@ def edit_user(user_id):
             current_app.logger.error(f"FEHLER beim Aktualisieren des Benutzers: {str(e)}")
             flash(f'Fehler beim Aktualisieren: {str(e)}', 'danger')
     elif request.method == 'GET':
-        # Populate user fields
         form.username.data = user_to_edit.username
         form.email.data = user_to_edit.email
         form.role_id.data = user_to_edit.role_id
@@ -409,7 +395,6 @@ def delete_user(user_id):
         return redirect(url_for('admin.panel'))
 
     try:
-        # Delete linked team member first
         TeamMember.query.filter_by(user_id=user_id).delete()
         user.teams_led = []
         Coaching.query.filter_by(coach_id=user_id).update({"coach_id": None})
@@ -526,7 +511,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management (kept for compatibility, but not used in new workflow) ---
+# --- Team Member Management (kept for compatibility) ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -553,13 +538,11 @@ def create_team_member():
             db.session.add(member)
             db.session.flush()
             
-            # Handle active status: if not active, move to ARCHIV
             if not form.active.data:
                 archiv_team = get_or_create_archiv_team()
                 member.original_team_id = member.team_id
                 member.original_project_id = member.team.project_id
                 member.team_id = archiv_team.id
-            # else: stay in the selected team, no archive record needed
             
             db.session.commit()
             flash('Teammitglied erfolgreich erstellt!', 'success')
@@ -581,13 +564,11 @@ def edit_team_member(member_id):
     projects = Project.query.order_by(Project.name).all()
     all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
     
-    # Split existing name into first and last for display
     if request.method == 'GET':
         parts = member.name.split(' ', 1)
         form.first_name.data = parts[0] if parts else ''
         form.last_name.data = parts[1] if len(parts) > 1 else ''
     
-    # Determine active status: not in ARCHIV
     archiv_team = get_or_create_archiv_team()
     is_active = member.team_id != archiv_team.id
     if request.method == 'GET':
@@ -595,7 +576,6 @@ def edit_team_member(member_id):
     
     if form.validate_on_submit():
         try:
-            # Update basic fields
             full_name = f"{form.first_name.data} {form.last_name.data}".strip()
             member.name = full_name
             member.pylon = form.pylon.data
@@ -603,33 +583,24 @@ def edit_team_member(member_id):
             member.ma_kennung = form.ma_kennung.data
             member.dag_id = form.dag_id.data
             
-            # Handle active status change
             if form.active.data:
-                # If moving from inactive to active
                 if not is_active:
-                    # Restore original team if available, else use selected team
                     if member.original_team_id:
                         member.team_id = member.original_team_id
                         member.original_team_id = None
                         member.original_project_id = None
                     else:
-                        # No original team – use selected team
                         member.team_id = form.team_id.data
                 else:
-                    # Already active – update team normally
                     member.team_id = form.team_id.data
             else:
-                # Moving to inactive
                 if is_active:
-                    # Store original team/project before moving
                     member.original_team_id = member.team_id
                     member.original_project_id = member.team.project_id
                     member.team_id = archiv_team.id
-                # else already inactive – keep as is (no change)
             
             db.session.commit()
             flash('Teammitglied erfolgreich aktualisiert!', 'success')
-            # Redirect to the team view of the team the member belongs to after update
             if form.active.data:
                 target_team_id = member.team_id
             else:
@@ -640,11 +611,9 @@ def edit_team_member(member_id):
             current_app.logger.error(f"Fehler beim Bearbeiten des Teammitglieds {member_id}: {e}")
             flash(f'Fehler beim Bearbeiten des Teammitglieds: {str(e)}', 'danger')
     elif request.method == 'GET':
-        # Set team dropdown to current team (if active) or original team (if archived)
         if is_active:
             form.team_id.data = member.team_id
         else:
-            # If archived, the selected team should be the original team if known, else first in list
             if member.original_team_id:
                 form.team_id.data = member.original_team_id
             else:
@@ -1233,7 +1202,7 @@ def delete_assigned_coaching(assignment_id):
     return redirect(url_for('admin.manage_assigned_coachings'))
 
 
-# --- Team Member with User Creation (kept for compatibility, but not used in new workflow) ---
+# --- Team Member with User Creation (kept for compatibility) ---
 @bp.route('/teammembers/create-with-user', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1258,14 +1227,12 @@ def create_team_member_with_user():
             db.session.add(team_member)
             db.session.flush()
             
-            # Handle active status: if not active, move to ARCHIV
             if not form.active.data:
                 archiv_team = get_or_create_archiv_team()
                 team_member.original_team_id = team_member.team_id
                 team_member.original_project_id = team_member.team.project_id
                 team_member.team_id = archiv_team.id
             
-            # Create user if requested
             if form.create_user.data and form.username.data:
                 role = Role.query.filter_by(name='Mitarbeiter').first()
                 if not role:
@@ -1347,7 +1314,8 @@ def sync_from_csv():
             'dag_id': 'DAG-ID',
             'email': 'eMail',
             'active_status': 'PLT aktiv?',
-            'agent_status': 'Agent-Status'
+            'agent_status': 'Agent-Status',
+            'role': 'Agent-Status'   # map role from Agent-Status column
         }
 
         return render_template('admin/csv_mapping.html',
@@ -1360,7 +1328,7 @@ def sync_from_csv():
     # Step 2: Process after mapping
     if request.method == 'POST' and 'process' in request.form:
         mapping = {}
-        for field in ['pylon', 'plt_id', 'first_name', 'last_name', 'ma_kennung', 'dag_id', 'email', 'team', 'project', 'active_status', 'agent_status']:
+        for field in ['pylon', 'plt_id', 'first_name', 'last_name', 'ma_kennung', 'dag_id', 'email', 'team', 'project', 'active_status', 'agent_status', 'role']:
             col_name = request.form.get(f'map_{field}')
             if col_name:
                 mapping[field] = col_name
@@ -1386,7 +1354,7 @@ def sync_from_csv():
 
             mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
             if not mitarbeiter_role:
-                flash('Rolle \"Mitarbeiter\" nicht gefunden. Bitte zuerst erstellen.', 'danger')
+                flash('Rolle "Mitarbeiter" nicht gefunden. Bitte zuerst erstellen.', 'danger')
                 return redirect(url_for('admin.sync_from_csv'))
 
             created_members = 0
@@ -1418,6 +1386,16 @@ def sync_from_csv():
                     ma_kennung = row.get(mapping.get('ma_kennung', ''), '').strip() if mapping.get('ma_kennung') else None
                     dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
                     email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
+
+                    # Role
+                    role_name = row.get(mapping.get('role', ''), '').strip() if mapping.get('role') else None
+                    if not role_name:
+                        role_name = 'Mitarbeiter'
+                    role = Role.query.filter_by(name=role_name).first()
+                    if not role:
+                        role = mitarbeiter_role
+                        if role_name != 'Mitarbeiter':
+                            current_app.logger.warning(f"Role '{role_name}' not found, using Mitarbeiter for {pylon}")
 
                     project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
                     project = None
@@ -1477,7 +1455,15 @@ def sync_from_csv():
                         if dag_id is not None:
                             team_member.dag_id = dag_id
                         updated_members += 1
+
+                        # If linked user exists, update its role if necessary
+                        if team_member.user_id:
+                            user = User.query.get(team_member.user_id)
+                            if user and user.role_id != role.id:
+                                user.role_id = role.id
+                                db.session.add(user)
                     else:
+                        # Create new team member
                         team_member = TeamMember(
                             name=full_name,
                             team_id=team.id,
@@ -1502,6 +1488,7 @@ def sync_from_csv():
                                 else:
                                     username_base = pylon.lower()
                             username = username_base
+                            # Ensure uniqueness
                             existing = User.query.filter_by(username=username).first()
                             counter = 1
                             orig_username = username
@@ -1509,14 +1496,16 @@ def sync_from_csv():
                                 username = f"{orig_username}{counter}"
                                 existing = User.query.filter_by(username=username).first()
                                 counter += 1
+
                             user = User(
                                 username=username,
                                 email=email,
-                                role_id=mitarbeiter_role.id,
+                                role_id=role.id,
                                 project_id=project.id
                             )
                             user.set_password("Start123")
                             db.session.add(user)
+                            db.session.flush()
                             team_member.user_id = user.id
                             created_users += 1
 
