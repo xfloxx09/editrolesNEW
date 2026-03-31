@@ -1,92 +1,74 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header telekom-bg-magenta text-white">
-                <h2>Teammitglied mit Benutzerkonto erstellen</h2>
+<div class="container">
+    <h2>Teammitglied mit Benutzerkonto erstellen</h2>
+    <form method="POST">
+        {{ form.hidden_tag() }}
+        
+        <div class="form-group">
+            {{ form.name.label }} {{ form.name(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.pylon.label }} {{ form.pylon(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.plt_id.label }} {{ form.plt_id(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.ma_kennung.label }} {{ form.ma_kennung(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.dag_id.label }} {{ form.dag_id(class="form-control") }}
+        </div>
+        <div class="form-group">
+            {{ form.team_id.label }} {{ form.team_id(class="form-control") }}
+        </div>
+        <div class="form-check">
+            {{ form.active(class="form-check-input") }}
+            {{ form.active.label(class="form-check-label") }}
+            <small class="form-text text-muted">Wenn deaktiviert, wird das Mitglied ins ARCHIV verschoben.</small>
+        </div>
+        
+        <hr>
+        <div class="form-check">
+            {{ form.create_user(class="form-check-input") }}
+            {{ form.create_user.label(class="form-check-label") }}
+        </div>
+        
+        <div id="user-fields" style="display: none;">
+            <div class="form-group">
+                {{ form.username.label }} {{ form.username(class="form-control") }}
             </div>
-            <div class="card-body">
-                <form method="POST" novalidate>
-                    {{ form.hidden_tag() }}
-
-                    <div class="form-group">
-                        {{ form.name.label(class="form-control-label") }}
-                        {{ form.name(class="form-control " + ("is-invalid" if form.name.errors else "")) }}
-                        {% if form.name.errors %}
-                            <div class="invalid-feedback">{% for error in form.name.errors %}{{ error }}{% endfor %}</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="form-group">
-                        {{ form.team_id.label(class="form-control-label") }}
-                        {{ form.team_id(class="form-control custom-select " + ("is-invalid" if form.team_id.errors else "")) }}
-                        {% if form.team_id.errors %}
-                            <div class="invalid-feedback">{% for error in form.team_id.errors %}{{ error }}{% endfor %}</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="form-check mb-3">
-                        {{ form.create_user(class="form-check-input") }}
-                        {{ form.create_user.label(class="form-check-label") }}
-                    </div>
-
-                    <div id="userFields" style="display: none;">
-                        <div class="form-group">
-                            {{ form.username.label(class="form-control-label") }}
-                            {{ form.username(class="form-control " + ("is-invalid" if form.username.errors else "")) }}
-                            {% if form.username.errors %}
-                                <div class="invalid-feedback">{% for error in form.username.errors %}{{ error }}{% endfor %}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="form-group">
-                            {{ form.email.label(class="form-control-label") }}
-                            {{ form.email(class="form-control " + ("is-invalid" if form.email.errors else "")) }}
-                            {% if form.email.errors %}
-                                <div class="invalid-feedback">{% for error in form.email.errors %}{{ error }}{% endfor %}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="form-group">
-                            {{ form.password.label(class="form-control-label") }}
-                            {{ form.password(class="form-control " + ("is-invalid" if form.password.errors else "")) }}
-                            {% if form.password.errors %}
-                                <div class="invalid-feedback">{% for error in form.password.errors %}{{ error }}{% endfor %}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="form-group">
-                            {{ form.password2.label(class="form-control-label") }}
-                            {{ form.password2(class="form-control " + ("is-invalid" if form.password2.errors else "")) }}
-                            {% if form.password2.errors %}
-                                <div class="invalid-feedback">{% for error in form.password2.errors %}{{ error }}{% endfor %}</div>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        {{ form.submit(class="btn telekom-button") }}
-                        <a href="{{ url_for('admin.panel') }}" class="btn btn-secondary">Abbrechen</a>
-                    </div>
-                </form>
+            <div class="form-group">
+                {{ form.email.label }} {{ form.email(class="form-control") }}
+            </div>
+            <div class="form-group">
+                {{ form.password.label }} {{ form.password(class="form-control") }}
+            </div>
+            <div class="form-group">
+                {{ form.password2.label }} {{ form.password2(class="form-control") }}
             </div>
         </div>
-    </div>
+        
+        {{ form.submit(class="btn telekom-button") }}
+        <a href="{{ url_for('admin.panel') }}" class="btn btn-secondary">Abbrechen</a>
+    </form>
 </div>
 
 <script>
-    const createUserCheckbox = document.getElementById('create_user');
-    const userFields = document.getElementById('userFields');
-    function toggleUserFields() {
-        if (createUserCheckbox.checked) {
-            userFields.style.display = 'block';
-        } else {
-            userFields.style.display = 'none';
+    document.addEventListener('DOMContentLoaded', function() {
+        var createUserCheckbox = document.getElementById('create_user');
+        var userFields = document.getElementById('user-fields');
+        function toggleUserFields() {
+            if (createUserCheckbox.checked) {
+                userFields.style.display = 'block';
+            } else {
+                userFields.style.display = 'none';
+            }
         }
-    }
-    createUserCheckbox.addEventListener('change', toggleUserFields);
-    toggleUserFields();
+        createUserCheckbox.addEventListener('change', toggleUserFields);
+        toggleUserFields();
+    });
 </script>
 {% endblock %}
