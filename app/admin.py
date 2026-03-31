@@ -339,7 +339,7 @@ def create_team():
     all_team_leaders = User.query.filter(User.role.has(name=ROLE_TEAMLEITER)).order_by(User.username).all()
     if form.validate_on_submit():
         if form.name.data.strip().upper() == ARCHIV_TEAM_NAME:
-            flash(f'Der Teamname \\"{ARCHIV_TEAM_NAME}\\" ist für das System reserviert.', 'danger')
+            flash(f'Der Teamname \"{ARCHIV_TEAM_NAME}\" ist für das System reserviert.', 'danger')
             return render_template('admin/create_team.html', title='Team erstellen', form=form, config=current_app.config)
         try:
             team = Team(
@@ -501,7 +501,7 @@ def move_to_archiv(member_id):
         member_to_move.original_project_id = member_to_move.team.project_id
         member_to_move.team_id = archiv_team.id
         db.session.commit()
-        flash(f'Mitglied \\"{member_to_move.name}\\" wurde von Team \\"{original_team_name}\\" ins ARCHIV verschoben.', 'success')
+        flash(f'Mitglied \"{member_to_move.name}\" wurde von Team \"{original_team_name}\" ins ARCHIV verschoben.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim Verschieben von Mitglied {member_id} ins Archiv: {e}")
@@ -521,7 +521,7 @@ def delete_team_member_permanently(member_id):
         db.session.execute(workshop_participants.delete().where(workshop_participants.c.team_member_id == member_id))
         db.session.delete(member)
         db.session.commit()
-        flash(f'Mitglied \\"{member_name}\\" wurde endgültig gelöscht.', 'success')
+        flash(f'Mitglied \"{member_name}\" wurde endgültig gelöscht.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim endgültigen Löschen von Mitglied {member_id}: {e}")
@@ -1102,7 +1102,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (fixed for large files and team uniqueness) ---
+# --- CSV Sync Route (fixed for large files, team uniqueness, and username rule) ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1298,13 +1298,22 @@ def sync_from_csv():
                         db.session.flush()
                         created_members += 1
 
+                        # Create user account if not already linked
                         if not team_member.user_id:
-                            if email:
-                                username = email.split('@')[0]
-                            else:
-                                base = full_name.lower().replace(' ', '.').replace('ä','ae').replace('ö','oe').replace('ü','ue').replace('ß','ss')
-                                base = ''.join(c for c in base if c.isalnum() or c=='.')
-                                username = base
+                            # NEW: Username = first 4 letters of first name + full last name
+                            first_part = first_name[:4].lower() if first_name else ''
+                            last_part = last_name.lower() if last_name else ''
+                            username_base = f"{first_part}{last_part}"
+                            # Remove any non-alphanumeric characters except dot
+                            username_base = ''.join(c for c in username_base if c.isalnum() or c == '.')
+                            if not username_base:
+                                # fallback to email or pylon
+                                if email:
+                                    username_base = email.split('@')[0]
+                                else:
+                                    username_base = pylon.lower()
+                            username = username_base
+                            # Ensure uniqueness
                             existing = User.query.filter_by(username=username).first()
                             counter = 1
                             orig_username = username
