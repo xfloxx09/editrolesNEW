@@ -18,10 +18,21 @@ bp = Blueprint('admin', __name__)
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def panel():
-    # Keep your existing panel code exactly as it is.
-    # I'm not repeating it here – you already have a working version.
-    # Just ensure it remains unchanged.
-    pass
+    # Basic admin dashboard – shows counts and recent items
+    user_count = User.query.count()
+    team_count = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).count()
+    member_count = TeamMember.query.join(Team).filter(Team.name != ARCHIV_TEAM_NAME).count()
+    coaching_count = Coaching.query.count()
+    workshop_count = Workshop.query.count()
+    project_count = Project.query.count()
+    return render_template('admin/admin_panel.html',
+                           user_count=user_count,
+                           team_count=team_count,
+                           member_count=member_count,
+                           coaching_count=coaching_count,
+                           workshop_count=workshop_count,
+                           project_count=project_count,
+                           config=current_app.config)
 
 
 # --- Project Management ---
