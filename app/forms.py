@@ -84,6 +84,14 @@ class TeamForm(FlaskForm):
 class TeamMemberForm(FlaskForm):
     name = StringField('Name des Teammitglieds', validators=[DataRequired(), Length(min=2, max=100)])
     team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
+    
+    # New fields from CSV
+    pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
+    plt_id = StringField('PLT-ID', validators=[Length(max=50)])
+    ma_kennung = StringField('MA-Kennung', validators=[Length(max=50)])
+    dag_id = StringField('DAG-ID', validators=[Length(max=50)])
+    active = BooleanField('Aktiv (nicht im Archiv)', default=True)
+    
     submit = SubmitField('Teammitglied erstellen/aktualisieren')
 
     def __init__(self, *args, **kwargs):
