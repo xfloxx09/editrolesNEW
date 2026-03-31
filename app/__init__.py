@@ -35,28 +35,42 @@ def create_app(config_class=Config):
         inspector = inspect(db.engine)
         conn = db.engine.connect()
 
-        # 1. coachings.team_id
-        columns_coachings = [col['name'] for col in inspector.get_columns('coachings')]
-        if 'team_id' not in columns_coachings:
-            print("⚠️ Spalte 'team_id' in coachings fehlt – wird hinzugefügt...")
-            conn.execute(text('ALTER TABLE coachings ADD COLUMN team_id INTEGER REFERENCES teams(id)'))
+        # List of tables we expect to exist after this migration
+        expected_tables = ['coachings', 'workshop_participants', 'users', 'teams', 'projects', 'assigned_coachings', 'permissions', 'roles', 'role_permissions', 'role_projects', 'user_projects', 'team_members', 'workshops']
+
+        # 1. Ensure all tables are created (if missing)
+        from app.models import Base  # if you have a Base, otherwise just call db.create_all()
+        # But using db.create_all() is easier:
+        db.create_all()
+
+        # After create_all, refresh inspector
+        inspector = inspect(db.engine)
+
+        # 2. Coachings.team_id column
+        if 'coachings' in inspector.get_table_names():
+            columns_coachings = [col['name'] for col in inspector.get_columns('coachings')]
+            if 'team_id' not in columns_coachings:
+                print("⚠️ Spalte 'team_id' in coachings fehlt – wird hinzugefügt...")
+                conn.execute(text('ALTER TABLE coachings ADD COLUMN team_id INTEGER REFERENCES teams(id)'))
+                conn.commit()
+                print("✅ Spalte 'team_id' in coachings hinzugefügt.")
+            else:
+                print("✅ Spalte 'team_id' in coachings existiert bereits.")
+
+            # Update existing coachings with team_id from team_members
+            conn.execute(text('''
+                UPDATE coachings
+                SET team_id = team_members.team_id
+                FROM team_members
+                WHERE coachings.team_member_id = team_members.id
+                AND coachings.team_id IS NULL
+            '''))
             conn.commit()
-            print("✅ Spalte 'team_id' in coachings hinzugefügt.")
+            print("ℹ️ Bestehende Coachings mit team_id aktualisiert.")
         else:
-            print("✅ Spalte 'team_id' in coachings existiert bereits.")
+            print("ℹ️ Tabelle 'coachings' existiert noch nicht – überspringe.")
 
-        # 2. Für bestehende Coachings die team_id nachtragen (falls NULL)
-        conn.execute(text('''
-            UPDATE coachings
-            SET team_id = team_members.team_id
-            FROM team_members
-            WHERE coachings.team_member_id = team_members.id
-            AND coachings.team_id IS NULL
-        '''))
-        conn.commit()
-        print("ℹ️ Bestehende Coachings mit team_id aktualisiert.")
-
-        # 3. Prüfen und Hinzufügen von workshop_participants.original_team_id
+        # 3. workshop_participants.original_team_id column
         if 'workshop_participants' in inspector.get_table_names():
             columns_wp = [col['name'] for col in inspector.get_columns('workshop_participants')]
             if 'original_team_id' not in columns_wp:
@@ -67,6 +81,7 @@ def create_app(config_class=Config):
             else:
                 print("✅ Spalte 'original_team_id' in workshop_participants existiert bereits.")
 
+            # Update existing participants
             conn.execute(text('''
                 UPDATE workshop_participants
                 SET original_team_id = team_members.team_id
@@ -77,93 +92,17 @@ def create_app(config_class=Config):
             conn.commit()
             print("ℹ️ Bestehende Workshop-Teilnehmer mit original_team_id aktualisiert.")
         else:
-            print("✅ Tabelle 'workshop_participants' existiert noch nicht, später automatisch.")
+            print("ℹ️ Tabelle 'workshop_participants' existiert noch nicht – überspringe.")
 
-        # 4. user_projects table
-        if 'user_projects' not in inspector.get_table_names():
-            print("⚠️ Tabelle 'user_projects' fehlt – wird erstellt...")
-            conn.execute(text('''
-                CREATE TABLE user_projects (
-                    user_id INTEGER NOT NULL,
-                    project_id INTEGER NOT NULL,
-                    PRIMARY KEY (user_id, project_id),
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-                )
-            '''))
-            conn.commit()
-            print("✅ Tabelle 'user_projects' erstellt.")
-
-            # Für alle bestehenden Abteilungsleiter die Zuordnung zum aktuellen Projekt eintragen
-            columns_users = [col['name'] for col in inspector.get_columns('users')]
-            if 'role' in columns_users:
-                res = conn.execute(text("SELECT id, project_id FROM users WHERE role = 'Abteilungsleiter' AND project_id IS NOT NULL"))
-                rows = res.fetchall()
-                for user_id, project_id in rows:
-                    conn.execute(
-                        text("INSERT INTO user_projects (user_id, project_id) VALUES (:user_id, :project_id)"),
-                        {"user_id": user_id, "project_id": project_id}
-                    )
-                conn.commit()
-                print(f"ℹ️ {len(rows)} Abteilungsleiter-Zuordnungen in user_projects eingetragen.")
-            else:
-                print("ℹ️ Alte Spalte 'role' existiert nicht mehr, überspringe Migration von Abteilungsleitern.")
-        else:
+        # 4. user_projects table (already created by create_all, but we need to fill for existing Abteilungsleiter)
+        # We'll do that only if table exists and users have old 'role' column (which they don't, so skip)
+        if 'user_projects' in inspector.get_table_names():
             print("✅ Tabelle 'user_projects' existiert bereits.")
-
-        # 5. Fehlende Zuordnungen nachholen (nur wenn 'role' Spalte noch existiert)
-        columns_users = [col['name'] for col in inspector.get_columns('users')]
-        if 'role' in columns_users:
-            res = conn.execute(text("""
-                SELECT u.id, u.project_id
-                FROM users u
-                WHERE u.role = 'Abteilungsleiter'
-                  AND u.project_id IS NOT NULL
-                  AND NOT EXISTS (SELECT 1 FROM user_projects up WHERE up.user_id = u.id AND up.project_id = u.project_id)
-            """))
-            rows = res.fetchall()
-            for user_id, project_id in rows:
-                conn.execute(
-                    text("INSERT INTO user_projects (user_id, project_id) VALUES (:user_id, :project_id)"),
-                    {"user_id": user_id, "project_id": project_id}
-                )
-            conn.commit()
-            if rows:
-                print(f"ℹ️ {len(rows)} zusätzliche Abteilungsleiter-Zuordnungen in user_projects nachgetragen.")
         else:
-            print("ℹ️ Alte Spalte 'role' existiert nicht mehr, überspringe zusätzliche Migration von Abteilungsleitern.")
+            print("⚠️ Tabelle 'user_projects' fehlt – sollte durch create_all erstellt sein.")
 
-        # ========== assigned_coachings table ==========
-        # 6. Create assigned_coachings table if not exists
-        if 'assigned_coachings' not in inspector.get_table_names():
-            print("⚠️ Tabelle 'assigned_coachings' fehlt – wird erstellt...")
-            conn.execute(text('''
-                CREATE TABLE assigned_coachings (
-                    id SERIAL NOT NULL,
-                    project_leader_id INTEGER NOT NULL,
-                    coach_id INTEGER NOT NULL,
-                    team_member_id INTEGER NOT NULL,
-                    deadline TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-                    expected_coaching_count INTEGER NOT NULL,
-                    desired_performance_note INTEGER,
-                    current_performance_note_at_assign FLOAT,
-                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
-                    created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-                    updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-                    PRIMARY KEY (id),
-                    FOREIGN KEY(project_leader_id) REFERENCES users(id),
-                    FOREIGN KEY(coach_id) REFERENCES users(id),
-                    FOREIGN KEY(team_member_id) REFERENCES team_members(id)
-                )
-            '''))
-            conn.commit()
-            print("✅ Tabelle 'assigned_coachings' erstellt.")
-
-            # Create index on status
-            conn.execute(text('CREATE INDEX ix_assigned_coachings_status ON assigned_coachings (status)'))
-            conn.commit()
-        else:
-            print("✅ Tabelle 'assigned_coachings' existiert bereits.")
+        # 5. assigned_coachings table (already created by create_all)
+        if 'assigned_coachings' in inspector.get_table_names():
             # Ensure id column has auto-increment (if table was created without SERIAL)
             conn.execute(text('''
                 DO $$
@@ -180,95 +119,56 @@ def create_app(config_class=Config):
             '''))
             conn.commit()
             print("✅ Auto-increment für assigned_coachings.id sichergestellt.")
-
-        # 7. Add assigned_coaching_id to coachings table if not exists
-        columns_coachings = [col['name'] for col in inspector.get_columns('coachings')]
-        if 'assigned_coaching_id' not in columns_coachings:
-            print("⚠️ Spalte 'assigned_coaching_id' in coachings fehlt – wird hinzugefügt...")
-            conn.execute(text('ALTER TABLE coachings ADD COLUMN assigned_coaching_id INTEGER REFERENCES assigned_coachings(id)'))
-            conn.commit()
-            print("✅ Spalte 'assigned_coaching_id' in coachings hinzugefügt.")
         else:
-            print("✅ Spalte 'assigned_coaching_id' in coachings existiert bereits.")
+            print("ℹ️ Tabelle 'assigned_coachings' existiert noch nicht – überspringe.")
 
-        # ========== NEW: roles and permissions ==========
-        # 8. Create permissions table
-        if 'permissions' not in inspector.get_table_names():
-            print("⚠️ Tabelle 'permissions' fehlt – wird erstellt...")
-            conn.execute(text('''
-                CREATE TABLE permissions (
-                    id SERIAL NOT NULL,
-                    name VARCHAR(100) NOT NULL UNIQUE,
-                    description VARCHAR(255),
-                    PRIMARY KEY (id)
-                )
-            '''))
-            conn.commit()
-            print("✅ Tabelle 'permissions' erstellt.")
-        else:
+        # 6. assigned_coaching_id column in coachings
+        if 'coachings' in inspector.get_table_names():
+            columns_coachings = [col['name'] for col in inspector.get_columns('coachings')]
+            if 'assigned_coaching_id' not in columns_coachings:
+                print("⚠️ Spalte 'assigned_coaching_id' in coachings fehlt – wird hinzugefügt...")
+                conn.execute(text('ALTER TABLE coachings ADD COLUMN assigned_coaching_id INTEGER REFERENCES assigned_coachings(id)'))
+                conn.commit()
+                print("✅ Spalte 'assigned_coaching_id' in coachings hinzugefügt.")
+            else:
+                print("✅ Spalte 'assigned_coaching_id' in coachings existiert bereits.")
+
+        # 7. Permissions table (already created)
+        if 'permissions' in inspector.get_table_names():
             print("✅ Tabelle 'permissions' existiert bereits.")
-
-        # 9. Create roles table
-        if 'roles' not in inspector.get_table_names():
-            print("⚠️ Tabelle 'roles' fehlt – wird erstellt...")
-            conn.execute(text('''
-                CREATE TABLE roles (
-                    id SERIAL NOT NULL,
-                    name VARCHAR(100) NOT NULL UNIQUE,
-                    description VARCHAR(255),
-                    PRIMARY KEY (id)
-                )
-            '''))
-            conn.commit()
-            print("✅ Tabelle 'roles' erstellt.")
         else:
+            print("⚠️ Tabelle 'permissions' fehlt – sollte durch create_all erstellt sein.")
+
+        # 8. Roles table
+        if 'roles' in inspector.get_table_names():
             print("✅ Tabelle 'roles' existiert bereits.")
-
-        # 10. Create role_permissions junction table
-        if 'role_permissions' not in inspector.get_table_names():
-            print("⚠️ Tabelle 'role_permissions' fehlt – wird erstellt...")
-            conn.execute(text('''
-                CREATE TABLE role_permissions (
-                    role_id INTEGER NOT NULL,
-                    permission_id INTEGER NOT NULL,
-                    PRIMARY KEY (role_id, permission_id),
-                    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-                    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
-                )
-            '''))
-            conn.commit()
-            print("✅ Tabelle 'role_permissions' erstellt.")
         else:
+            print("⚠️ Tabelle 'roles' fehlt – sollte durch create_all erstellt sein.")
+
+        # 9. role_permissions table
+        if 'role_permissions' in inspector.get_table_names():
             print("✅ Tabelle 'role_permissions' existiert bereits.")
-
-        # 11. Create role_projects junction table
-        if 'role_projects' not in inspector.get_table_names():
-            print("⚠️ Tabelle 'role_projects' fehlt – wird erstellt...")
-            conn.execute(text('''
-                CREATE TABLE role_projects (
-                    role_id INTEGER NOT NULL,
-                    project_id INTEGER NOT NULL,
-                    PRIMARY KEY (role_id, project_id),
-                    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-                    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-                )
-            '''))
-            conn.commit()
-            print("✅ Tabelle 'role_projects' erstellt.")
         else:
+            print("⚠️ Tabelle 'role_permissions' fehlt – sollte durch create_all erstellt sein.")
+
+        # 10. role_projects table
+        if 'role_projects' in inspector.get_table_names():
             print("✅ Tabelle 'role_projects' existiert bereits.")
-
-        # 12. Add role_id to users table
-        columns_users = [col['name'] for col in inspector.get_columns('users')]
-        if 'role_id' not in columns_users:
-            print("⚠️ Spalte 'role_id' in users fehlt – wird hinzugefügt...")
-            conn.execute(text('ALTER TABLE users ADD COLUMN role_id INTEGER REFERENCES roles(id)'))
-            conn.commit()
-            print("✅ Spalte 'role_id' in users hinzugefügt.")
         else:
-            print("✅ Spalte 'role_id' in users existiert bereits.")
+            print("⚠️ Tabelle 'role_projects' fehlt – sollte durch create_all erstellt sein.")
 
-        # 13. Insert default permissions if they don't exist
+        # 11. role_id column in users
+        if 'users' in inspector.get_table_names():
+            columns_users = [col['name'] for col in inspector.get_columns('users')]
+            if 'role_id' not in columns_users:
+                print("⚠️ Spalte 'role_id' in users fehlt – wird hinzugefügt...")
+                conn.execute(text('ALTER TABLE users ADD COLUMN role_id INTEGER REFERENCES roles(id)'))
+                conn.commit()
+                print("✅ Spalte 'role_id' in users hinzugefügt.")
+            else:
+                print("✅ Spalte 'role_id' in users existiert bereits.")
+
+        # 12. Insert default permissions if they don't exist
         default_permissions = [
             ('view_coaching_dashboard', 'View coaching dashboard'),
             ('view_workshop_dashboard', 'View workshop dashboard'),
@@ -306,7 +206,7 @@ def create_app(config_class=Config):
                 print(f"✅ Permission '{name}' hinzugefügt.")
         conn.commit()
 
-        # 14. Insert default roles if they don't exist
+        # 13. Insert default roles if they don't exist
         default_roles = [
             ('Admin', 'Administrator with full access'),
             ('Betriebsleiter', 'Operations manager'),
@@ -326,7 +226,7 @@ def create_app(config_class=Config):
                 )
                 print(f"✅ Rolle '{role_name}' hinzugefügt.")
 
-        # 15. Assign permissions to roles
+        # 14. Assign permissions to roles
         all_perms = conn.execute(text("SELECT id, name FROM permissions")).fetchall()
         perm_map = {p[1]: p[0] for p in all_perms}
 
@@ -458,7 +358,7 @@ def create_app(config_class=Config):
                         )
             print("✅ Abteilungsleiter Berechtigungen gesetzt.")
 
-        # 16. Ensure all users have a role_id (assign default if NULL)
+        # 15. Ensure all users have a role_id (assign default if NULL)
         users_without_role = conn.execute(text("SELECT id FROM users WHERE role_id IS NULL")).fetchall()
         if users_without_role:
             print(f"⚠️ {len(users_without_role)} Benutzer ohne Rolle gefunden. Setze Standardrolle 'Teamleiter'...")
@@ -476,7 +376,7 @@ def create_app(config_class=Config):
         else:
             print("✅ Alle Benutzer haben bereits eine Rolle.")
 
-        # 16.5. Ensure all role_id values are valid (point to existing roles)
+        # 15.5. Ensure all role_id values are valid
         valid_role_ids = [row[0] for row in conn.execute(text("SELECT id FROM roles")).fetchall()]
         if valid_role_ids:
             users_with_role = conn.execute(text("SELECT id, role_id FROM users WHERE role_id IS NOT NULL")).fetchall()
@@ -499,38 +399,8 @@ def create_app(config_class=Config):
         else:
             print("⚠️ Keine Rollen in der Datenbank gefunden.")
 
-        # 17. Migrate existing users to role_id (only if 'role' column still exists)
-        columns_users = [col['name'] for col in inspector.get_columns('users')]
-        if 'role' in columns_users:
-            users_to_migrate = conn.execute(text("SELECT id, role FROM users WHERE role_id IS NULL")).fetchall()
-            if users_to_migrate:
-                print(f"⚠️ {len(users_to_migrate)} Benutzer ohne Rolle gefunden – wird migriert...")
-                for user_id, old_role in users_to_migrate:
-                    role_name = old_role
-                    role_id = conn.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}).fetchone()
-                    if role_id:
-                        conn.execute(
-                            text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
-                            {"role_id": role_id[0], "user_id": user_id}
-                        )
-                        print(f"✅ Benutzer ID {user_id} zu Rolle '{role_name}' zugewiesen.")
-                    else:
-                        print(f"⚠️ Keine Rolle für '{old_role}' gefunden, Benutzer ID {user_id} wird auf Standard gesetzt.")
-                        default_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
-                        if default_role:
-                            conn.execute(
-                                text("UPDATE users SET role_id = :role_id WHERE id = :user_id"),
-                                {"role_id": default_role[0], "user_id": user_id}
-                            )
-                conn.commit()
-                print("✅ Migration der Benutzer abgeschlossen.")
-            else:
-                print("✅ Alle Benutzer haben bereits eine Rolle.")
-        else:
-            print("✅ Alte Spalte 'role' existiert nicht mehr, überspringe Benutzermigration.")
-
-        # 18. Drop old 'role' column if it exists
-        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        # 16. Drop old 'role' column if it exists
+        columns_users = [col['name'] for col in inspector.get_columns('users')] if 'users' in inspector.get_table_names() else []
         if 'role' in columns_users:
             print("⚠️ Alte Spalte 'role' wird gelöscht...")
             conn.execute(text('ALTER TABLE users DROP COLUMN role'))
@@ -539,77 +409,66 @@ def create_app(config_class=Config):
         else:
             print("✅ Alte Spalte 'role' existiert nicht mehr.")
 
-        # ========== NEW: Add user_id to team_members ==========
-        columns_team_members = [col['name'] for col in inspector.get_columns('team_members')]
-        if 'user_id' not in columns_team_members:
-            print("⚠️ Spalte 'user_id' in team_members fehlt – wird hinzugefügt...")
-            conn.execute(text('ALTER TABLE team_members ADD COLUMN user_id INTEGER UNIQUE REFERENCES users(id)'))
-            conn.commit()
-            print("✅ Spalte 'user_id' in team_members hinzugefügt.")
-        else:
-            print("✅ Spalte 'user_id' in team_members existiert bereits.")
-
-        # ========== NEW: Add custom fields to team_members ==========
-        new_fields = ['pylon', 'plt_id', 'ma_kennung', 'dag_id']
-        for field in new_fields:
-            if field not in columns_team_members:
-                print(f"⚠️ Spalte '{field}' in team_members fehlt – wird hinzugefügt...")
-                conn.execute(text(f'ALTER TABLE team_members ADD COLUMN {field} VARCHAR(50)'))
+        # 17. Add user_id to team_members
+        if 'team_members' in inspector.get_table_names():
+            columns_team_members = [col['name'] for col in inspector.get_columns('team_members')]
+            if 'user_id' not in columns_team_members:
+                print("⚠️ Spalte 'user_id' in team_members fehlt – wird hinzugefügt...")
+                conn.execute(text('ALTER TABLE team_members ADD COLUMN user_id INTEGER UNIQUE REFERENCES users(id)'))
                 conn.commit()
-                print(f"✅ Spalte '{field}' in team_members hinzugefügt.")
+                print("✅ Spalte 'user_id' in team_members hinzugefügt.")
             else:
-                print(f"✅ Spalte '{field}' in team_members existiert bereits.")
+                print("✅ Spalte 'user_id' in team_members existiert bereits.")
 
-        # ========== FIX: Change team name uniqueness to be per project ==========
-        try:
-            # Check if the composite constraint already exists
-            check_constraint = conn.execute(text("""
-                SELECT 1 FROM information_schema.table_constraints 
-                WHERE constraint_name = 'teams_name_project_id_key' 
-                AND table_name = 'teams'
-            """)).fetchone()
-            if not check_constraint:
-                # Drop old unique constraint if it exists (ignore if not)
-                try:
-                    conn.execute(text('ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_name_key'))
-                except Exception:
-                    pass
-                # Add composite unique constraint
+            # Add custom fields
+            new_fields = ['pylon', 'plt_id', 'ma_kennung', 'dag_id']
+            for field in new_fields:
+                if field not in columns_team_members:
+                    print(f"⚠️ Spalte '{field}' in team_members fehlt – wird hinzugefügt...")
+                    conn.execute(text(f'ALTER TABLE team_members ADD COLUMN {field} VARCHAR(50)'))
+                    conn.commit()
+                    print(f"✅ Spalte '{field}' in team_members hinzugefügt.")
+                else:
+                    print(f"✅ Spalte '{field}' in team_members existiert bereits.")
+
+        # 18. Change team name uniqueness to be per project (if table exists)
+        if 'teams' in inspector.get_table_names():
+            try:
+                conn.execute(text('ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_name_key'))
                 conn.execute(text('ALTER TABLE teams ADD CONSTRAINT teams_name_project_id_key UNIQUE (name, project_id)'))
                 conn.commit()
                 print("✅ Unique constraint on teams updated to (name, project_id).")
+            except Exception as e:
+                conn.rollback()
+                print(f"ℹ️ Note on team constraint: {e}")
+
+        # 19. Add permission view_own_coachings
+        if 'permissions' in inspector.get_table_names():
+            res = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()
+            if not res:
+                conn.execute(
+                    text("INSERT INTO permissions (name, description) VALUES ('view_own_coachings', 'View own coachings')")
+                )
+                print("✅ Permission 'view_own_coachings' hinzugefügt.")
             else:
-                print("✅ Composite unique constraint (name, project_id) already exists.")
-        except Exception as e:
-            # Rollback the failed part of the transaction
-            conn.rollback()
-            print(f"⚠️ Could not update team constraint: {e}")
+                print("✅ Permission 'view_own_coachings' existiert bereits.")
 
-        # ========== NEW: Add permission view_own_coachings ==========
-        res = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()
-        if not res:
-            conn.execute(
-                text("INSERT INTO permissions (name, description) VALUES ('view_own_coachings', 'View own coachings')")
-            )
-            print("✅ Permission 'view_own_coachings' hinzugefügt.")
-        else:
-            print("✅ Permission 'view_own_coachings' existiert bereits.")
-
-        # ========== NEW: Add role 'Mitarbeiter' ==========
-        res = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()
-        if not res:
-            conn.execute(
-                text("INSERT INTO roles (name, description) VALUES ('Mitarbeiter', 'Team member with limited access')")
-            )
-            role_id = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()[0]
-            perm_id = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()[0]
-            conn.execute(
-                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
-                {"role_id": role_id, "perm_id": perm_id}
-            )
-            print("✅ Rolle 'Mitarbeiter' mit Berechtigung 'view_own_coachings' hinzugefügt.")
-        else:
-            print("✅ Rolle 'Mitarbeiter' existiert bereits.")
+        # 20. Add role 'Mitarbeiter'
+        if 'roles' in inspector.get_table_names():
+            res = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()
+            if not res:
+                conn.execute(
+                    text("INSERT INTO roles (name, description) VALUES ('Mitarbeiter', 'Team member with limited access')")
+                )
+                role_id = conn.execute(text("SELECT id FROM roles WHERE name = 'Mitarbeiter'")).fetchone()[0]
+                perm_id = conn.execute(text("SELECT id FROM permissions WHERE name = 'view_own_coachings'")).fetchone()[0]
+                conn.execute(
+                    text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id)"),
+                    {"role_id": role_id, "perm_id": perm_id}
+                )
+                print("✅ Rolle 'Mitarbeiter' mit Berechtigung 'view_own_coachings' hinzugefügt.")
+            else:
+                print("✅ Rolle 'Mitarbeiter' existiert bereits.")
 
         print("--- Migration abgeschlossen ---")
 
@@ -618,20 +477,19 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp, url_prefix='/auth')
     print("<<<< auth_bp REGISTRIERT (__init__.py) >>>>")
 
-    from app.main_routes import bp as main_bp 
+    from app.main_routes import bp as main_bp
     app.register_blueprint(main_bp)
     print("<<<< main_bp REGISTRIERT (__init__.py) >>>>")
 
     from app.admin import bp as admin_bp
     app.register_blueprint(admin_bp, url_prefix='/admin')
     print("<<<< admin_bp REGISTRIERT (__init__.py) >>>>")
-    
-    # Kontextprozessor für globale Variablen in Templates (z.B. aktuelles Jahr)
+
+    # Context processors etc. (keep your existing ones)
     @app.context_processor
     def inject_current_year():
         return {'current_year': datetime.utcnow().year}
 
-    # Kontextprozessor für erlaubte Projekte (für Projektwechsler in der Navbar)
     @app.context_processor
     def inject_user_allowed_projects():
         from app.models import Project
@@ -647,7 +505,6 @@ def create_app(config_class=Config):
             projects = []
         return {'user_allowed_projects': projects}
 
-    # Kontextprozessor für die Anzahl ausstehender zugewiesener Coachings (für Badge)
     @app.context_processor
     def inject_assigned_count():
         from app.utils import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER
@@ -658,7 +515,6 @@ def create_app(config_class=Config):
             count = 0
         return {'pending_assigned_count': count}
 
-    # Kontextprozessor für Berechtigungsprüfungen in Templates
     @app.context_processor
     def inject_permissions():
         def has_perm(permission_name):
@@ -667,7 +523,6 @@ def create_app(config_class=Config):
             return False
         return {'has_perm': has_perm}
 
-    # Benutzerdefinierter Jinja-Filter für Athener Zeit
     @app.template_filter('athens_time')
     def format_athens_time(utc_dt, fmt='%d.%m.%Y %H:%M'):
         if not utc_dt:
@@ -680,24 +535,23 @@ def create_app(config_class=Config):
                     try:
                         utc_dt = datetime.strptime(utc_dt, "%Y-%m-%d %H:%M:%S")
                     except ValueError:
-                         return str(utc_dt)
+                        return str(utc_dt)
             else:
                 return str(utc_dt)
 
         if utc_dt.tzinfo is None or utc_dt.tzinfo.utcoffset(utc_dt) is None:
             utc_dt = utc_dt.replace(tzinfo=timezone.utc)
-        
+
         athens_tz = pytz.timezone('Europe/Athens')
         try:
             local_dt = utc_dt.astimezone(athens_tz)
             return local_dt.strftime(fmt)
-        except Exception as e:
+        except Exception:
             try:
-                return utc_dt.strftime(fmt) + " (UTC?)" 
+                return utc_dt.strftime(fmt) + " (UTC?)"
             except:
                 return str(utc_dt)
 
-    # Filter für Status-Übersetzung
     @app.template_filter('status_de')
     def translate_status(status):
         translations = {
@@ -715,7 +569,7 @@ def create_app(config_class=Config):
         os.makedirs(app.instance_path)
     except OSError:
         pass
-    
+
     print("<<<< VOR Import von app.models in create_app (__init__.py) >>>>")
     from app import models
     print("<<<< NACH Import von app.models in create_app (__init__.py) >>>>")
@@ -724,7 +578,7 @@ def create_app(config_class=Config):
     return app
 
 print("<<<< VOR globalem Import von app.models am Ende von __init__.py >>>>")
-from app import models 
+from app import models
 print("<<<< NACH globalem Import von app.models am Ende von __init__.py >>>>")
 
 print("<<<< ENDE __init__.py wurde GELADEN >>>>")
