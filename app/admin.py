@@ -1,4 +1,4 @@
-# app/admin.py
+# app/admin.py (full with role handling improvements)
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
@@ -1391,7 +1391,8 @@ def sync_from_csv():
                     role_name = row.get(mapping.get('role', ''), '').strip() if mapping.get('role') else None
                     if not role_name:
                         role_name = 'Mitarbeiter'
-                    role = Role.query.filter_by(name=role_name).first()
+                    # Case‑insensitive lookup
+                    role = Role.query.filter(Role.name.ilike(role_name)).first()
                     if not role:
                         role = mitarbeiter_role
                         if role_name != 'Mitarbeiter':
