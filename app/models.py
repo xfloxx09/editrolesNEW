@@ -22,6 +22,7 @@ workshop_participants = db.Table('workshop_participants',
     db.Column('original_team_id', db.Integer, db.ForeignKey('teams.id'))
 )
 
+# Many-to-many for role permissions and role projects
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id')),
     db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id'))
@@ -43,12 +44,12 @@ class User(UserMixin, db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))
 
-    # Relationships
-    role = db.relationship('Role', backref='users')
-    project = db.relationship('Project', backref='project_users')  # changed backref to avoid conflict
-    teams_led = db.relationship('Team', secondary=team_leaders, backref='leaders')
-    projects = db.relationship('Project', secondary=user_projects, backref='user_projects_rel')  # changed backref
-    team_members = db.relationship('TeamMember', backref='user', lazy='dynamic')
+    # Relationships (using back_populates)
+    role = db.relationship('Role', back_populates='users')
+    project = db.relationship('Project', back_populates='users')
+    teams_led = db.relationship('Team', secondary=team_leaders, back_populates='leaders')
+    projects = db.relationship('Project', secondary=user_projects, back_populates='assigned_users')
+    team_members = db.relationship('TeamMember', back_populates='user')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -72,8 +73,9 @@ class Role(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.String(255))
 
-    permissions = db.relationship('Permission', secondary=role_permissions, backref='roles')
-    projects = db.relationship('Project', secondary=role_projects, backref='role_projects_rel')  # changed backref
+    permissions = db.relationship('Permission', secondary=role_permissions, back_populates='roles')
+    projects = db.relationship('Project', secondary=role_projects, back_populates='roles')
+    users = db.relationship('User', back_populates='role')
 
     def has_permission(self, permission_name):
         return any(perm.name == permission_name for perm in self.permissions)
@@ -85,6 +87,8 @@ class Permission(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.String(255))
 
+    roles = db.relationship('Role', secondary=role_permissions, back_populates='permissions')
+
 
 class Project(db.Model):
     __tablename__ = 'projects'
@@ -93,10 +97,12 @@ class Project(db.Model):
     description = db.Column(db.String(500))
 
     # Relationships
-    users = db.relationship('User', backref='project_ref', foreign_keys=[User.project_id])
-    teams = db.relationship('Team', backref='project_ref')
-    workshops = db.relationship('Workshop', backref='project')
-    coachings = db.relationship('Coaching', backref='project')
+    users = db.relationship('User', back_populates='project')
+    teams = db.relationship('Team', back_populates='project')
+    workshops = db.relationship('Workshop', back_populates='project')
+    coachings = db.relationship('Coaching', back_populates='project')
+    assigned_users = db.relationship('User', secondary=user_projects, back_populates='projects')
+    roles = db.relationship('Role', secondary=role_projects, back_populates='projects')
 
 
 class Team(db.Model):
@@ -105,7 +111,9 @@ class Team(db.Model):
     name = db.Column(db.String(100), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
 
-    members = db.relationship('TeamMember', backref='team')
+    members = db.relationship('TeamMember', back_populates='team')
+    leaders = db.relationship('User', secondary=team_leaders, back_populates='teams_led')
+    project = db.relationship('Project', back_populates='teams')
     __table_args__ = (db.UniqueConstraint('name', 'project_id', name='teams_name_project_id_key'),)
 
 
@@ -122,9 +130,13 @@ class TeamMember(db.Model):
     original_team_id = db.Column(db.Integer, db.ForeignKey('teams.id'))
     original_project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
 
-    team = db.relationship('Team', foreign_keys=[team_id])
+    team = db.relationship('Team', foreign_keys=[team_id], back_populates='members')
     original_team = db.relationship('Team', foreign_keys=[original_team_id])
     original_project = db.relationship('Project', foreign_keys=[original_project_id])
+    user = db.relationship('User', back_populates='team_members')
+    coachings = db.relationship('Coaching', back_populates='team_member')
+    workshops = db.relationship('Workshop', secondary=workshop_participants, back_populates='participants')
+    assigned_coachings = db.relationship('AssignedCoaching', back_populates='team_member')
 
 
 class Coaching(db.Model):
@@ -151,10 +163,11 @@ class Coaching(db.Model):
     team_id = db.Column(db.Integer, db.ForeignKey('teams.id'))
     assigned_coaching_id = db.Column(db.Integer, db.ForeignKey('assigned_coachings.id'))
 
-    team_member = db.relationship('TeamMember', backref='coachings')
+    team_member = db.relationship('TeamMember', back_populates='coachings')
     coach = db.relationship('User', backref='coachings_done')
     team = db.relationship('Team')
-    project = db.relationship('Project')
+    project = db.relationship('Project', back_populates='coachings')
+    assigned_coaching = db.relationship('AssignedCoaching', back_populates='coachings')
 
 
 class Workshop(db.Model):
@@ -169,8 +182,8 @@ class Workshop(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'))
 
     coach = db.relationship('User', backref='workshops')
-    participants = db.relationship('TeamMember', secondary=workshop_participants, backref='workshops')
-    project = db.relationship('Project')
+    participants = db.relationship('TeamMember', secondary=workshop_participants, back_populates='workshops')
+    project = db.relationship('Project', back_populates='workshops')
 
 
 class AssignedCoaching(db.Model):
@@ -189,4 +202,5 @@ class AssignedCoaching(db.Model):
 
     project_leader = db.relationship('User', foreign_keys=[project_leader_id])
     coach = db.relationship('User', foreign_keys=[coach_id])
-    team_member = db.relationship('TeamMember', backref='assigned_coachings')
+    team_member = db.relationship('TeamMember', back_populates='assigned_coachings')
+    coachings = db.relationship('Coaching', back_populates='assigned_coaching')
