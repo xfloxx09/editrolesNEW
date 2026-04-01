@@ -22,7 +22,6 @@ workshop_participants = db.Table('workshop_participants',
     db.Column('original_team_id', db.Integer, db.ForeignKey('teams.id'))
 )
 
-# Many-to-many for role permissions and role projects
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id')),
     db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id'))
@@ -44,7 +43,6 @@ class User(UserMixin, db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))
 
-    # Relationships (using back_populates)
     role = db.relationship('Role', back_populates='users')
     project = db.relationship('Project', back_populates='users')
     teams_led = db.relationship('Team', secondary=team_leaders, back_populates='leaders')
@@ -96,7 +94,6 @@ class Project(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.String(500))
 
-    # Relationships
     users = db.relationship('User', back_populates='project')
     teams = db.relationship('Team', back_populates='project')
     workshops = db.relationship('Workshop', back_populates='project')
@@ -111,7 +108,7 @@ class Team(db.Model):
     name = db.Column(db.String(100), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
 
-    members = db.relationship('TeamMember', back_populates='team')
+    members = db.relationship('TeamMember', foreign_keys='TeamMember.team_id', back_populates='team')
     leaders = db.relationship('User', secondary=team_leaders, back_populates='teams_led')
     project = db.relationship('Project', back_populates='teams')
     __table_args__ = (db.UniqueConstraint('name', 'project_id', name='teams_name_project_id_key'),)
