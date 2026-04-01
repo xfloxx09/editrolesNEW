@@ -2,6 +2,7 @@
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
+from datetime import datetime
 
 team_leaders = db.Table('team_leaders',
     db.Column('team_id', db.Integer, db.ForeignKey('teams.id')),
@@ -28,14 +29,12 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128))
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
-    team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))  # legacy, may not be used
+    team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))
 
     role = db.relationship('Role', backref='users')
     project = db.relationship('Project', backref='users')
     teams_led = db.relationship('Team', secondary=team_leaders, backref='leaders')
     projects = db.relationship('Project', secondary=user_projects, backref='users')
-
-    # Add this relationship to get the linked team member
     team_members = db.relationship('TeamMember', backref='user', lazy='dynamic')
 
     def set_password(self, password):
@@ -93,7 +92,6 @@ class Team(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
 
     members = db.relationship('TeamMember', backref='team')
-    # note: team_leaders is defined above
     __table_args__ = (db.UniqueConstraint('name', 'project_id', name='teams_name_project_id_key'),)
 
 
