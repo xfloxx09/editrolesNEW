@@ -76,7 +76,6 @@ def get_or_create_role(role_name):
     if not role:
         role = Role(name=role_name, description=f"Auto-created role: {role_name}")
         db.session.add(role)
-        db.session.flush()   # to get the id
-        # Optionally assign default permissions? Not needed for now.
+        db.session.flush()
         print(f"✅ Auto-created role '{role_name}'")
     return role
