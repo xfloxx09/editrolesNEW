@@ -10,7 +10,7 @@ ROLE_BETRIEBSLEITER = 'Betriebsleiter'
 ROLE_PROJEKTLEITER = 'Projektleiter'
 ROLE_TEAMLEITER = 'Teamleiter'
 ROLE_QUALITÄTSMANAGER = 'Qualitätsmanager'
-ROLE_QM = ROLE_QUALITÄTSMANAGER   # alias for compatibility
+ROLE_QM = ROLE_QUALITÄTSMANAGER   # alias
 ROLE_SALESCOACH = 'SalesCoach'
 ROLE_TRAINER = 'Trainer'
 ROLE_ABTEILUNGSLEITER = 'Abteilungsleiter'
@@ -69,3 +69,14 @@ def has_permission(user, permission_name):
     if not user or not user.role:
         return False
     return user.role.has_permission(permission_name)
+
+def get_or_create_role(role_name):
+    """Get a role by name, create it if it doesn't exist (with no permissions)."""
+    role = Role.query.filter_by(name=role_name).first()
+    if not role:
+        role = Role(name=role_name, description=f"Auto-created role: {role_name}")
+        db.session.add(role)
+        db.session.flush()   # to get the id
+        # Optionally assign default permissions? Not needed for now.
+        print(f"✅ Auto-created role '{role_name}'")
+    return role
