@@ -32,9 +32,11 @@ class User(UserMixin, db.Model):
     team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))
 
     role = db.relationship('Role', backref='users')
+    # One-to-many relationship to the user's main project
     project = db.relationship('Project', backref='users')
+    # Many-to-many relationship to other projects (for Abteilungsleiter)
+    projects = db.relationship('Project', secondary=user_projects, backref='user_projects_assoc')
     teams_led = db.relationship('Team', secondary=team_leaders, backref='leaders')
-    projects = db.relationship('Project', secondary=user_projects, backref='users')
     team_members = db.relationship('TeamMember', backref='user', lazy='dynamic')
 
     def set_password(self, password):
@@ -79,7 +81,8 @@ class Project(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.String(500))
 
-    users = db.relationship('User', backref='project_ref')
+    # The users relationship is already provided by backref 'users' from User.project
+    # So we don't define it here.
     teams = db.relationship('Team', backref='project_ref')
     workshops = db.relationship('Workshop', backref='project')
     coachings = db.relationship('Coaching', backref='project')
