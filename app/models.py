@@ -21,6 +21,7 @@ workshop_participants = db.Table('workshop_participants',
     db.Column('original_team_id', db.Integer, db.ForeignKey('teams.id'))
 )
 
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
