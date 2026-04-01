@@ -1,10 +1,10 @@
+# app/utils.py
 from functools import wraps
 from flask_login import current_user
 from flask import flash, redirect, url_for
 from app import db
-from app.models import Team, Project, User, Role, Permission
+from app.models import Team, Project, Role
 
-# Role constants
 ROLE_ADMIN = 'Admin'
 ROLE_BETRIEBSLEITER = 'Betriebsleiter'
 ROLE_PROJEKTLEITER = 'Projektleiter'
@@ -19,7 +19,6 @@ ROLE_MITARBEITER = 'Mitarbeiter'
 ARCHIV_TEAM_NAME = "ARCHIV"
 
 def role_required(allowed_roles):
-    """Decorator to check if current user has one of the allowed roles."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -34,7 +33,6 @@ def role_required(allowed_roles):
     return decorator
 
 def permission_required(permission_name):
-    """Decorator to check if current user has a specific permission."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
@@ -49,7 +47,6 @@ def permission_required(permission_name):
     return decorator
 
 def get_or_create_archiv_team():
-    """Get or create the ARCHIV team (for inactive members)."""
     archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
     if not archiv_team:
         default_project = Project.query.first()
@@ -63,13 +60,11 @@ def get_or_create_archiv_team():
     return archiv_team
 
 def has_permission(user, permission_name):
-    """Check if a user has a specific permission (via role)."""
     if not user or not user.role:
         return False
     return user.role.has_permission(permission_name)
 
 def get_or_create_role(role_name):
-    """Get a role by name, create it if it doesn't exist (with no permissions)."""
     role = Role.query.filter_by(name=role_name).first()
     if not role:
         role = Role(name=role_name, description=f"Auto-created role: {role_name}")
