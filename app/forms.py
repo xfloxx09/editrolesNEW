@@ -25,8 +25,7 @@ class RegistrationForm(FlaskForm):
     team_ids = SelectMultipleField('Zugeordnete Teams (nur für Teamleiter)', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
-
-    # Team member fields (first name, last name, and custom fields)
+    # Team member fields
     first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
     last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
     pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
@@ -35,7 +34,6 @@ class RegistrationForm(FlaskForm):
     dag_id = StringField('DAG-ID', validators=[Length(max=50)])
     team_id_for_member = SelectField('Team des Mitglieds', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
     active = BooleanField('Aktiv (nicht im Archiv)', default=True)
-
     submit = SubmitField('Benutzer registrieren/aktualisieren')
 
     def __init__(self, original_username=None, *args, **kwargs):
@@ -97,14 +95,11 @@ class TeamMemberForm(FlaskForm):
     first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
     last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
     team_id = SelectField('Team', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
-    
-    # New fields from CSV
     pylon = StringField('Pylon-Nr', validators=[DataRequired("Pylon-Nr ist erforderlich."), Length(max=50)])
     plt_id = StringField('PLT-ID', validators=[Length(max=50)])
     ma_kennung = StringField('MA-Kennung', validators=[Length(max=50)])
     dag_id = StringField('DAG-ID', validators=[Length(max=50)])
     active = BooleanField('Aktiv (nicht im Archiv)', default=True)
-    
     submit = SubmitField('Teammitglied erstellen/aktualisieren')
 
     def __init__(self, *args, **kwargs):
@@ -309,7 +304,6 @@ class AdminAssignedCoachingForm(FlaskForm):
         self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in TeamMember.query.join(Team).order_by(Team.name, TeamMember.name).all()]
 
 
-# Note: TeamMemberWithUserForm is kept for backwards compatibility but not used in new workflow
 class TeamMemberWithUserForm(FlaskForm):
     first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
     last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
