@@ -395,6 +395,7 @@ def delete_user(user_id):
         return redirect(url_for('admin.panel'))
 
     try:
+        # Delete linked team member first
         TeamMember.query.filter_by(user_id=user_id).delete()
         user.teams_led = []
         Coaching.query.filter_by(coach_id=user_id).update({"coach_id": None})
@@ -511,7 +512,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management ---
+# --- Team Member Management (kept for compatibility, but not used in new workflow) ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1260,7 +1261,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (improved with auto‑create roles) ---
+# --- CSV Sync Route (auto-create roles and link users) ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
