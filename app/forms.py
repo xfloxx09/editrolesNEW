@@ -25,6 +25,7 @@ class RegistrationForm(FlaskForm):
     team_ids = SelectMultipleField('Zugeordnete Teams (nur für Teamleiter)', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
+
     # Team member fields
     first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
     last_name = StringField('Nachname', validators=[DataRequired(), Length(min=1, max=50)])
@@ -34,6 +35,7 @@ class RegistrationForm(FlaskForm):
     dag_id = StringField('DAG-ID', validators=[Length(max=50)])
     team_id_for_member = SelectField('Team des Mitglieds', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
     active = BooleanField('Aktiv (nicht im Archiv)', default=True)
+
     submit = SubmitField('Benutzer registrieren/aktualisieren')
 
     def __init__(self, original_username=None, *args, **kwargs):
