@@ -4,6 +4,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 from datetime import datetime
 
+# Association tables
 team_leaders = db.Table('team_leaders',
     db.Column('team_id', db.Integer, db.ForeignKey('teams.id')),
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'))
@@ -21,6 +22,17 @@ workshop_participants = db.Table('workshop_participants',
     db.Column('original_team_id', db.Integer, db.ForeignKey('teams.id'))
 )
 
+role_permissions = db.Table('role_permissions',
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id')),
+    db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id'))
+)
+
+role_projects = db.Table('role_projects',
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id')),
+    db.Column('project_id', db.Integer, db.ForeignKey('projects.id'))
+)
+
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -31,12 +43,11 @@ class User(UserMixin, db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))
 
+    # Relationships
     role = db.relationship('Role', backref='users')
-    # One-to-many relationship to the user's main project
-    project = db.relationship('Project', backref='users')
-    # Many-to-many relationship to other projects (for Abteilungsleiter)
-    projects = db.relationship('Project', secondary=user_projects, backref='user_projects_assoc')
+    project = db.relationship('Project', backref='project_users')  # changed backref to avoid conflict
     teams_led = db.relationship('Team', secondary=team_leaders, backref='leaders')
+    projects = db.relationship('Project', secondary=user_projects, backref='user_projects_rel')  # changed backref
     team_members = db.relationship('TeamMember', backref='user', lazy='dynamic')
 
     def set_password(self, password):
@@ -61,8 +72,8 @@ class Role(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.String(255))
 
-    permissions = db.relationship('Permission', secondary='role_permissions', backref='roles')
-    projects = db.relationship('Project', secondary='role_projects', backref='roles')
+    permissions = db.relationship('Permission', secondary=role_permissions, backref='roles')
+    projects = db.relationship('Project', secondary=role_projects, backref='role_projects_rel')  # changed backref
 
     def has_permission(self, permission_name):
         return any(perm.name == permission_name for perm in self.permissions)
@@ -81,8 +92,8 @@ class Project(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.String(500))
 
-    # The users relationship is already provided by backref 'users' from User.project
-    # So we don't define it here.
+    # Relationships
+    users = db.relationship('User', backref='project_ref', foreign_keys=[User.project_id])
     teams = db.relationship('Team', backref='project_ref')
     workshops = db.relationship('Workshop', backref='project')
     coachings = db.relationship('Coaching', backref='project')
@@ -143,6 +154,7 @@ class Coaching(db.Model):
     team_member = db.relationship('TeamMember', backref='coachings')
     coach = db.relationship('User', backref='coachings_done')
     team = db.relationship('Team')
+    project = db.relationship('Project')
 
 
 class Workshop(db.Model):
