@@ -1,11 +1,11 @@
-# app/admin.py (full with role handling improvements)
+# app/admin.py
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm
-from app.utils import role_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
+from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
@@ -511,7 +511,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management (kept for compatibility) ---
+# --- Team Member Management ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1202,7 +1202,7 @@ def delete_assigned_coaching(assignment_id):
     return redirect(url_for('admin.manage_assigned_coachings'))
 
 
-# --- Team Member with User Creation (kept for compatibility) ---
+# --- Team Member with User Creation ---
 @bp.route('/teammembers/create-with-user', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1260,7 +1260,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (improved: auto-create roles) ---
+# --- CSV Sync Route (improved with auto‑create roles) ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1315,7 +1315,7 @@ def sync_from_csv():
             'email': 'eMail',
             'active_status': 'PLT aktiv?',
             'agent_status': 'Agent-Status',
-            'role': 'Agent-Status'   # default mapping: role from Agent-Status
+            'role': 'Agent-Status'   # map role from Agent-Status column
         }
 
         return render_template('admin/csv_mapping.html',
@@ -1354,11 +1354,7 @@ def sync_from_csv():
 
             mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
             if not mitarbeiter_role:
-                # Create Mitarbeiter role if missing
-                mitarbeiter_role = Role(name='Mitarbeiter', description='Regular employee')
-                db.session.add(mitarbeiter_role)
-                db.session.commit()
-                print("✅ Rolle 'Mitarbeiter' wurde erstellt.")
+                mitarbeiter_role = get_or_create_role('Mitarbeiter')
 
             created_members = 0
             updated_members = 0
@@ -1391,19 +1387,15 @@ def sync_from_csv():
                     dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
                     email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
 
-                    # Role: get or create based on mapped column
+                    # Role: get or create
                     role_name = row.get(mapping.get('role', ''), '').strip() if mapping.get('role') else None
                     if not role_name:
                         role_name = 'Mitarbeiter'
                     
-                    # Try to get the role, create if not exists
                     role = Role.query.filter_by(name=role_name).first()
                     if not role:
-                        role = Role(name=role_name, description=f"Auto-created from CSV")
-                        db.session.add(role)
-                        db.session.flush()
+                        role = get_or_create_role(role_name)
                         created_roles += 1
-                        current_app.logger.info(f"Created new role: {role_name}")
 
                     project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
                     project = None
@@ -1440,7 +1432,6 @@ def sync_from_csv():
                     team_member = TeamMember.query.filter_by(pylon=pylon).first()
 
                     if team_member:
-                        # Update existing team member
                         if not is_active and team_member.team_id != archiv_team.id:
                             team_member.original_team_id = team_member.team_id
                             team_member.original_project_id = team_member.team.project_id
