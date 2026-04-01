@@ -68,28 +68,28 @@
                 </thead>
                 <tbody>
                 {% for user in users_paginated.items %}
-                    {% set tm = user.team_member %}
-                    <tr>
-                        <td>{{ user.id }}</td>
-                        <td>{{ user.username }}</td>
-                        <td>{{ user.email }}</td>
-                        <td>{{ user.role.name if user.role else '-' }}</td>
-                        <td>{{ tm.name.split(' ')[0] if tm else '-' }}</td>
-                        <td>{{ tm.name.split(' ')[1] if tm and tm.name.split(' ')|length > 1 else '-' }}</td>
-                        <td>{{ tm.team.name if tm and tm.team else '-' }}</td>
-                        <td>{{ tm.pylon if tm else '-' }}</td>
-                        <td>
+                    {% set tm = user.team_members[0] if user.team_members else None %}
+                     <tr>
+                         <td>{{ user.id }}</td>
+                         <td>{{ user.username }}</td>
+                         <td>{{ user.email }}</td>
+                         <td>{{ user.role.name if user.role else '-' }}</td>
+                         <td>{{ tm.name.split(' ')[0] if tm else '-' }}</td>
+                         <td>{{ tm.name.split(' ')[1] if tm and tm.name.split(' ')|length > 1 else '-' }}</td>
+                         <td>{{ tm.team.name if tm and tm.team else '-' }}</td>
+                         <td>{{ tm.pylon if tm else '-' }}</td>
+                         <td>
                             <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary">Bearbeiten</a>
                             {% if user.username != 'admin' and user.id != current_user.id %}
                             <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Benutzer wirklich löschen?');">
                                 <input type="submit" value="Löschen" class="btn btn-xs btn-danger">
                             </form>
                             {% endif %}
-                        </td>
-                    </tr>
+                         </td>
+                     </tr>
                 {% endfor %}
                 </tbody>
-            </table>
+             </table>
 
             {% if users_paginated.pages > 1 %}
             <nav>
@@ -163,33 +163,33 @@
         {% if team_filter_active or teams_paginated.items %}
             <table class="table table-sm">
                 <thead>
-                    <tr>
+                     <tr>
                         <th>ID</th>
                         <th>Name</th>
                         <th>Projekt</th>
                         <th>Teamleiter</th>
                         <th>Mitglieder</th>
                         <th>Aktionen</th>
-                    </tr>
+                     </tr>
                 </thead>
                 <tbody>
                 {% for team in teams_paginated.items %}
-                    <tr>
-                        <td>{{ team.id }}</td>
-                        <td>{{ team.name }}</td>
-                        <td>{{ team.project_ref.name if team.project_ref else '-' }}</td>
-                        <td>{% for leader in team.leaders %}{{ leader.username }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
-                        <td>{{ team.members.count() }}</td>
-                        <td>
+                     <tr>
+                         <td>{{ team.id }}</td>
+                         <td>{{ team.name }}</td>
+                         <td>{{ team.project_ref.name if team.project_ref else '-' }}</td>
+                         <td>{% for leader in team.leaders %}{{ leader.username }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
+                         <td>{{ team.members.count() }}</td>
+                         <td>
                             <a href="{{ url_for('admin.edit_team', team_id=team.id) }}" class="btn btn-xs btn-outline-secondary">Bearbeiten & Mitglieder</a>
                             <form action="{{ url_for('admin.delete_team', team_id=team.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Team wirklich löschen? ACHTUNG: Nur wenn keine Mitglieder mehr zugeordnet sind!');">
                                 <input type="submit" value="Löschen" class="btn btn-xs btn-danger">
                             </form>
-                        </td>
-                    </tr>
+                         </td>
+                     </tr>
                 {% endfor %}
                 </tbody>
-            </table>
+             </table>
 
             {% if teams_paginated.pages > 1 %}
             <nav>
