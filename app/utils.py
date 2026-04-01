@@ -10,7 +10,7 @@ ROLE_BETRIEBSLEITER = 'Betriebsleiter'
 ROLE_PROJEKTLEITER = 'Projektleiter'
 ROLE_TEAMLEITER = 'Teamleiter'
 ROLE_QUALITÄTSMANAGER = 'Qualitätsmanager'
-ROLE_QM = ROLE_QUALITÄTSMANAGER   # alias
+ROLE_QM = ROLE_QUALITÄTSMANAGER
 ROLE_SALESCOACH = 'SalesCoach'
 ROLE_TRAINER = 'Trainer'
 ROLE_ABTEILUNGSLEITER = 'Abteilungsleiter'
@@ -52,10 +52,8 @@ def get_or_create_archiv_team():
     """Get or create the ARCHIV team (for inactive members)."""
     archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
     if not archiv_team:
-        # Get a default project (first project) or create a dummy one
         default_project = Project.query.first()
         if not default_project:
-            # Create a fallback project if none exists
             default_project = Project(name="Default Project")
             db.session.add(default_project)
             db.session.commit()
