@@ -44,7 +44,7 @@ def panel():
     member_filter_active = any([member_project_filter, member_team_filter, member_search])
     archiv_filter_active = any([archiv_project_filter, archiv_team_filter, archiv_search])
 
-    # Users query - now searches in pylon and team member name as well
+    # Users query - search in username, email, team member name, pylon
     users_query = User.query
     if not user_filter_active:
         users_query = users_query.filter(false())
@@ -54,7 +54,6 @@ def panel():
         if user_role_filter:
             users_query = users_query.join(User.role).filter(Role.name == user_role_filter)
         if user_search:
-            # Left join to team_members to search in name and pylon
             users_query = users_query.outerjoin(User.team_members).filter(
                 or_(
                     User.username.ilike(f'%{user_search}%'),
@@ -65,7 +64,7 @@ def panel():
             )
     users_paginated = users_query.order_by(User.username).paginate(page=page_users, per_page=20, error_out=False)
 
-    # Teams query (unchanged)
+    # Teams query
     teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
     if not team_filter_active:
         teams_query = teams_query.filter(false())
@@ -76,7 +75,7 @@ def panel():
             teams_query = teams_query.filter(Team.name.ilike(f'%{team_search}%'))
     teams_paginated = teams_query.order_by(Team.name).paginate(page=page_teams, per_page=20, error_out=False)
 
-    # Members query (unchanged)
+    # Members query (not used in UI but kept for compatibility)
     members_query = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME)
     if not member_filter_active:
         members_query = members_query.filter(false())
@@ -381,7 +380,6 @@ def edit_user(user_id):
         form.username.data = user_to_edit.username
         form.email.data = user_to_edit.email
         form.role_id.data = user_to_edit.role_id
-        # FIX: teams_led is a list, not a query
         form.team_ids.data = [team.id for team in user_to_edit.teams_led]
         role = user_to_edit.role
         if role.name != ROLE_ABTEILUNGSLEITER:
@@ -402,7 +400,6 @@ def delete_user(user_id):
         return redirect(url_for('admin.panel'))
 
     try:
-        # Delete linked team member first
         TeamMember.query.filter_by(user_id=user_id).delete()
         user.teams_led = []
         Coaching.query.filter_by(coach_id=user_id).update({"coach_id": None})
@@ -519,7 +516,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management (kept for compatibility) ---
+# --- Team Member Management (kept for compatibility but not used in UI) ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1268,7 +1265,7 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
-# --- CSV Sync Route (auto-create roles and link users) ---
+# --- CSV Sync Route ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
@@ -1323,7 +1320,7 @@ def sync_from_csv():
             'email': 'eMail',
             'active_status': 'PLT aktiv?',
             'agent_status': 'Agent-Status',
-            'role': 'Agent-Status'   # map role from Agent-Status column
+            'role': 'Agent-Status'
         }
 
         return render_template('admin/csv_mapping.html',
@@ -1464,14 +1461,12 @@ def sync_from_csv():
                             team_member.dag_id = dag_id
                         updated_members += 1
 
-                        # If linked user exists, update its role if necessary
                         if team_member.user_id:
                             user = User.query.get(team_member.user_id)
                             if user and user.role_id != role.id:
                                 user.role_id = role.id
                                 db.session.add(user)
                     else:
-                        # Create new team member
                         team_member = TeamMember(
                             name=full_name,
                             team_id=team.id,
@@ -1483,9 +1478,7 @@ def sync_from_csv():
                         db.session.add(team_member)
                         created_members += 1
 
-                        # Create user account if not already linked
                         if not team_member.user_id:
-                            # Username = first 4 letters of first name + full last name
                             first_part = first_name[:4].lower() if first_name else ''
                             last_part = last_name.lower() if last_name else ''
                             username_base = f"{first_part}{last_part}"
@@ -1496,7 +1489,6 @@ def sync_from_csv():
                                 else:
                                     username_base = pylon.lower()
                             username = username_base
-                            # Ensure uniqueness
                             existing = User.query.filter_by(username=username).first()
                             counter = 1
                             orig_username = username
@@ -1517,7 +1509,6 @@ def sync_from_csv():
                             team_member.user_id = user.id
                             created_users += 1
 
-                    # Batch commit
                     batch.append(team_member)
                     if len(batch) >= BATCH_SIZE:
                         db.session.commit()
@@ -1530,12 +1521,10 @@ def sync_from_csv():
                     errors += 1
                     continue
 
-            # Final commit
             if batch:
                 db.session.commit()
             current_app.logger.info(f"Import finished. Processed {processed} rows, errors {errors}")
 
-        # Clean up temp file
         try:
             os.unlink(temp_path)
         except:
