@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Meine Coachings</h2>
+
+    <!-- Filter form -->
+    <form method="GET" class="mb-4">
+        <div class="form-row">
+            <div class="col-md-3">
+                <select name="period" class="form-control">
+                    <option value="all" {% if current_period == 'all' %}selected{% endif %}>Alle</option>
+                    <option value="today" {% if current_period == 'today' %}selected{% endif %}>Heute</option>
+                    <option value="yesterday" {% if current_period == 'yesterday' %}selected{% endif %}>Gestern</option>
+                    <option value="this_week" {% if current_period == 'this_week' %}selected{% endif %}>Diese Woche</option>
+                    <option value="last_week" {% if current_period == 'last_week' %}selected{% endif %}>Letzte Woche</option>
+                    <option value="this_month" {% if current_period == 'this_month' %}selected{% endif %}>Dieser Monat</option>
+                    <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>Letzter Monat</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="team" class="form-control">
+                    <option value="all" {% if current_team == 'all' %}selected{% endif %}>Alle Teams</option>
+                    {% for team in all_teams %}
+                        <option value="{{ team.id }}" {% if current_team == team.id|string %}selected{% endif %}>{{ team.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="member_id" class="form-control">
+                    <option value="">-- Alle Mitglieder --</option>
+                    {% for member in all_team_members %}
+                        <option value="{{ member.id }}" {% if current_member == member.id %}selected{% endif %}>{{ member.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <input type="text" name="search" class="form-control" placeholder="Suchen..." value="{{ current_search }}">
+            </div>
+        </div>
+        <div class="form-row mt-2">
+            <div class="col-md-12">
+                <button type="submit" class="btn btn-primary">Filtern</button>
+                <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-secondary">Zurücksetzen</a>
+            </div>
+        </div>
+    </form>
+
+    <!-- Coaching list -->
+    {% if coachings.items %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Datum</th>
+                        <th>Teammitglied</th>
+                        <th>Team</th>
+                        <th>Coaching Stil</th>
+                        <th>Thema</th>
+                        <th>Performance</th>
+                        <th>Notiz</th>
+                        <th>Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for coaching in coachings.items %}
+                        <tr>
+                            <td>{{ coaching.coaching_date|athens_time }}</td>
+                            <td>{{ coaching.team_member.name }}</td>
+                            <td>{{ coaching.team_member.team.name }}</td>
+                            <td>{{ coaching.coaching_style }}</td>
+                            <td>{{ coaching.coaching_subject }}</td>
+                            <td>{{ coaching.performance_mark }}</td>
+                            <td>{{ coaching.coach_notes|truncate(50) }}</td>
+                            <td>
+                                <a href="{{ url_for('main.edit_coaching', coaching_id=coaching.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
+                                <form action="{{ url_for('main.delete_coaching', coaching_id=coaching.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Coaching wirklich löschen?');">
+                                    <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
+                                </form>
+                             </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if coachings.pages > 1 %}
+        <nav>
+            <ul class="pagination justify-content-center">
+                {% if coachings.has_prev %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('main.coaching_dashboard', page=coachings.prev_num, period=current_period, team=current_team, member_id=current_member, search=current_search) }}">Vorherige</a></li>
+                {% endif %}
+                {% for page_num in coachings.iter_pages() %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == coachings.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('main.coaching_dashboard', page=page_num, period=current_period, team=current_team, member_id=current_member, search=current_search) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if coachings.has_next %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('main.coaching_dashboard', page=coachings.next_num, period=current_period, team=current_team, member_id=current_member, search=current_search) }}">Nächste</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    {% else %}
+        <p class="text-muted">Keine Coachings gefunden.</p>
+    {% endif %}
+</div>
+{% endblock %}
