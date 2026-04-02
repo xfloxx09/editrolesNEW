@@ -179,7 +179,7 @@
                         <td>{{ team.name }}</td>
                         <td>{{ team.project_ref.name if team.project_ref else '-' }}</td>
                         <td>{% for leader in team.leaders %}{{ leader.username }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
-                        <td>{{ team.members.count() }}</td>
+                        <td>{{ team.members|length }}</td>
                         <td>
                             <a href="{{ url_for('admin.edit_team', team_id=team.id) }}" class="btn btn-xs btn-outline-secondary">Bearbeiten & Mitglieder</a>
                             <form action="{{ url_for('admin.delete_team', team_id=team.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Team wirklich löschen? ACHTUNG: Nur wenn keine Mitglieder mehr zugeordnet sind!');">
@@ -254,7 +254,6 @@
                         <button type="submit" class="btn btn-sm btn-secondary btn-block">Filtern</button>
                     </div>
                 </div>
-                <!-- hidden fields -->
                 <input type="hidden" name="user_project" value="{{ filter_params.user_project or '' }}">
                 <input type="hidden" name="user_role" value="{{ filter_params.user_role or '' }}">
                 <input type="hidden" name="user_search" value="{{ filter_params.user_search or '' }}">
