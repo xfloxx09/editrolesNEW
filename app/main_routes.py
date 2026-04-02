@@ -411,6 +411,14 @@ def my_coachings():
 @permission_required('leave_coaching_review')
 def submit_coaching_review():
     form = CoachingReviewForm()
+    cid_raw = (request.form.get('review_coaching_pk') or '').strip()
+    if not cid_raw:
+        flash('Coaching konnte nicht zugeordnet werden. Bitte „Bewertung abgeben“ erneut anklicken.', 'danger')
+        t = _safe_internal_path((request.form.get('next') or '').strip())
+        if t:
+            return redirect(t)
+        return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+
     if not form.validate_on_submit():
         for _field, errors in form.errors.items():
             for err in errors:
@@ -421,8 +429,8 @@ def submit_coaching_review():
         return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
 
     try:
-        cid = int(str(form.coaching_id.data).strip())
-    except (TypeError, ValueError, AttributeError):
+        cid = int(cid_raw)
+    except (TypeError, ValueError):
         flash('Ungültige Coaching-ID.', 'danger')
         return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
 

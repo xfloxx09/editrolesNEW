@@ -368,8 +368,7 @@ class LeitfadenItemForm(FlaskForm):
 
 
 class CoachingReviewForm(FlaskForm):
-    # StringField: HiddenInput + JS-Zuweisung funktioniert zuverlässiger als IntegerField
-    coaching_id = HiddenField(validators=[DataRequired(message='Coaching konnte nicht zugeordnet werden.')])
+    """coaching-PK kommt als plain HTML name=review_coaching_pk (robuster als WTForms Hidden)."""
     rating = IntegerField(
         widget=HiddenInput(),
         default=5,

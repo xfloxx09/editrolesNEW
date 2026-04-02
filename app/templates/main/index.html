@@ -440,7 +440,7 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    {{ review_form_dashboard.coaching_id(id='dashModalCoachingId') }}
+                    <input type="hidden" name="review_coaching_pk" id="dashModalCoachingId" value="" autocomplete="off">
                     <div class="form-group star-rating-wrap">
                         <label class="form-control-label">Sterne wählen <span class="text-muted font-weight-normal">(links 1 · rechts 5)</span></label>
                         <div class="star-rating-row" id="dashModalStarRating" role="group" aria-label="Bewertung 1 bis 5 Sterne">
