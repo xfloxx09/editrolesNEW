@@ -22,7 +22,8 @@
                     {% if has_perm('view_own_coachings') %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.coaching_dashboard') }}">Meine Coachings</a></li>
                     {% endif %}
-                    {% if has_perm('view_own_team') and current_user.teams_led.count() > 0 %}
+                    {# Fix: Use |length instead of .count() #}
+                    {% if has_perm('view_own_team') and current_user.teams_led|length > 0 %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}
                     {% if has_perm('view_pl_qm_dashboard') %}
