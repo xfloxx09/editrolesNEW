@@ -1,36 +1,24 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-12 text-center">
-        <h1 class="mb-5">Willkommen im Coaching-Portal</h1>
-        <div class="d-flex justify-content-center flex-wrap" style="gap: 1.5rem;">
-            <div class="mb-4" style="width: 280px;">
-                <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-lg btn-block p-5" style="background-color: #e20074; color: white; border-radius: 20px; text-decoration: none; height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <i class="fas fa-chalkboard-teacher" style="font-size: 5rem; margin-bottom: 20px;"></i>
-                    <h2>Coachings</h2>
-                    <p>Einzel-Coachings</p>
-                </a>
-            </div>
-            <div class="mb-4" style="width: 280px;">
-                <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-lg btn-block p-5" style="background-color: #007bff; color: white; border-radius: 20px; text-decoration: none; height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <i class="fas fa-users" style="font-size: 5rem; margin-bottom: 20px;"></i>
-                    <h2>Workshops</h2>
-                    <p>Gruppen-Coachings</p>
-                </a>
-            </div>
-            {% if has_perm('view_assigned_coachings') %}
-            <div class="mb-4" style="width: 280px;">
-                <a href="{{ url_for('main.assigned_coachings') }}" class="btn btn-lg btn-block p-5" style="background-color: #28a745; color: white; border-radius: 20px; text-decoration: none; height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;">
-                    <i class="fas fa-tasks" style="font-size: 5rem; margin-bottom: 20px;"></i>
-                    <h2>To-Do</h2>
-                    <p>Zugewiesene Aufgaben</p>
-                    {% if pending_assigned_count > 0 %}
-                    <span class="badge badge-danger" style="position: absolute; top: 15px; right: 25px; font-size: 1.2rem; border-radius: 50%; padding: 8px 12px;">{{ pending_assigned_count }}</span>
-                    {% endif %}
-                </a>
-            </div>
-            {% endif %}
+<div class="container mt-5">
+    <div class="row">
+        <!-- If you want to keep a link to add coaching, keep this, otherwise remove -->
+        <div class="col-md-6 offset-md-3">
+            <a href="{{ url_for('main.add_coaching') }}" class="btn btn-lg btn-block p-5" style="background-color: #e20074; color: white; border-radius: 20px; text-decoration: none; height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <i class="fas fa-chalkboard-teacher fa-4x mb-3"></i>
+                <h3>Neues Coaching (Einzel)</h3>
+                <p>Ein Coaching für ein Teammitglied erfassen</p>
+            </a>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-6 offset-md-3">
+            <a href="{{ url_for('main.add_workshop') }}" class="btn btn-lg btn-block p-5" style="background-color: #6c757d; color: white; border-radius: 20px; text-decoration: none; height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <i class="fas fa-users fa-4x mb-3"></i>
+                <h3>Neuer Workshop (Gruppe)</h3>
+                <p>Einen Workshop für mehrere Teilnehmer erfassen</p>
+            </a>
         </div>
     </div>
 </div>
