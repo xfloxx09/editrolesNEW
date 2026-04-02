@@ -130,6 +130,12 @@ def index():
 @login_required
 @permission_required('view_coaching_dashboard')
 def coaching_dashboard():
+    # Get the first team member linked to the current user
+    team_member = current_user.team_members.first()
+    if not team_member:
+        flash('Kein Teammitglied gefunden. Bitte kontaktieren Sie den Administrator.', 'warning')
+        return redirect(url_for('main.index'))
+    
     page = request.args.get('page', 1, type=int)
     period_arg = request.args.get('period', 'all')
     team_arg = request.args.get('team', "all")
