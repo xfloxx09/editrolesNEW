@@ -44,6 +44,7 @@ def panel():
     member_filter_active = any([member_project_filter, member_team_filter, member_search])
     archiv_filter_active = any([archiv_project_filter, archiv_team_filter, archiv_search])
 
+    # Users query - now searches in pylon and team member name as well
     users_query = User.query
     if not user_filter_active:
         users_query = users_query.filter(false())
@@ -53,14 +54,18 @@ def panel():
         if user_role_filter:
             users_query = users_query.join(User.role).filter(Role.name == user_role_filter)
         if user_search:
-            users_query = users_query.filter(
+            # Left join to team_members to search in name and pylon
+            users_query = users_query.outerjoin(User.team_members).filter(
                 or_(
                     User.username.ilike(f'%{user_search}%'),
-                    User.email.ilike(f'%{user_search}%')
+                    User.email.ilike(f'%{user_search}%'),
+                    TeamMember.name.ilike(f'%{user_search}%'),
+                    TeamMember.pylon.ilike(f'%{user_search}%')
                 )
             )
     users_paginated = users_query.order_by(User.username).paginate(page=page_users, per_page=20, error_out=False)
 
+    # Teams query (unchanged)
     teams_query = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
     if not team_filter_active:
         teams_query = teams_query.filter(false())
@@ -71,6 +76,7 @@ def panel():
             teams_query = teams_query.filter(Team.name.ilike(f'%{team_search}%'))
     teams_paginated = teams_query.order_by(Team.name).paginate(page=page_teams, per_page=20, error_out=False)
 
+    # Members query (unchanged)
     members_query = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.name != ARCHIV_TEAM_NAME)
     if not member_filter_active:
         members_query = members_query.filter(false())
