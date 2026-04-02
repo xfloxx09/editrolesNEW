@@ -53,6 +53,12 @@
         <p class="small text-muted mb-0">Wenn Sie Jahr wählen, überschreibt das die Schnellfilter (außer „Alle“ im Zeitraum wird ignoriert).</p>
     </form>
 
+    {% if can_leave_review and coachings.items %}
+    <div class="alert alert-info small mb-3">
+        In der <strong>rechten Spalte</strong> jeder Zeile finden Sie <strong>Bewertung abgeben</strong> bzw. <strong>Bewertung ändern</strong>.
+    </div>
+    {% endif %}
+
     {% if coachings.items %}
         <div class="table-responsive">
             <table class="table table-striped">
@@ -64,7 +70,7 @@
                         <th>Thema</th>
                         <th>Performance</th>
                         <th>Ihre Bewertung</th>
-                        {% if has_perm('leave_coaching_review') %}<th></th>{% endif %}
+                        {% if can_leave_review %}<th>Aktion</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -85,7 +91,7 @@
                                     <span class="text-muted">—</span>
                                 {% endif %}
                             </td>
-                            {% if has_perm('leave_coaching_review') %}
+                            {% if can_leave_review %}
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-info review-open-btn"
                                         data-coaching-id="{{ coaching.id }}">
@@ -120,11 +126,25 @@
         </nav>
         {% endif %}
     {% else %}
+        {% if not has_team_member_link %}
+        <div class="alert alert-warning">
+            Es sind <strong>keine Coachings</strong> sichtbar, weil Ihr Benutzerkonto mit keinem <strong>Teammitglied</strong> verknüpft ist.
+            Ohne diese Verknüpfung kann das System Ihre Einzelcoachings nicht zuordnen (und es erscheint auch kein Bewertungs-Button).
+            Bitte die Administration prüfen: Benutzer bearbeiten und mit dem passenden Teammitglied verknüpfen, oder CSV-Import mit Login-Zuordnung nutzen.
+        </div>
+        {% elif can_leave_review %}
+        <div class="alert alert-secondary">
+            <strong>Keine Coachings</strong> in diesem Zeitraum oder mit diesen Filtern.
+            <a href="{{ url_for('main.my_coachings') }}" class="alert-link">Alle Filter zurücksetzen</a>.
+            Sobald hier Zeilen erscheinen, gibt es in der Spalte „Aktion“ die Bewertung.
+        </div>
+        {% else %}
         <p class="text-muted">Keine Coachings gefunden.</p>
+        {% endif %}
     {% endif %}
 </div>
 
-{% if has_perm('leave_coaching_review') %}
+{% if can_leave_review %}
 <div class="modal fade" id="reviewModal" tabindex="-1" role="dialog" aria-labelledby="reviewModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -160,7 +180,7 @@
 
 {% block scripts %}
 {{ super() }}
-{% if has_perm('leave_coaching_review') %}
+{% if can_leave_review %}
 <script>
 var reviewPrefill = {{ review_prefill | tojson }};
 document.querySelectorAll('.review-open-btn').forEach(function(btn) {

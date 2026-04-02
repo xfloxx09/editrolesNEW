@@ -349,6 +349,11 @@ def my_coachings():
                 'rating': c.employee_review.rating,
                 'comment': c.employee_review.comment or '',
             }
+    can_leave_review = current_user.has_permission('leave_coaching_review')
+    has_team_member_link = (
+        db.session.query(TeamMember.id).filter(TeamMember.user_id == current_user.id).first()
+        is not None
+    )
     return render_template(
         'main/my_coachings.html',
         title='Meine Coachings',
@@ -364,6 +369,8 @@ def my_coachings():
         page_url=lambda p: url_for_paginated('main.my_coachings', p, filter_args),
         review_prefill=review_prefill,
         review_form=review_form,
+        can_leave_review=can_leave_review,
+        has_team_member_link=has_team_member_link,
         config=current_app.config
     )
 

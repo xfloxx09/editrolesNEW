@@ -25,11 +25,14 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     migrate.init_app(app, db)
 
-    # Flask-Login user loader
+    # Flask-Login user loader (eager role + permissions so checks match DB after role edits)
     @login_manager.user_loader
     def load_user(user_id):
-        from app.models import User
-        return User.query.get(int(user_id))
+        from sqlalchemy.orm import joinedload
+        from app.models import User, Role
+        return User.query.options(
+            joinedload(User.role).joinedload(Role.permissions)
+        ).get(int(user_id))
 
     # --- Migration: ensure necessary columns and tables exist ---
     with app.app_context():
