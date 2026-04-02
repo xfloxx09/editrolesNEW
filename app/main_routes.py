@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenValue
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from datetime import datetime, timezone, timedelta
@@ -239,13 +239,6 @@ def add_coaching():
             coaching_style=form.coaching_style.data,
             tcap_id=form.tcap_id.data if form.coaching_style.data == 'TCAP' else None,
             coaching_subject=form.coaching_subject.data,
-            leitfaden_begruessung=form.leitfaden_begruessung.data,
-            leitfaden_legitimation=form.leitfaden_legitimation.data,
-            leitfaden_pka=form.leitfaden_pka.data,
-            leitfaden_kek=form.leitfaden_kek.data,
-            leitfaden_angebot=form.leitfaden_angebot.data,
-            leitfaden_zusammenfassung=form.leitfaden_zusammenfassung.data,
-            leitfaden_kzb=form.leitfaden_kzb.data,
             performance_mark=form.performance_mark.data,
             time_spent=form.time_spent.data,
             coach_notes=form.coach_notes.data,
@@ -259,6 +252,15 @@ def add_coaching():
                 assignment.status = 'in_progress'
 
         db.session.add(coaching)
+        db.session.flush()  # Get coaching.id before adding leitfaden values
+
+        # Save dynamic leitfaden values
+        active_items = LeitfadenItem.query.filter_by(active=True).all()
+        for item in active_items:
+            val = request.form.get(f'leitfaden_{item.id}', 'k.A.')
+            lv = CoachingLeitfadenValue(coaching_id=coaching.id, leitfaden_item_id=item.id, value=val)
+            db.session.add(lv)
+
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
         return redirect(url_for('main.coaching_dashboard'))
@@ -277,7 +279,7 @@ def add_coaching():
         else:
             flash('Ungültige oder nicht verfügbare Aufgabe.', 'danger')
 
-    return render_template('main/add_coaching.html', form=form, config=current_app.config)
+    return render_template('main/add_coaching.html', form=form, leitfaden_values=None, config=current_app.config)
 
 
 # --- Edit Coaching ---
@@ -297,11 +299,27 @@ def edit_coaching(coaching_id):
         form.populate_obj(coaching)
         if form.coaching_style.data != 'TCAP':
             coaching.tcap_id = None
+
+        # Update dynamic leitfaden values
+        # Remove existing values
+        CoachingLeitfadenValue.query.filter_by(coaching_id=coaching.id).delete()
+        # Save new values
+        active_items = LeitfadenItem.query.filter_by(active=True).all()
+        for item in active_items:
+            val = request.form.get(f'leitfaden_{item.id}', 'k.A.')
+            lv = CoachingLeitfadenValue(coaching_id=coaching.id, leitfaden_item_id=item.id, value=val)
+            db.session.add(lv)
+
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
         return redirect(url_for('main.coaching_dashboard'))
 
-    return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, config=current_app.config)
+    # Build existing leitfaden values for the template
+    leitfaden_values = {}
+    for lv in coaching.leitfaden_values:
+        leitfaden_values[lv.leitfaden_item_id] = lv.value
+
+    return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, leitfaden_values=leitfaden_values, config=current_app.config)
 
 
 # --- Delete Coaching ---
@@ -534,20 +552,16 @@ def pl_qm_dashboard():
                 mins = total_t % 60
                 formatted_time = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
 
-                # Leitfaden adherence
-                leitfaden_fields = ['leitfaden_begruessung', 'leitfaden_legitimation',
-                                    'leitfaden_pka', 'leitfaden_kek', 'leitfaden_angebot',
-                                    'leitfaden_zusammenfassung', 'leitfaden_kzb']
+                # Leitfaden adherence (uses dynamic leitfaden_fields_list property)
                 if total_c > 0:
                     member_coachings = Coaching.query.filter_by(team_member_id=member.id, project_id=project_id).all()
                     total_checks = 0
                     positive_checks = 0
                     for c in member_coachings:
-                        for field in leitfaden_fields:
-                            val = getattr(c, field, 'k.A.')
-                            if val and val != 'k.A.':
+                        for name, val in c.leitfaden_fields_list:
+                            if val in ('Ja', 'Nein'):
                                 total_checks += 1
-                                if val.lower() in ['ja', 'yes', '1', 'true']:
+                                if val == 'Ja':
                                     positive_checks += 1
                     avg_leitfaden = round((positive_checks / total_checks * 100), 1) if total_checks > 0 else 0
                 else:

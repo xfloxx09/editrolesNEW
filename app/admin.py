@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenValue
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role
 from app.main_routes import calculate_date_range, get_month_name_german
@@ -1537,3 +1537,82 @@ def sync_from_csv():
         return redirect(url_for('admin.sync_from_csv'))
 
     return render_template('admin/sync_from_csv.html', config=current_app.config)
+
+
+# ─── Leitfaden Items Management ───────────────────────────────────────────────
+
+@bp.route('/leitfaden')
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def manage_leitfaden():
+    items = LeitfadenItem.query.order_by(LeitfadenItem.position).all()
+    return render_template('admin/manage_leitfaden.html', items=items, title='Leitfaden verwalten', config=current_app.config)
+
+
+@bp.route('/leitfaden/add', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def create_leitfaden_item():
+    if request.method == 'POST':
+        label = request.form.get('label', '').strip()
+        key = request.form.get('key', '').strip()
+        position = request.form.get('position', 0, type=int)
+        active = 'active' in request.form
+
+        if not label:
+            flash('Label ist erforderlich.', 'danger')
+            return render_template('admin/edit_leitfaden_item.html', item=None, title='Neues Leitfaden-Item', config=current_app.config)
+
+        # Auto-generate key from label if not provided
+        if not key:
+            key = 'leitfaden_' + label.lower().replace(' ', '_').replace('ä', 'ae').replace('ö', 'oe').replace('ü', 'ue').replace('ß', 'ss')
+
+        # Check for duplicate key
+        existing = LeitfadenItem.query.filter_by(key=key).first()
+        if existing:
+            flash(f'Ein Item mit dem Schlüssel "{key}" existiert bereits.', 'danger')
+            return render_template('admin/edit_leitfaden_item.html', item=None, title='Neues Leitfaden-Item', config=current_app.config)
+
+        item = LeitfadenItem(label=label, key=key, position=position, active=active)
+        db.session.add(item)
+        db.session.commit()
+        flash(f'Leitfaden-Item "{label}" wurde erstellt.', 'success')
+        return redirect(url_for('admin.manage_leitfaden'))
+
+    return render_template('admin/edit_leitfaden_item.html', item=None, title='Neues Leitfaden-Item', config=current_app.config)
+
+
+@bp.route('/leitfaden/<int:item_id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def edit_leitfaden_item(item_id):
+    item = LeitfadenItem.query.get_or_404(item_id)
+    if request.method == 'POST':
+        label = request.form.get('label', '').strip()
+        position = request.form.get('position', 0, type=int)
+        active = 'active' in request.form
+
+        if not label:
+            flash('Label ist erforderlich.', 'danger')
+            return render_template('admin/edit_leitfaden_item.html', item=item, title='Leitfaden-Item bearbeiten', config=current_app.config)
+
+        item.label = label
+        item.position = position
+        item.active = active
+        db.session.commit()
+        flash(f'Leitfaden-Item "{label}" wurde aktualisiert.', 'success')
+        return redirect(url_for('admin.manage_leitfaden'))
+
+    return render_template('admin/edit_leitfaden_item.html', item=item, title='Leitfaden-Item bearbeiten', config=current_app.config)
+
+
+@bp.route('/leitfaden/<int:item_id>/delete', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def delete_leitfaden_item(item_id):
+    item = LeitfadenItem.query.get_or_404(item_id)
+    label = item.label
+    db.session.delete(item)
+    db.session.commit()
+    flash(f'Leitfaden-Item "{label}" wurde gelöscht.', 'success')
+    return redirect(url_for('admin.manage_leitfaden'))

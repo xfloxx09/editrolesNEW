@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <div class="form-group">
+                <label for="label">Label (Anzeigename) *</label>
+                <input type="text" class="form-control" id="label" name="label" value="{{ item.label if item else '' }}" required placeholder="z.B. Begrüßung">
+                <small class="form-text text-muted">Der Name, der im Coaching-Bogen angezeigt wird.</small>
+            </div>
+
+            {% if not item %}
+            <div class="form-group">
+                <label for="key">Schlüssel (intern)</label>
+                <input type="text" class="form-control" id="key" name="key" value="" placeholder="z.B. leitfaden_begruessung (wird automatisch generiert)">
+                <small class="form-text text-muted">Wird automatisch aus dem Label generiert, wenn leer gelassen. Kann nach dem Erstellen nicht mehr geändert werden.</small>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label>Schlüssel (intern)</label>
+                <input type="text" class="form-control" value="{{ item.key }}" disabled>
+                <small class="form-text text-muted">Der Schlüssel kann nicht geändert werden.</small>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="position">Position (Reihenfolge)</label>
+                <input type="number" class="form-control" id="position" name="position" value="{{ item.position if item else 0 }}" min="0">
+                <small class="form-text text-muted">Niedrigere Werte werden zuerst angezeigt.</small>
+            </div>
+
+            <div class="form-group form-check">
+                <input type="checkbox" class="form-check-input" id="active" name="active" {% if not item or item.active %}checked{% endif %}>
+                <label class="form-check-label" for="active">Aktiv (wird im Coaching-Bogen angezeigt)</label>
+            </div>
+
+            <div class="form-group mt-4">
+                <button type="submit" class="btn telekom-button"><i class="fas fa-save"></i> Speichern</button>
+                <a href="{{ url_for('admin.manage_leitfaden') }}" class="btn btn-secondary ml-2"><i class="fas fa-times"></i> Abbrechen</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
