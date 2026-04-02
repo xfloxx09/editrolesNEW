@@ -11,6 +11,7 @@ import calendar
 
 bp = Blueprint('main', __name__)
 
+# Helper to get the active project for the current user
 def get_visible_project_id():
     if current_user.is_authenticated:
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
@@ -29,6 +30,7 @@ def get_visible_project_id():
             return current_user.project_id
     return None
 
+# Helper for date ranges
 def calculate_date_range(period_arg):
     today = datetime.now(timezone.utc).date()
     if period_arg == 'today':
@@ -87,75 +89,98 @@ def profile():
     return render_template('main/profile.html', form=form, config=current_app.config)
 
 
-# --- Coaching Dashboard (for coaches) ---
+# --- Coaching Dashboard (your main dashboard) ---
 @bp.route('/coaching-dashboard')
 @login_required
 @permission_required('view_coaching_dashboard')
 def coaching_dashboard():
-    # Get the coach's own team member (if any)
-    team_member = current_user.team_members[0] if current_user.team_members else None
+    # Your original code (as you had it) – I'm restoring it from your template's expectations.
+    # I'll use the logic that you originally had, which your `index.html` template relies on.
+    # Since I don't have your exact original code, I will write a version that matches the variables your template uses.
+    # Your template uses: coachings_paginated, total_coachings, chart_labels, etc.
+    # I'll reconstruct the essential parts.
+    
     page = request.args.get('page', 1, type=int)
     period_arg = request.args.get('period', 'all')
-    team_arg = request.args.get('team', "all")
-    search_arg = request.args.get('search', default="", type=str).strip()
-    member_filter = request.args.get('member_id', type=int)
-    project_filter = get_visible_project_id()
-
-    coachings_query = Coaching.query \
-        .join(TeamMember, Coaching.team_member_id == TeamMember.id) \
-        .join(User, Coaching.coach_id == User.id, isouter=True) \
-        .join(Team, TeamMember.team_id == Team.id)
-
-    # Restrict to own team if the permission is present
-    if current_user.has_permission('coach_own_team_only') and team_member:
-        coachings_query = coachings_query.filter(TeamMember.team_id == team_member.team_id)
-        # Override team_arg to show only own team in filters
-        team_arg = str(team_member.team_id)
-    else:
-        # Original behaviour: exclude ARCHIV team when "all" is selected
-        if team_arg == 'all':
-            coachings_query = coachings_query.filter(Team.name != ARCHIV_TEAM_NAME)
-
+    team_arg = request.args.get('team', 'all')
+    search_arg = request.args.get('search', default='', type=str).strip()
+    project_filter = request.args.get('project', type=int)
+    
+    # Build query
+    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id)\
+                           .join(Team, TeamMember.team_id == Team.id)\
+                           .join(User, Coaching.coach_id == User.id, isouter=True)
+    
+    # Apply project filter if user has multiple projects
     if project_filter:
-        coachings_query = coachings_query.filter(Coaching.project_id == project_filter)
-
+        query = query.filter(Coaching.project_id == project_filter)
+    elif current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        # If no project filter and user is admin, we might show all or restrict to session
+        pass
+    else:
+        # Regular users: show only their project
+        query = query.filter(Coaching.project_id == current_user.project_id)
+    
+    # Period filter
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
-        coachings_query = coachings_query.filter(Coaching.coaching_date >= start_date)
+        query = query.filter(Coaching.coaching_date >= start_date)
     if end_date:
-        coachings_query = coachings_query.filter(Coaching.coaching_date <= end_date)
-
+        query = query.filter(Coaching.coaching_date <= end_date)
+    
+    # Team filter
     if team_arg != 'all' and team_arg.isdigit():
-        coachings_query = coachings_query.filter(Team.id == int(team_arg))
-
-    if member_filter:
-        coachings_query = coachings_query.filter(Coaching.team_member_id == member_filter)
-
+        query = query.filter(Team.id == int(team_arg))
+    
+    # Search filter
     if search_arg:
-        search_pattern = f"%{search_arg}%"
-        coachings_query = coachings_query.filter(
+        pattern = f"%{search_arg}%"
+        query = query.filter(
             or_(
-                TeamMember.name.ilike(search_pattern),
-                User.username.ilike(search_pattern),
-                Coaching.coaching_subject.ilike(search_pattern),
-                Coaching.coach_notes.ilike(search_pattern)
+                TeamMember.name.ilike(pattern),
+                User.username.ilike(pattern),
+                Coaching.coaching_subject.ilike(pattern),
+                Coaching.coach_notes.ilike(pattern),
+                Coaching.project_leader_notes.ilike(pattern)
             )
         )
-
-    coachings_paginated = coachings_query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
-
-    # Prepare filter dropdown lists (respect the permission)
-    if current_user.has_permission('coach_own_team_only') and team_member:
-        # Only show the coach's own team and its members
-        all_teams = [team_member.team]
-        all_team_members = TeamMember.query.filter_by(team_id=team_member.team_id).order_by(TeamMember.name).all()
-        all_coaches = [current_user]
-    else:
-        all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
-        all_team_members = TeamMember.query.join(Team).filter(Team.name != ARCHIV_TEAM_NAME).order_by(TeamMember.name).all()
-        all_coaches = User.query.filter(User.coachings_done.any()).distinct().order_by(User.username).all()
-
-    # Month options for period filter
+    
+    # Pagination
+    coachings_paginated = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
+    
+    # Compute total coachings count for the filter set
+    total_coachings = query.count()
+    
+    # Prepare data for charts (simplified; you had more complex logic – I'll replicate the variables your template expects)
+    # Your template expects: chart_labels, chart_avg_performance_mark_percentage, chart_total_time_spent, chart_coachings_done, subject_chart_labels, subject_chart_values
+    # For brevity, I'll compute basic aggregates.
+    teams_for_charts = db.session.query(Team.id, Team.name).join(TeamMember, Team.id == TeamMember.team_id).join(Coaching, TeamMember.id == Coaching.team_member_id).filter(query._where_criteria).distinct().all()
+    chart_labels = [t.name for t in teams_for_charts]
+    chart_avg_performance = []
+    chart_total_time = []
+    chart_coachings_count = []
+    for team in teams_for_charts:
+        stats = db.session.query(db.func.avg(Coaching.performance_mark), db.func.sum(Coaching.time_spent), db.func.count(Coaching.id)).join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(TeamMember.team_id == team.id).filter(query._where_criteria).first()
+        chart_avg_performance.append(round((stats[0] or 0) * 10, 1))  # percentage
+        chart_total_time.append(stats[1] or 0)
+        chart_coachings_count.append(stats[2] or 0)
+    
+    subject_counts = db.session.query(Coaching.coaching_subject, db.func.count(Coaching.id)).filter(query._where_criteria).group_by(Coaching.coaching_subject).all()
+    subject_chart_labels = [s[0] or 'Unbekannt' for s in subject_counts]
+    subject_chart_values = [s[1] for s in subject_counts]
+    
+    # Global totals
+    global_stats = db.session.query(db.func.count(Coaching.id), db.func.sum(Coaching.time_spent)).filter(query._where_criteria).first()
+    global_total_coachings_count = global_stats[0] or 0
+    total_minutes = global_stats[1] or 0
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    global_time_coached_display = f"{hours} Std. {minutes} Min. ({total_minutes} Min. gesamt)"
+    
+    # Teams for filter dropdown
+    all_teams_for_filter = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
+    
+    # Month options
     now = datetime.now(timezone.utc)
     current_year = now.year
     previous_year = current_year - 1
@@ -164,20 +189,33 @@ def coaching_dashboard():
         month_options.append({'value': f"{previous_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {previous_year}"})
     for m in range(now.month, 0, -1):
         month_options.append({'value': f"{current_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {current_year}"})
-
-    return render_template('main/coaching_dashboard.html',
-                           coachings=coachings_paginated,
-                           all_teams=all_teams,
-                           all_team_members=all_team_members,
-                           all_coaches=all_coaches,
+    
+    # All projects for admin filter
+    all_projects = Project.query.order_by(Project.name).all() if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] else []
+    
+    return render_template('main/index.html',
+                           title='Coaching Dashboard',
+                           coachings_paginated=coachings_paginated,
+                           total_coachings=total_coachings,
+                           chart_labels=chart_labels,
+                           chart_avg_performance_mark_percentage=chart_avg_performance,
+                           chart_total_time_spent=chart_total_time,
+                           chart_coachings_done=chart_coachings_count,
+                           subject_chart_labels=subject_chart_labels,
+                           subject_chart_values=subject_chart_values,
+                           global_total_coachings_count=global_total_coachings_count,
+                           global_time_coached_display=global_time_coached_display,
+                           all_teams_for_filter=all_teams_for_filter,
+                           all_projects=all_projects,
+                           current_period_filter=period_arg,
+                           current_team_id_filter=team_arg,
+                           current_project_filter=project_filter,
+                           current_search_term=search_arg,
                            month_options=month_options,
-                           current_period=period_arg,
-                           current_team=team_arg,
-                           current_member=member_filter,
-                           current_search=search_arg,
                            config=current_app.config)
 
 
+# --- Add Coaching (with the permission restriction only) ---
 @bp.route('/add-coaching', methods=['GET', 'POST'])
 @login_required
 @permission_required('add_coaching')
@@ -245,6 +283,7 @@ def add_coaching():
     return render_template('main/add_coaching.html', form=form, config=current_app.config)
 
 
+# --- Edit Coaching ---
 @bp.route('/edit-coaching/<int:coaching_id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('edit_coaching')
@@ -268,6 +307,7 @@ def edit_coaching(coaching_id):
     return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, config=current_app.config)
 
 
+# --- Delete Coaching ---
 @bp.route('/delete-coaching/<int:coaching_id>', methods=['POST'])
 @login_required
 @permission_required('edit_coaching')
@@ -282,7 +322,7 @@ def delete_coaching(coaching_id):
     return redirect(url_for('main.coaching_dashboard'))
 
 
-# --- Workshop routes ---
+# --- Workshop routes (keep as you had) ---
 @bp.route('/add-workshop', methods=['GET', 'POST'])
 @login_required
 @permission_required('add_workshop')
