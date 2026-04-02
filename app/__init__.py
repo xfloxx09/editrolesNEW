@@ -109,10 +109,12 @@ def create_app(config_class=Config):
                 conn.commit()
                 print("✅ Spalte 'role_id' in users hinzugefügt.")
 
-        # 6. Default permissions and roles (simplified – you can keep your full list)
+        # 6. Default permissions
         default_permissions = [
             ('view_own_coachings', 'View own coachings'),
             ('coach', 'Can perform coaching'),
+            ('assign_teams', 'Can be assigned as team leader (has teams_led)'),
+            # Add any other permissions you need
         ]
         for name, desc in default_permissions:
             res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
@@ -124,10 +126,17 @@ def create_app(config_class=Config):
                 print(f"✅ Permission '{name}' hinzugefügt.")
         conn.commit()
 
+        # 7. Default roles
         default_roles = [
             ('Admin', 'Administrator'),
             ('Betriebsleiter', 'Operations manager'),
+            ('Teamleiter', 'Team leader'),
             ('Mitarbeiter', 'Regular employee'),
+            ('Projektleiter', 'Project leader'),
+            ('Qualitätsmanager', 'Quality coach'),
+            ('SalesCoach', 'Sales coach'),
+            ('Trainer', 'Trainer'),
+            ('Abteilungsleiter', 'Department head'),
         ]
         for role_name, role_desc in default_roles:
             res = conn.execute(text("SELECT id FROM roles WHERE name = :name"), {"name": role_name}).fetchone()
@@ -138,17 +147,45 @@ def create_app(config_class=Config):
                 )
                 print(f"✅ Rolle '{role_name}' hinzugefügt.")
 
-        # Assign permissions to Admin
+        # 8. Assign permissions to roles
+        all_perms = conn.execute(text("SELECT id, name FROM permissions")).fetchall()
+        perm_map = {p[1]: p[0] for p in all_perms}
+
+        # Admin gets all permissions
         admin_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Admin'")).fetchone()
         if admin_role:
-            for perm in conn.execute(text("SELECT id FROM permissions")).fetchall():
+            for perm_id in perm_map.values():
                 conn.execute(
                     text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
-                    {"role_id": admin_role[0], "perm_id": perm[0]}
+                    {"role_id": admin_role[0], "perm_id": perm_id}
                 )
             print("✅ Admin hat alle Berechtigungen.")
 
-        # 7. user_id and custom fields in team_members
+        # Betriebsleiter gets all permissions as well
+        betriebsleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Betriebsleiter'")).fetchone()
+        if betriebsleiter_role:
+            for perm_id in perm_map.values():
+                conn.execute(
+                    text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                    {"role_id": betriebsleiter_role[0], "perm_id": perm_id}
+                )
+            print("✅ Betriebsleiter hat alle Berechtigungen.")
+
+        # Teamleiter gets assign_teams and coach permissions
+        teamleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
+        if teamleiter_role and 'assign_teams' in perm_map:
+            conn.execute(
+                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                {"role_id": teamleiter_role[0], "perm_id": perm_map['assign_teams']}
+            )
+            if 'coach' in perm_map:
+                conn.execute(
+                    text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                    {"role_id": teamleiter_role[0], "perm_id": perm_map['coach']}
+                )
+            print("✅ Teamleiter hat 'assign_teams' und 'coach' Berechtigungen.")
+
+        # 9. user_id and custom fields in team_members
         if 'team_members' in inspector.get_table_names():
             columns_team_members = [col['name'] for col in inspector.get_columns('team_members')]
             if 'user_id' not in columns_team_members:
@@ -161,7 +198,7 @@ def create_app(config_class=Config):
                     conn.commit()
                     print(f"✅ Spalte '{field}' in team_members hinzugefügt.")
 
-        # 8. Team uniqueness per project
+        # 10. Team uniqueness per project
         if 'teams' in inspector.get_table_names():
             try:
                 conn.execute(text('ALTER TABLE teams DROP CONSTRAINT IF EXISTS teams_name_key'))
