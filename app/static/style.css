@@ -162,3 +162,44 @@ footer {
     line-height: 1.5;
     border-radius: .2rem;
 }
+
+/* Coaching-Bewertung Modal — dunkel wie die App */
+.modal-coaching-review {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+    border-radius: 12px;
+}
+.modal-coaching-review-header {
+    background-color: #1a1a1a;
+    border-bottom: 2px solid #e20074 !important;
+}
+.modal-coaching-review .modal-title {
+    color: #f0f0f0;
+    font-weight: 600;
+}
+.modal-coaching-review .close {
+    color: #f0f0f0;
+    text-shadow: none;
+    opacity: 0.85;
+}
+.modal-coaching-review .close:hover {
+    color: #e20074;
+    opacity: 1;
+}
+.modal-coaching-review .modal-body label,
+.modal-coaching-review .modal-body .form-control-label {
+    color: #ccc;
+}
+.modal-coaching-review .modal-footer {
+    background-color: #252525;
+    border-top: 1px solid #444;
+}
+.modal-coaching-review .btn-secondary {
+    background-color: #444;
+    border-color: #555;
+    color: #f0f0f0;
+}
+.modal-coaching-review .btn-secondary:hover {
+    background-color: #555;
+    color: #fff;
+}

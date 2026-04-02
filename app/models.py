@@ -65,6 +65,17 @@ class User(UserMixin, db.Model):
             return self.role.has_permission(permission_name)
         return False
 
+    @property
+    def coach_display_name(self):
+        """Vor-/Nachname aus verknüpftem Teammitglied (Import), sonst Benutzername."""
+        try:
+            for tm in self.team_members:
+                if tm and tm.name and str(tm.name).strip():
+                    return str(tm.name).strip()
+        except (TypeError, AttributeError):
+            pass
+        return (self.username or '').strip() or '—'
+
 
 class Role(db.Model):
     __tablename__ = 'roles'

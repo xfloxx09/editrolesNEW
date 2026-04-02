@@ -287,7 +287,7 @@
                 <td>{{ coaching.coaching_date|athens_time }}</td>
                 <td>{{ coaching.team_member_coached.name if coaching.team_member_coached else 'N/A' }}</td>
                 <td>{{ coaching.team_member_coached.team.name if coaching.team_member_coached and coaching.team_member_coached.team else 'N/A' }}</td>
-                <td>{{ coaching.coach.username if coaching.coach else 'N/A' }}</td>
+                <td>{{ coaching.coach.coach_display_name if coaching.coach else 'N/A' }}</td>
                 <td>{{ coaching.coaching_subject if coaching.coaching_subject else '-' }}</td>
                 <td>{{ coaching.coaching_style if coaching.coaching_style else '-' }}</td>
                 <td>{{ coaching.performance_mark if coaching.performance_mark is not none else '-'}}</td>
@@ -427,11 +427,11 @@
 {% if can_leave_review and review_form_dashboard %}
 <div class="modal fade" id="reviewModalDash" tabindex="-1" role="dialog" aria-labelledby="reviewModalDashLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
-        <div class="modal-content">
+        <div class="modal-content modal-coaching-review">
             <form method="post" action="{{ url_for('main.submit_coaching_review') }}">
                 {{ review_form_dashboard.hidden_tag() }}
                 {{ review_form_dashboard.next() }}
-                <div class="modal-header">
+                <div class="modal-header modal-coaching-review-header">
                     <h5 class="modal-title" id="reviewModalDashLabel">Coach bewerten</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
@@ -448,7 +448,7 @@
                         {{ review_form_dashboard.comment(class="form-control", rows=4, id="dashModalComment") }}
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer border-secondary">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
                     {{ review_form_dashboard.submit(class="btn telekom-button") }}
                 </div>

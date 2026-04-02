@@ -68,7 +68,6 @@
                         <th>Coach</th>
                         <th>Coaching Stil</th>
                         <th>Thema</th>
-                        <th>Performance</th>
                         <th>Ihre Bewertung</th>
                         {% if can_leave_review %}<th>Aktion</th>{% endif %}
                     </tr>
@@ -77,10 +76,9 @@
                     {% for coaching in coachings.items %}
                         <tr>
                             <td>{{ coaching.coaching_date|athens_time }}</td>
-                            <td>{{ coaching.coach.username if coaching.coach else '-' }}</td>
+                            <td>{{ coaching.coach.coach_display_name if coaching.coach else '-' }}</td>
                             <td>{{ coaching.coaching_style }}</td>
                             <td>{{ coaching.coaching_subject or '-' }}</td>
-                            <td>{{ coaching.performance_mark }}</td>
                             <td>
                                 {% if coaching.employee_review %}
                                     {{ coaching.employee_review.rating }}/5
@@ -147,11 +145,11 @@
 {% if can_leave_review %}
 <div class="modal fade" id="reviewModal" tabindex="-1" role="dialog" aria-labelledby="reviewModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
-        <div class="modal-content">
+        <div class="modal-content modal-coaching-review">
             <form method="post" action="{{ url_for('main.submit_coaching_review') }}">
                 {{ review_form.hidden_tag() }}
                 {{ review_form.next() }}
-                <div class="modal-header">
+                <div class="modal-header modal-coaching-review-header">
                     <h5 class="modal-title" id="reviewModalLabel">Coaching bewerten</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
@@ -168,7 +166,7 @@
                         {{ review_form.comment(class="form-control", rows=4, id="modalComment") }}
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer border-secondary">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
                     {{ review_form.submit(class="btn telekom-button") }}
                 </div>

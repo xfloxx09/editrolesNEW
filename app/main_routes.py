@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm
@@ -264,8 +264,11 @@ def coaching_dashboard():
             )
         )
 
-    # Build query (eager employee_review for review buttons on own rows)
-    query = Coaching.query.options(joinedload(Coaching.employee_review)).join(
+    # Build query (eager employee_review + coach names from linked TeamMember)
+    query = Coaching.query.options(
+        joinedload(Coaching.employee_review),
+        selectinload(Coaching.coach).selectinload(User.team_members),
+    ).join(
         TeamMember, Coaching.team_member_id == TeamMember.id
     ).join(Team, TeamMember.team_id == Team.id).join(
         User, Coaching.coach_id == User.id, isouter=True
@@ -371,7 +374,10 @@ def my_coachings():
     month = request.args.get('month', type=int)
     day = request.args.get('day', type=int)
 
-    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(
+    query = Coaching.query.options(
+        joinedload(Coaching.employee_review),
+        selectinload(Coaching.coach).selectinload(User.team_members),
+    ).join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(
         TeamMember.user_id == current_user.id
     )
     query = apply_coaching_date_filters(query, period_arg, year, month, day)
