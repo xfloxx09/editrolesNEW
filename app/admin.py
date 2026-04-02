@@ -220,7 +220,8 @@ def create_user():
             db.session.add(user)
             db.session.flush()
 
-            if role.name == ROLE_TEAMLEITER and form.team_ids.data:
+            # Assign teams_led only if the role has the 'assign_teams' permission
+            if role.has_permission('assign_teams') and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user.teams_led = selected_teams
             else:
@@ -329,7 +330,8 @@ def edit_user(user_id):
             if form.password.data:
                 user_to_edit.set_password(form.password.data)
 
-            if role.name == ROLE_TEAMLEITER and form.team_ids.data:
+            # Assign teams_led only if the role has the 'assign_teams' permission
+            if role.has_permission('assign_teams') and form.team_ids.data:
                 selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
                 user_to_edit.teams_led = selected_teams
             else:
