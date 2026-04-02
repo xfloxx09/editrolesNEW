@@ -37,7 +37,6 @@ def create_app(config_class=Config):
         inspector = inspect(db.engine)
         conn = db.engine.connect()
 
-        # Ensure all tables are created
         db.create_all()
 
         # 1. coachings.team_id
@@ -47,7 +46,6 @@ def create_app(config_class=Config):
                 conn.execute(text('ALTER TABLE coachings ADD COLUMN team_id INTEGER REFERENCES teams(id)'))
                 conn.commit()
                 print("✅ Spalte 'team_id' in coachings hinzugefügt.")
-            # Update existing coachings
             conn.execute(text('''
                 UPDATE coachings
                 SET team_id = team_members.team_id
@@ -115,7 +113,6 @@ def create_app(config_class=Config):
             ('coach', 'Can perform coaching'),
             ('assign_teams', 'Can be assigned as team leader (has teams_led)'),
             ('coach_own_team_only', 'Coach can only coach members of their own team'),
-            # Add any other permissions you need
         ]
         for name, desc in default_permissions:
             res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
@@ -162,7 +159,7 @@ def create_app(config_class=Config):
                 )
             print("✅ Admin hat alle Berechtigungen.")
 
-        # Betriebsleiter gets all permissions as well
+        # Betriebsleiter gets all permissions
         betriebsleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Betriebsleiter'")).fetchone()
         if betriebsleiter_role:
             for perm_id in perm_map.values():
@@ -172,19 +169,16 @@ def create_app(config_class=Config):
                 )
             print("✅ Betriebsleiter hat alle Berechtigungen.")
 
-        # Teamleiter gets assign_teams and coach permissions
+        # Teamleiter gets assign_teams, coach, and coach_own_team_only
         teamleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
-        if teamleiter_role and 'assign_teams' in perm_map:
-            conn.execute(
-                text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
-                {"role_id": teamleiter_role[0], "perm_id": perm_map['assign_teams']}
-            )
-            if 'coach' in perm_map:
-                conn.execute(
-                    text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
-                    {"role_id": teamleiter_role[0], "perm_id": perm_map['coach']}
-                )
-            print("✅ Teamleiter hat 'assign_teams' und 'coach' Berechtigungen.")
+        if teamleiter_role:
+            for perm_name in ['assign_teams', 'coach', 'coach_own_team_only']:
+                if perm_name in perm_map:
+                    conn.execute(
+                        text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                        {"role_id": teamleiter_role[0], "perm_id": perm_map[perm_name]}
+                    )
+            print("✅ Teamleiter hat 'assign_teams', 'coach', 'coach_own_team_only' Berechtigungen.")
 
         # 9. user_id and custom fields in team_members
         if 'team_members' in inspector.get_table_names():
