@@ -19,15 +19,6 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
-                    {% if has_perm('view_own_coachings') or has_perm('leave_coaching_review') %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.my_coachings') }}">Meine Coachings</a></li>
-                    {% endif %}
-                    {% if has_perm('view_review') %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.coach_received_reviews') }}">Bewertungen über mich</a></li>
-                    {% endif %}
-                    {% if has_perm('view_all_reviews') %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.all_coaching_reviews') }}">Alle Bewertungen</a></li>
-                    {% endif %}
                     {% if has_perm('view_own_team') and current_user.teams_led|length > 0 %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}

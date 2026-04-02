@@ -198,7 +198,20 @@ def url_for_paginated(endpoint, page, filter_args):
 @bp.route('/')
 @login_required
 def index():
-    return render_template('main/index_choice.html', config=current_app.config)
+    u = current_user
+    index_tile_count = sum([
+        1 if u.has_permission('view_coaching_dashboard') else 0,
+        1 if u.has_permission('view_workshop_dashboard') else 0,
+        1 if u.has_permission('view_assigned_coachings') else 0,
+        1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
+        1 if u.has_permission('view_review') else 0,
+        1 if u.has_permission('view_all_reviews') else 0,
+    ])
+    return render_template(
+        'main/index_choice.html',
+        config=current_app.config,
+        index_tile_count=index_tile_count,
+    )
 
 
 @bp.route('/profile', methods=['GET', 'POST'])
@@ -580,10 +593,14 @@ def all_coaching_reviews():
     if coach_filter:
         extra_filters['coach'] = coach_filter
     filter_args = build_filter_args(period_arg, year, month, day, extra=extra_filters)
+    show_manager_only_feedback_notice = any(
+        not rev.visible_to_coach for rev in reviews.items
+    )
     return render_template(
         'main/all_coaching_reviews.html',
         title='Alle Bewertungen',
         reviews=reviews,
+        show_manager_only_feedback_notice=show_manager_only_feedback_notice,
         current_period=period_arg,
         filter_year=year,
         filter_month=month,
