@@ -27,6 +27,7 @@
         </div>
         <div class="form-group" id="team_leader_teams">
             {{ form.team_ids.label }} {{ form.team_ids(class="form-control") }}
+            <small class="form-text text-muted">Nur für Rollen mit der Berechtigung "assign_teams".</small>
         </div>
         <div class="form-group" id="abteilungsleiter_projects">
             {{ form.project_ids.label }} {{ form.project_ids(class="form-control") }}
@@ -67,7 +68,6 @@
 </div>
 
 <script>
-    // Show/hide role-specific fields
     const roleSelect = document.getElementById('role_id');
     const projectField = document.getElementById('project_id').parentElement;
     const teamLeaderField = document.getElementById('team_leader_teams');
@@ -84,7 +84,7 @@
             abteilungsleiterField.style.display = 'block';
             projectField.style.display = 'none';
         } else {
-            teamLeaderField.style.display = 'none';
+            teamLeaderField.style.display = 'block';  // always show, server will validate
             abteilungsleiterField.style.display = 'none';
             projectField.style.display = 'block';
         }
