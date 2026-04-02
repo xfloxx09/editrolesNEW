@@ -106,36 +106,28 @@ def coaching_dashboard():
     search_arg = request.args.get('search', default='', type=str).strip()
     project_filter = request.args.get('project', type=int)
     
-    # Build query
-    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id)\
-                           .join(Team, TeamMember.team_id == Team.id)\
-                           .join(User, Coaching.coach_id == User.id, isouter=True)
-    
-    # Apply project filter if user has multiple projects
+    # Build reusable filter conditions
+    filters = []
     if project_filter:
-        query = query.filter(Coaching.project_id == project_filter)
-    elif current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
-        # If no project filter and user is admin, we might show all or restrict to session
-        pass
-    else:
-        # Regular users: show only their project
-        query = query.filter(Coaching.project_id == current_user.project_id)
-    
+        filters.append(Coaching.project_id == project_filter)
+    elif current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        filters.append(Coaching.project_id == current_user.project_id)
+
     # Period filter
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
-        query = query.filter(Coaching.coaching_date >= start_date)
+        filters.append(Coaching.coaching_date >= start_date)
     if end_date:
-        query = query.filter(Coaching.coaching_date <= end_date)
-    
+        filters.append(Coaching.coaching_date <= end_date)
+
     # Team filter
     if team_arg != 'all' and team_arg.isdigit():
-        query = query.filter(Team.id == int(team_arg))
-    
+        filters.append(Team.id == int(team_arg))
+
     # Search filter
     if search_arg:
         pattern = f"%{search_arg}%"
-        query = query.filter(
+        filters.append(
             or_(
                 TeamMember.name.ilike(pattern),
                 User.username.ilike(pattern),
@@ -144,33 +136,38 @@ def coaching_dashboard():
                 Coaching.project_leader_notes.ilike(pattern)
             )
         )
-    
+
+    # Build query
+    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id)\
+                           .join(Team, TeamMember.team_id == Team.id)\
+                           .join(User, Coaching.coach_id == User.id, isouter=True)\
+                           .filter(*filters)
+
     # Pagination
     coachings_paginated = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
-    
+
     # Compute total coachings count for the filter set
     total_coachings = query.count()
-    
-    # Prepare data for charts (simplified; you had more complex logic – I'll replicate the variables your template expects)
-    # Your template expects: chart_labels, chart_avg_performance_mark_percentage, chart_total_time_spent, chart_coachings_done, subject_chart_labels, subject_chart_values
-    # For brevity, I'll compute basic aggregates.
-    teams_for_charts = db.session.query(Team.id, Team.name).join(TeamMember, Team.id == TeamMember.team_id).join(Coaching, TeamMember.id == Coaching.team_member_id).filter(query._where_criteria).distinct().all()
+
+    # Prepare data for charts
+    teams_for_charts = db.session.query(Team.id, Team.name).join(TeamMember, Team.id == TeamMember.team_id).join(Coaching, TeamMember.id == Coaching.team_member_id).filter(*filters).distinct().all()
     chart_labels = [t.name for t in teams_for_charts]
     chart_avg_performance = []
     chart_total_time = []
     chart_coachings_count = []
     for team in teams_for_charts:
-        stats = db.session.query(db.func.avg(Coaching.performance_mark), db.func.sum(Coaching.time_spent), db.func.count(Coaching.id)).join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(TeamMember.team_id == team.id).filter(query._where_criteria).first()
+        team_filters = [TeamMember.team_id == team.id] + filters
+        stats = db.session.query(db.func.avg(Coaching.performance_mark), db.func.sum(Coaching.time_spent), db.func.count(Coaching.id)).join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(*team_filters).first()
         chart_avg_performance.append(round((stats[0] or 0) * 10, 1))  # percentage
         chart_total_time.append(stats[1] or 0)
         chart_coachings_count.append(stats[2] or 0)
-    
-    subject_counts = db.session.query(Coaching.coaching_subject, db.func.count(Coaching.id)).filter(query._where_criteria).group_by(Coaching.coaching_subject).all()
+
+    subject_counts = db.session.query(Coaching.coaching_subject, db.func.count(Coaching.id)).filter(*filters).group_by(Coaching.coaching_subject).all()
     subject_chart_labels = [s[0] or 'Unbekannt' for s in subject_counts]
     subject_chart_values = [s[1] for s in subject_counts]
-    
+
     # Global totals
-    global_stats = db.session.query(db.func.count(Coaching.id), db.func.sum(Coaching.time_spent)).filter(query._where_criteria).first()
+    global_stats = db.session.query(db.func.count(Coaching.id), db.func.sum(Coaching.time_spent)).filter(*filters).first()
     global_total_coachings_count = global_stats[0] or 0
     total_minutes = global_stats[1] or 0
     hours = total_minutes // 60
@@ -367,25 +364,62 @@ def workshop_dashboard():
     period_arg = request.args.get('period', 'all')
     search_arg = request.args.get('search', default="", type=str).strip()
     project_filter = get_visible_project_id()
-    workshops_query = Workshop.query
+
+    # Build reusable filter conditions
+    ws_filters = []
     if project_filter:
-        workshops_query = workshops_query.filter(Workshop.project_id == project_filter)
+        ws_filters.append(Workshop.project_id == project_filter)
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
-        workshops_query = workshops_query.filter(Workshop.workshop_date >= start_date)
+        ws_filters.append(Workshop.workshop_date >= start_date)
     if end_date:
-        workshops_query = workshops_query.filter(Workshop.workshop_date <= end_date)
+        ws_filters.append(Workshop.workshop_date <= end_date)
+
+    workshops_query = Workshop.query
     if search_arg:
         pattern = f"%{search_arg}%"
-        workshops_query = workshops_query.filter(
+        ws_filters.append(
             or_(
                 Workshop.title.ilike(pattern),
                 Workshop.notes.ilike(pattern),
                 User.username.ilike(pattern)
             )
-        ).join(User, Workshop.coach_id == User.id)
+        )
+        workshops_query = workshops_query.join(User, Workshop.coach_id == User.id)
+
+    workshops_query = workshops_query.filter(*ws_filters)
     workshops_paginated = workshops_query.order_by(desc(Workshop.workshop_date)).paginate(page=page, per_page=15, error_out=False)
-    return render_template('main/workshop_dashboard.html', workshops=workshops_paginated, current_search=search_arg, current_period=period_arg, config=current_app.config)
+
+    # Compute stats for the template
+    total_workshops = workshops_query.count()
+    total_time = db.session.query(
+        db.func.coalesce(db.func.sum(Workshop.time_spent), 0)
+    ).filter(*ws_filters).scalar()
+    avg_rating_val = db.session.query(
+        db.func.avg(Workshop.overall_rating)
+    ).filter(*ws_filters).scalar()
+    avg_rating = round(avg_rating_val, 1) if avg_rating_val else 0
+
+    # Month options for filter dropdown
+    now = datetime.now(timezone.utc)
+    current_year = now.year
+    previous_year = current_year - 1
+    month_options = []
+    for m in range(12, 0, -1):
+        month_options.append({'value': f"{previous_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {previous_year}"})
+    for m in range(now.month, 0, -1):
+        month_options.append({'value': f"{current_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {current_year}"})
+
+    return render_template('main/workshop_dashboard.html',
+                           title='Workshop Dashboard',
+                           workshops_paginated=workshops_paginated,
+                           total_workshops=total_workshops,
+                           total_time=total_time,
+                           avg_rating=avg_rating,
+                           current_search=search_arg,
+                           current_period_filter=period_arg,
+                           month_options=month_options,
+                           config=current_app.config)
 
 
 # --- Team View (for team leaders) ---
