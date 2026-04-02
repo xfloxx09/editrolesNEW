@@ -526,7 +526,7 @@ def pl_qm_dashboard():
                     db.func.count(Coaching.id),
                     db.func.avg(Coaching.performance_mark),
                     db.func.sum(Coaching.time_spent)
-                ).filter(Coaching.team_member_id == member.id).first()
+                ).filter(Coaching.team_member_id == member.id, Coaching.project_id == project_id).first()
                 total_c = m_stats[0] or 0
                 avg_perf = round((m_stats[1] or 0) * 10, 1) if total_c > 0 else 0
                 total_t = m_stats[2] or 0
@@ -539,7 +539,7 @@ def pl_qm_dashboard():
                                     'leitfaden_pka', 'leitfaden_kek', 'leitfaden_angebot',
                                     'leitfaden_zusammenfassung', 'leitfaden_kzb']
                 if total_c > 0:
-                    member_coachings = Coaching.query.filter_by(team_member_id=member.id).all()
+                    member_coachings = Coaching.query.filter_by(team_member_id=member.id, project_id=project_id).all()
                     total_checks = 0
                     positive_checks = 0
                     for c in member_coachings:
@@ -592,6 +592,7 @@ def pl_qm_dashboard():
 
 @bp.route('/api/member-coaching-trend')
 @login_required
+@permission_required('view_pl_qm_dashboard')
 def get_member_coaching_trend():
     team_member_id = request.args.get('team_member_id', type=int)
     count = request.args.get('count', default='10', type=str)
@@ -600,7 +601,10 @@ def get_member_coaching_trend():
 
     query = Coaching.query.filter_by(team_member_id=team_member_id).order_by(desc(Coaching.coaching_date))
     if count != 'all':
-        query = query.limit(int(count))
+        try:
+            query = query.limit(int(count))
+        except (ValueError, TypeError):
+            query = query.limit(10)
     coachings = query.all()
     coachings.reverse()  # oldest first for chart
 
