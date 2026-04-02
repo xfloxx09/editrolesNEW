@@ -219,15 +219,23 @@
             <h4 class="section-title"><i class="fas fa-check-circle"></i> Leitfaden-Checkliste</h4>
             <p class="text-muted mb-3">Klicken Sie auf die entsprechenden Icons, um den Status festzulegen.</p>
 
-            {% for field in [form.leitfaden_begruessung, form.leitfaden_legitimation, form.leitfaden_pka, form.leitfaden_kek, form.leitfaden_angebot, form.leitfaden_zusammenfassung, form.leitfaden_kzb] %}
+            {% if not leitfaden_items %}
+                <div class="alert alert-warning mb-0">Keine aktiven Leitfaden-Punkte vorhanden. Ein Admin kann diese unter Admin -> Leitfaden verwalten anlegen.</div>
+            {% endif %}
+            {% for item in leitfaden_items %}
+                {% set current_value = selected_leitfaden_values.get(item.id, 'k.A.') %}
                 <div class="leitfaden-item">
-                    <span class="leitfaden-label">{{ field.label.text }}</span>
+                    <span class="leitfaden-label">{{ item.name }}</span>
                     <div class="leitfaden-buttons">
-                        <button type="button" class="leitfaden-btn ja" data-field="{{ field.id }}" data-value="Ja" title="Ja"><i class="fas fa-check"></i></button>
-                        <button type="button" class="leitfaden-btn nein" data-field="{{ field.id }}" data-value="Nein" title="Nein"><i class="fas fa-times"></i></button>
-                        <button type="button" class="leitfaden-btn ka" data-field="{{ field.id }}" data-value="k.A." title="k.A."><i class="fas fa-question"></i></button>
+                        <button type="button" class="leitfaden-btn ja" data-field="leitfaden_item_{{ item.id }}" data-value="Ja" title="Ja"><i class="fas fa-check"></i></button>
+                        <button type="button" class="leitfaden-btn nein" data-field="leitfaden_item_{{ item.id }}" data-value="Nein" title="Nein"><i class="fas fa-times"></i></button>
+                        <button type="button" class="leitfaden-btn ka" data-field="leitfaden_item_{{ item.id }}" data-value="k.A." title="k.A."><i class="fas fa-question"></i></button>
                     </div>
-                    {{ field(class="leitfaden-select") }}
+                    <select class="leitfaden-select" id="leitfaden_item_{{ item.id }}" name="leitfaden_item_{{ item.id }}">
+                        <option value="Ja" {% if current_value == 'Ja' %}selected{% endif %}>Ja</option>
+                        <option value="Nein" {% if current_value == 'Nein' %}selected{% endif %}>Nein</option>
+                        <option value="k.A." {% if current_value == 'k.A.' %}selected{% endif %}>k.A.</option>
+                    </select>
                 </div>
             {% endfor %}
         </div>

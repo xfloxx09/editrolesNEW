@@ -3,7 +3,8 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField, SelectMultipleField, IntegerField, TextAreaField, DateField
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from flask_login import current_user
-from app.models import User, Team, TeamMember, Project, Role, Permission
+from app import db
+from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
 from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
 
 
@@ -343,3 +344,22 @@ class TeamMemberWithUserForm(FlaskForm):
             user = User.query.filter_by(username=field.data).first()
             if user:
                 raise ValidationError('Dieser Benutzername ist bereits vergeben.')
+
+
+class LeitfadenItemForm(FlaskForm):
+    name = StringField('Bezeichnung', validators=[DataRequired(), Length(min=2, max=120)])
+    position = IntegerField('Position', validators=[DataRequired(), NumberRange(min=0, max=9999)])
+    is_active = BooleanField('Aktiv', default=True)
+    submit = SubmitField('Speichern')
+
+    def __init__(self, original_name=None, *args, **kwargs):
+        super(LeitfadenItemForm, self).__init__(*args, **kwargs)
+        self.original_name = original_name
+
+    def validate_name(self, field):
+        name = (field.data or '').strip()
+        query = LeitfadenItem.query.filter(db.func.lower(LeitfadenItem.name) == name.lower())
+        if self.original_name and self.original_name.strip().lower() == name.lower():
+            return
+        if query.first():
+            raise ValidationError('Diese Leitfaden-Bezeichnung existiert bereits.')

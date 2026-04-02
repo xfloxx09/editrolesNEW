@@ -3,13 +3,14 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from datetime import datetime, timezone, timedelta
 import calendar
 
 bp = Blueprint('main', __name__)
+LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
 
 # Helper to get the active project for the current user
 def get_visible_project_id():
@@ -226,6 +227,7 @@ def add_coaching():
     current_user_team_ids = [team.id for team in current_user.teams_led] if current_user_role == ROLE_TEAMLEITER else []
     form = CoachingForm(current_user_role=current_user_role, current_user_team_ids=current_user_team_ids)
     form.update_team_member_choices(exclude_archiv=True, project_id=project_id)
+    leitfaden_items = LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
 
     if form.validate_on_submit():
         team_member = TeamMember.query.get(form.team_member_id.data)
@@ -259,6 +261,16 @@ def add_coaching():
                 assignment.status = 'in_progress'
 
         db.session.add(coaching)
+        db.session.flush()
+
+        for item in leitfaden_items:
+            selected_value = request.form.get(f'leitfaden_item_{item.id}', 'k.A.')
+            value = selected_value if selected_value in LEITFADEN_CHOICES else 'k.A.'
+            db.session.add(CoachingLeitfadenResponse(
+                coaching_id=coaching.id,
+                item_id=item.id,
+                value=value
+            ))
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
         return redirect(url_for('main.coaching_dashboard'))
@@ -277,7 +289,13 @@ def add_coaching():
         else:
             flash('Ungültige oder nicht verfügbare Aufgabe.', 'danger')
 
-    return render_template('main/add_coaching.html', form=form, config=current_app.config)
+    return render_template(
+        'main/add_coaching.html',
+        form=form,
+        leitfaden_items=leitfaden_items,
+        selected_leitfaden_values={},
+        config=current_app.config
+    )
 
 
 # --- Edit Coaching ---
@@ -292,16 +310,35 @@ def edit_coaching(coaching_id):
 
     form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=True, project_id=coaching.project_id)
+    leitfaden_items = LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+    selected_leitfaden_values = {response.item_id: response.value for response in coaching.leitfaden_responses}
 
     if form.validate_on_submit():
         form.populate_obj(coaching)
         if form.coaching_style.data != 'TCAP':
             coaching.tcap_id = None
+        CoachingLeitfadenResponse.query.filter_by(coaching_id=coaching.id).delete()
+        for item in leitfaden_items:
+            selected_value = request.form.get(f'leitfaden_item_{item.id}', 'k.A.')
+            value = selected_value if selected_value in LEITFADEN_CHOICES else 'k.A.'
+            db.session.add(CoachingLeitfadenResponse(
+                coaching_id=coaching.id,
+                item_id=item.id,
+                value=value
+            ))
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
         return redirect(url_for('main.coaching_dashboard'))
 
-    return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, config=current_app.config)
+    return render_template(
+        'main/add_coaching.html',
+        form=form,
+        is_edit_mode=True,
+        coaching=coaching,
+        leitfaden_items=leitfaden_items,
+        selected_leitfaden_values=selected_leitfaden_values,
+        config=current_app.config
+    )
 
 
 # --- Delete Coaching ---
@@ -534,17 +571,12 @@ def pl_qm_dashboard():
                 mins = total_t % 60
                 formatted_time = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
 
-                # Leitfaden adherence
-                leitfaden_fields = ['leitfaden_begruessung', 'leitfaden_legitimation',
-                                    'leitfaden_pka', 'leitfaden_kek', 'leitfaden_angebot',
-                                    'leitfaden_zusammenfassung', 'leitfaden_kzb']
                 if total_c > 0:
                     member_coachings = Coaching.query.filter_by(team_member_id=member.id, project_id=project_id).all()
                     total_checks = 0
                     positive_checks = 0
                     for c in member_coachings:
-                        for field in leitfaden_fields:
-                            val = getattr(c, field, 'k.A.')
+                        for _, val in c.leitfaden_fields_list:
                             if val and val != 'k.A.':
                                 total_checks += 1
                                 if val.lower() in ['ja', 'yes', '1', 'true']:

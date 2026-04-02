@@ -166,11 +166,68 @@ class Coaching(db.Model):
     team = db.relationship('Team')
     project = db.relationship('Project', back_populates='coachings')
     assigned_coaching = db.relationship('AssignedCoaching', back_populates='coachings')
+    leitfaden_responses = db.relationship(
+        'CoachingLeitfadenResponse',
+        back_populates='coaching',
+        cascade='all, delete-orphan'
+    )
 
     @property
     def overall_score(self):
         """Calculate overall score as performance_mark * 10 (percentage)."""
         return (self.performance_mark or 0) * 10
+
+    @property
+    def leitfaden_fields_list(self):
+        # Prefer dynamic responses; fallback to legacy fixed columns for old records.
+        if self.leitfaden_responses:
+            return [(r.item.name, r.value or 'k.A.') for r in sorted(self.leitfaden_responses, key=lambda x: x.item.position if x.item else 9999)]
+
+        legacy = [
+            ('Begrüßung', self.leitfaden_begruessung),
+            ('Legitimation', self.leitfaden_legitimation),
+            ('PKA', self.leitfaden_pka),
+            ('KEK', self.leitfaden_kek),
+            ('Angebot', self.leitfaden_angebot),
+            ('Zusammenfassung', self.leitfaden_zusammenfassung),
+            ('KZB', self.leitfaden_kzb),
+        ]
+        return [(name, value or 'k.A.') for name, value in legacy]
+
+    @property
+    def leitfaden_erfuellung_display(self):
+        checks = [value for _, value in self.leitfaden_fields_list if value and value != 'k.A.']
+        if not checks:
+            return 'k.A.'
+        positive = sum(1 for value in checks if str(value).strip().lower() in ['ja', 'yes', '1', 'true'])
+        percent = round((positive / len(checks)) * 100)
+        return f"{percent}% ({positive}/{len(checks)})"
+
+
+class LeitfadenItem(db.Model):
+    __tablename__ = 'leitfaden_items'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    responses = db.relationship('CoachingLeitfadenResponse', back_populates='item')
+
+
+class CoachingLeitfadenResponse(db.Model):
+    __tablename__ = 'coaching_leitfaden_responses'
+    id = db.Column(db.Integer, primary_key=True)
+    coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('leitfaden_items.id'), nullable=False)
+    value = db.Column(db.String(10), nullable=False, default='k.A.')
+
+    coaching = db.relationship('Coaching', back_populates='leitfaden_responses')
+    item = db.relationship('LeitfadenItem', back_populates='responses')
+
+    __table_args__ = (
+        db.UniqueConstraint('coaching_id', 'item_id', name='uq_coaching_leitfaden_item'),
+    )
 
 
 class Workshop(db.Model):
