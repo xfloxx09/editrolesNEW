@@ -131,7 +131,7 @@ def index():
 @permission_required('view_coaching_dashboard')
 def coaching_dashboard():
     # Get the first team member linked to the current user
-    team_member = current_user.team_members.first()
+    team_member = current_user.team_members[0] if current_user.team_members else None
     if not team_member:
         flash('Kein Teammitglied gefunden. Bitte kontaktieren Sie den Administrator.', 'warning')
         return redirect(url_for('main.index'))
