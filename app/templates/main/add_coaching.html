@@ -214,22 +214,29 @@
             </div>
         </div>
 
-        <!-- Abschnitt 3: Leitfaden-Checkliste -->
+        <!-- Abschnitt 3: Leitfaden-Checkliste (dynamisch) -->
         <div class="form-section">
             <h4 class="section-title"><i class="fas fa-check-circle"></i> Leitfaden-Checkliste</h4>
             <p class="text-muted mb-3">Klicken Sie auf die entsprechenden Icons, um den Status festzulegen.</p>
 
-            {% for field in [form.leitfaden_begruessung, form.leitfaden_legitimation, form.leitfaden_pka, form.leitfaden_kek, form.leitfaden_angebot, form.leitfaden_zusammenfassung, form.leitfaden_kzb] %}
+            {% for item in form.leitfaden_items %}
                 <div class="leitfaden-item">
-                    <span class="leitfaden-label">{{ field.label.text }}</span>
+                    <span class="leitfaden-label">{{ item.label }}</span>
                     <div class="leitfaden-buttons">
-                        <button type="button" class="leitfaden-btn ja" data-field="{{ field.id }}" data-value="Ja" title="Ja"><i class="fas fa-check"></i></button>
-                        <button type="button" class="leitfaden-btn nein" data-field="{{ field.id }}" data-value="Nein" title="Nein"><i class="fas fa-times"></i></button>
-                        <button type="button" class="leitfaden-btn ka" data-field="{{ field.id }}" data-value="k.A." title="k.A."><i class="fas fa-question"></i></button>
+                        <button type="button" class="leitfaden-btn ja" data-field="leitfaden_{{ item.id }}" data-value="Ja" title="Ja"><i class="fas fa-check"></i></button>
+                        <button type="button" class="leitfaden-btn nein" data-field="leitfaden_{{ item.id }}" data-value="Nein" title="Nein"><i class="fas fa-times"></i></button>
+                        <button type="button" class="leitfaden-btn ka" data-field="leitfaden_{{ item.id }}" data-value="k.A." title="k.A."><i class="fas fa-question"></i></button>
                     </div>
-                    {{ field(class="leitfaden-select") }}
+                    <select name="leitfaden_{{ item.id }}" id="leitfaden_{{ item.id }}" class="leitfaden-select">
+                        <option value="k.A." {% if leitfaden_values and leitfaden_values.get(item.id) == 'k.A.' %}selected{% elif not leitfaden_values %}selected{% endif %}>k.A.</option>
+                        <option value="Ja" {% if leitfaden_values and leitfaden_values.get(item.id) == 'Ja' %}selected{% endif %}>Ja</option>
+                        <option value="Nein" {% if leitfaden_values and leitfaden_values.get(item.id) == 'Nein' %}selected{% endif %}>Nein</option>
+                    </select>
                 </div>
             {% endfor %}
+            {% if not form.leitfaden_items %}
+                <p class="text-muted">Keine Leitfaden-Items konfiguriert. Ein Admin kann diese unter "Leitfaden verwalten" anlegen.</p>
+            {% endif %}
         </div>
 
         <!-- Abschnitt 4: Bewertung & Zeitaufwand -->

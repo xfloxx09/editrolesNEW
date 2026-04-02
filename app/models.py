@@ -167,10 +167,83 @@ class Coaching(db.Model):
     project = db.relationship('Project', back_populates='coachings')
     assigned_coaching = db.relationship('AssignedCoaching', back_populates='coachings')
 
+    leitfaden_values = db.relationship('CoachingLeitfadenValue', back_populates='coaching', cascade='all, delete-orphan')
+
     @property
     def overall_score(self):
         """Calculate overall score as performance_mark * 10 (percentage)."""
         return (self.performance_mark or 0) * 10
+
+    @property
+    def leitfaden_fields_list(self):
+        """Return list of (label, value) tuples for all leitfaden items.
+        Uses dynamic values from CoachingLeitfadenValue if available,
+        falls back to hardcoded columns for legacy data."""
+        result = []
+        if self.leitfaden_values:
+            for lv in sorted(self.leitfaden_values, key=lambda x: (x.leitfaden_item.position if x.leitfaden_item else 0)):
+                if lv.leitfaden_item:
+                    result.append((lv.leitfaden_item.label, lv.value or 'k.A.'))
+        else:
+            # Legacy fallback: read from hardcoded columns
+            legacy_fields = [
+                ('Begruessung', self.leitfaden_begruessung),
+                ('Legitimation', self.leitfaden_legitimation),
+                ('PKA', self.leitfaden_pka),
+                ('KEK', self.leitfaden_kek),
+                ('Angebot', self.leitfaden_angebot),
+                ('Zusammenfassung', self.leitfaden_zusammenfassung),
+                ('KZB', self.leitfaden_kzb),
+            ]
+            for name, val in legacy_fields:
+                result.append((name, val or 'k.A.'))
+        return result
+
+    @property
+    def leitfaden_erfuellung_display(self):
+        """Calculate and display leitfaden fulfillment percentage."""
+        fields = self.leitfaden_fields_list
+        if not fields:
+            return 'k.A.'
+        total = 0
+        positive = 0
+        for name, val in fields:
+            if val in ('Ja', 'Nein'):
+                total += 1
+                if val == 'Ja':
+                    positive += 1
+        if total == 0:
+            return 'k.A.'
+        pct = round(positive / total * 100, 1)
+        return f'{pct}%'
+
+
+class LeitfadenItem(db.Model):
+    """Dynamic leitfaden checkmark items that admins can manage."""
+    __tablename__ = 'leitfaden_items'
+    id = db.Column(db.Integer, primary_key=True)
+    label = db.Column(db.String(100), nullable=False)
+    key = db.Column(db.String(100), nullable=False, unique=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
+
+    project = db.relationship('Project')
+    values = db.relationship('CoachingLeitfadenValue', back_populates='leitfaden_item', cascade='all, delete-orphan')
+
+
+class CoachingLeitfadenValue(db.Model):
+    """Stores a leitfaden checkmark value for a specific coaching."""
+    __tablename__ = 'coaching_leitfaden_values'
+    id = db.Column(db.Integer, primary_key=True)
+    coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=False)
+    leitfaden_item_id = db.Column(db.Integer, db.ForeignKey('leitfaden_items.id'), nullable=False)
+    value = db.Column(db.String(10), nullable=False, default='k.A.')
+
+    coaching = db.relationship('Coaching', back_populates='leitfaden_values')
+    leitfaden_item = db.relationship('LeitfadenItem', back_populates='values')
+
+    __table_args__ = (db.UniqueConstraint('coaching_id', 'leitfaden_item_id', name='uq_coaching_leitfaden'),)
 
 
 class Workshop(db.Model):

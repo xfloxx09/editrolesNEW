@@ -3,7 +3,8 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField, SelectMultipleField, IntegerField, TextAreaField, DateField
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from flask_login import current_user
-from app.models import User, Team, TeamMember, Project, Role, Permission
+from sqlalchemy import false
+from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
 from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
 
 
@@ -133,13 +134,6 @@ class CoachingForm(FlaskForm):
     coaching_style = SelectField('Coaching Stil', choices=[('Side-by-Side', 'Side-by-Side'), ('TCAP', 'TCAP')], validators=[DataRequired("Coaching-Stil ist erforderlich.")])
     tcap_id = StringField('T-CAP ID (falls TCAP gewählt)')
     coaching_subject = SelectField('Coaching Thema', choices=COACHING_SUBJECT_CHOICES, validators=[DataRequired("Coaching-Thema ist erforderlich.")])
-    leitfaden_begruessung = SelectField('Begrüßung', choices=LEITFADEN_CHOICES, default='k.A.')
-    leitfaden_legitimation = SelectField('Legitimation', choices=LEITFADEN_CHOICES, default='k.A.')
-    leitfaden_pka = SelectField('PKA', choices=LEITFADEN_CHOICES, default='k.A.')
-    leitfaden_kek = SelectField('KEK', choices=LEITFADEN_CHOICES, default='k.A.')
-    leitfaden_angebot = SelectField('Angebot', choices=LEITFADEN_CHOICES, default='k.A.')
-    leitfaden_zusammenfassung = SelectField('Zusammenfassung', choices=LEITFADEN_CHOICES, default='k.A.')
-    leitfaden_kzb = SelectField('KZB', choices=LEITFADEN_CHOICES, default='k.A.')
     performance_mark = IntegerField('Performance Note (0-10)', validators=[DataRequired("Performance Note ist erforderlich."), NumberRange(min=0, max=10)])
     time_spent = IntegerField('Zeitaufwand (Minuten)', validators=[DataRequired("Zeitaufwand ist erforderlich."), NumberRange(min=1)])
     coach_notes = TextAreaField('Notizen des Coaches', validators=[Length(max=2000)])
@@ -150,6 +144,8 @@ class CoachingForm(FlaskForm):
         super(CoachingForm, self).__init__(*args, **kwargs)
         self.current_user_role = current_user_role
         self.current_user_team_ids = current_user_team_ids if current_user_team_ids is not None else []
+        # Dynamic leitfaden items loaded from DB
+        self.leitfaden_items = LeitfadenItem.query.filter_by(active=True).order_by(LeitfadenItem.position).all()
 
     def update_team_member_choices(self, exclude_archiv=False, project_id=None):
         generated_choices = []

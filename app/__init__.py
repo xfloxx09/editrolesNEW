@@ -204,6 +204,56 @@ def create_app(config_class=Config):
                 conn.rollback()
                 print(f"ℹ️ Note on team constraint: {e}")
 
+        # 11. Seed default LeitfadenItems if table is empty
+        if 'leitfaden_items' in inspector.get_table_names():
+            count = conn.execute(text("SELECT COUNT(*) FROM leitfaden_items")).scalar()
+            if count == 0:
+                default_items = [
+                    ('Begruessung', 'leitfaden_begruessung', 1),
+                    ('Legitimation', 'leitfaden_legitimation', 2),
+                    ('PKA', 'leitfaden_pka', 3),
+                    ('KEK', 'leitfaden_kek', 4),
+                    ('Angebot', 'leitfaden_angebot', 5),
+                    ('Zusammenfassung', 'leitfaden_zusammenfassung', 6),
+                    ('KZB', 'leitfaden_kzb', 7),
+                ]
+                for label, key, pos in default_items:
+                    conn.execute(
+                        text("INSERT INTO leitfaden_items (label, key, position, active) VALUES (:label, :key, :pos, true)"),
+                        {"label": label, "key": key, "pos": pos}
+                    )
+                conn.commit()
+                print("✅ Standard-Leitfaden-Items hinzugefügt.")
+
+            # 12. Migrate existing coaching leitfaden data to coaching_leitfaden_values
+            if 'coaching_leitfaden_values' in inspector.get_table_names():
+                migrated_count = conn.execute(text("SELECT COUNT(*) FROM coaching_leitfaden_values")).scalar()
+                if migrated_count == 0:
+                    # Get all leitfaden items keyed by their key
+                    items = conn.execute(text("SELECT id, key FROM leitfaden_items")).fetchall()
+                    key_to_id = {row[1]: row[0] for row in items}
+                    legacy_columns = [
+                        'leitfaden_begruessung', 'leitfaden_legitimation', 'leitfaden_pka',
+                        'leitfaden_kek', 'leitfaden_angebot', 'leitfaden_zusammenfassung', 'leitfaden_kzb'
+                    ]
+                    # Check which legacy columns exist
+                    coaching_cols = [col['name'] for col in inspector.get_columns('coachings')]
+                    existing_legacy = [c for c in legacy_columns if c in coaching_cols]
+                    if existing_legacy and key_to_id:
+                        coachings = conn.execute(text("SELECT id, " + ", ".join(existing_legacy) + " FROM coachings")).fetchall()
+                        for coaching_row in coachings:
+                            coaching_id = coaching_row[0]
+                            for i, col_name in enumerate(existing_legacy):
+                                val = coaching_row[i + 1] or 'k.A.'
+                                item_id = key_to_id.get(col_name)
+                                if item_id:
+                                    conn.execute(
+                                        text("INSERT INTO coaching_leitfaden_values (coaching_id, leitfaden_item_id, value) VALUES (:cid, :iid, :val) ON CONFLICT DO NOTHING"),
+                                        {"cid": coaching_id, "iid": item_id, "val": val}
+                                    )
+                        conn.commit()
+                        print(f"✅ {len(coachings)} Coachings: Leitfaden-Daten migriert.")
+
         print("--- Migration abgeschlossen ---")
 
     # --- Blueprint registration ---
