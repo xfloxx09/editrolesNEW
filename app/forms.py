@@ -2,9 +2,10 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField, SelectMultipleField, IntegerField, TextAreaField, DateField
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
+from flask_login import current_user
 from app.models import User, Team, TeamMember, Project, Role, Permission
 from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
-from flask_login import current_user
+
 
 class LoginForm(FlaskForm):
     username = StringField('Benutzername', validators=[DataRequired("Benutzername ist erforderlich.")])
@@ -151,38 +152,33 @@ class CoachingForm(FlaskForm):
         self.current_user_team_ids = current_user_team_ids if current_user_team_ids is not None else []
 
     def update_team_member_choices(self, exclude_archiv=False, project_id=None):
-    generated_choices = []
-    query = TeamMember.query.join(Team, TeamMember.team_id == Team.id)
+        generated_choices = []
+        query = TeamMember.query.join(Team, TeamMember.team_id == Team.id)
 
-    if project_id:
-        query = query.filter(Team.project_id == project_id)
+        if project_id:
+            query = query.filter(Team.project_id == project_id)
 
-    # Check if the current user has the restricted coaching permission
-    from flask_login import current_user
-    if current_user.is_authenticated and current_user.has_permission('coach_own_team_only'):
-        # Coach can only see members of his own team
-        # Get the coach's own team member record
-        coach_team_member = current_user.team_members.first()
-        if coach_team_member:
-            query = query.filter(TeamMember.team_id == coach_team_member.team_id)
+        # Restrict to own team if the coach has the 'coach_own_team_only' permission
+        if current_user.is_authenticated and current_user.has_permission('coach_own_team_only'):
+            coach_team_member = current_user.team_members.first()
+            if coach_team_member:
+                query = query.filter(TeamMember.team_id == coach_team_member.team_id)
+            else:
+                query = query.filter(false())
         else:
-            # If coach has no team member record, no choices
-            query = query.filter(false())
-    else:
-        # Original behaviour: if team leader, filter by his teams; else all in project
-        if self.current_user_role == ROLE_TEAMLEITER and self.current_user_team_ids:
-            query = query.filter(TeamMember.team_id.in_(self.current_user_team_ids))
-        elif self.current_user_role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
-            # For other roles, no extra filtering (already filtered by project)
-            pass
+            # Original behaviour
+            if self.current_user_role == ROLE_TEAMLEITER and self.current_user_team_ids:
+                query = query.filter(TeamMember.team_id.in_(self.current_user_team_ids))
+            elif self.current_user_role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+                pass
 
-    if exclude_archiv:
-        query = query.filter(Team.name != ARCHIV_TEAM_NAME)
+        if exclude_archiv:
+            query = query.filter(Team.name != ARCHIV_TEAM_NAME)
 
-    members = query.order_by(TeamMember.name).all()
-    for m in members:
-        generated_choices.append((m.id, f"{m.name} ({m.team.name})"))
-    self.team_member_id.choices = generated_choices
+        members = query.order_by(TeamMember.name).all()
+        for m in members:
+            generated_choices.append((m.id, f"{m.name} ({m.team.name})"))
+        self.team_member_id.choices = generated_choices
 
     def update_assignment_choices(self, team_member_id, coach_id):
         from app.models import AssignedCoaching
