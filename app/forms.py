@@ -3,6 +3,7 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField, SelectMultipleField, IntegerField, TextAreaField, DateField
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from flask_login import current_user
+from sqlalchemy import false
 from app import db
 from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
 from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
