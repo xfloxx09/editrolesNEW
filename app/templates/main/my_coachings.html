@@ -55,7 +55,7 @@
 
     {% if can_leave_review and coachings.items %}
     <div class="alert alert-info small mb-3">
-        In der <strong>rechten Spalte</strong> jeder Zeile finden Sie <strong>Bewertung abgeben</strong> bzw. <strong>Bewertung ändern</strong>.
+        In der Spalte <strong>Aktion</strong>: <strong>Bewertung abgeben</strong> (nur einmal möglich). Nach dem Absenden erscheint ein <strong>Haken</strong>.
     </div>
     {% endif %}
 
@@ -90,11 +90,13 @@
                                 {% endif %}
                             </td>
                             {% if can_leave_review %}
-                            <td>
+                            <td class="text-center">
+                                {% if coaching.employee_review %}
+                                <span class="text-success" title="Bewertung abgegeben"><i class="fas fa-check-circle fa-lg"></i></span>
+                                {% else %}
                                 <button type="button" class="btn btn-sm btn-outline-info review-open-btn"
-                                        data-coaching-id="{{ coaching.id }}">
-                                    {% if coaching.employee_review %}Bewertung ändern{% else %}Bewertung abgeben{% endif %}
-                                </button>
+                                        data-coaching-id="{{ coaching.id }}">Bewertung abgeben</button>
+                                {% endif %}
                             </td>
                             {% endif %}
                         </tr>
@@ -157,9 +159,17 @@
                 </div>
                 <div class="modal-body">
                     {{ review_form.coaching_id(id='modalCoachingId') }}
-                    <div class="form-group">
-                        {{ review_form.rating.label(class="form-control-label") }}
-                        {{ review_form.rating(class="form-control", min=1, max=5, id="modalRating") }}
+                    <div class="form-group star-rating-wrap">
+                        <label class="form-control-label">Sterne wählen <span class="text-muted font-weight-normal">(links 1 · rechts 5)</span></label>
+                        <div class="star-rating-row" id="modalStarRating" role="group" aria-label="Bewertung 1 bis 5 Sterne">
+                            {% for s in [1,2,3,4,5] %}
+                            <button type="button" class="star-rating-star is-lit" data-star="{{ s }}" aria-label="{{ s }} von 5 Sternen">
+                                <i class="fas fa-star"></i>
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <p class="small text-muted mb-2"><span class="star-rating-value-label">5</span> von 5 Sternen</p>
+                        {{ review_form.rating(id='modalRating') }}
                     </div>
                     <div class="form-group">
                         {{ review_form.comment.label(class="form-control-label") }}
@@ -180,15 +190,21 @@
 {% block scripts %}
 {{ super() }}
 {% if can_leave_review %}
+<script src="{{ url_for('static', filename='review_stars.js') }}"></script>
 <script>
-var reviewPrefill = {{ review_prefill | tojson }};
+document.addEventListener('DOMContentLoaded', function() {
+    var stars = document.getElementById('modalStarRating');
+    var ratingIn = document.getElementById('modalRating');
+    if (stars && ratingIn && window.hsReviewStarsInitOnce) window.hsReviewStarsInitOnce(stars, ratingIn);
+});
 document.querySelectorAll('.review-open-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        var id = String(this.getAttribute('data-coaching-id'));
-        document.getElementById('modalCoachingId').value = id;
-        var p = reviewPrefill[id];
-        document.getElementById('modalRating').value = (p && p.rating) ? p.rating : '5';
-        document.getElementById('modalComment').value = (p && p.comment) ? p.comment : '';
+        document.getElementById('modalCoachingId').value = String(this.getAttribute('data-coaching-id'));
+        document.getElementById('modalComment').value = '';
+        var stars = document.getElementById('modalStarRating');
+        var ratingIn = document.getElementById('modalRating');
+        if (ratingIn) ratingIn.value = '5';
+        if (stars && ratingIn && window.hsReviewStarsSync) window.hsReviewStarsSync(stars, ratingIn, 5);
         $('#reviewModal').modal('show');
     });
 });

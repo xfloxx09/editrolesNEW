@@ -278,7 +278,6 @@ def coaching_dashboard():
     coachings_paginated = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
 
     can_leave_review = current_user.has_permission('leave_coaching_review')
-    review_prefill = {}
     review_form_dashboard = None
     review_redirect_next = ''
     if can_leave_review:
@@ -286,13 +285,6 @@ def coaching_dashboard():
         review_redirect_next = request.path + (('?' + qv) if qv else '')
         review_form_dashboard = CoachingReviewForm()
         review_form_dashboard.next.data = review_redirect_next
-        for c in coachings_paginated.items:
-            tm = c.team_member_coached
-            if tm and tm.user_id == current_user.id and c.employee_review:
-                review_prefill[str(c.id)] = {
-                    'rating': c.employee_review.rating,
-                    'comment': c.employee_review.comment or '',
-                }
 
     # Compute total coachings count for the filter set
     total_coachings = query.count()
@@ -358,7 +350,6 @@ def coaching_dashboard():
                            current_search_term=search_arg,
                            month_options=month_options,
                            can_leave_review=can_leave_review,
-                           review_prefill=review_prefill,
                            review_form_dashboard=review_form_dashboard,
                            review_redirect_next=review_redirect_next,
                            config=current_app.config)
@@ -390,13 +381,6 @@ def my_coachings():
 
     review_form = CoachingReviewForm()
     filter_args = build_filter_args(period_arg, year, month, day)
-    review_prefill = {}
-    for c in coachings.items:
-        if c.employee_review:
-            review_prefill[str(c.id)] = {
-                'rating': c.employee_review.rating,
-                'comment': c.employee_review.comment or '',
-            }
     can_leave_review = current_user.has_permission('leave_coaching_review')
     has_team_member_link = (
         db.session.query(TeamMember.id).filter(TeamMember.user_id == current_user.id).first()
@@ -415,7 +399,6 @@ def my_coachings():
         day_options=day_options,
         filter_args=filter_args,
         page_url=lambda p: url_for_paginated('main.my_coachings', p, filter_args),
-        review_prefill=review_prefill,
         review_form=review_form,
         can_leave_review=can_leave_review,
         has_team_member_link=has_team_member_link,
@@ -437,7 +420,13 @@ def submit_coaching_review():
             return redirect(t)
         return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
 
-    coaching = Coaching.query.get_or_404(form.coaching_id.data)
+    try:
+        cid = int(str(form.coaching_id.data).strip())
+    except (TypeError, ValueError, AttributeError):
+        flash('Ungültige Coaching-ID.', 'danger')
+        return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
+
+    coaching = Coaching.query.get_or_404(cid)
     member = coaching.team_member
     if not member or member.user_id != current_user.id:
         flash('Keine Berechtigung für dieses Coaching.', 'danger')
@@ -445,19 +434,15 @@ def submit_coaching_review():
 
     existing = CoachingReview.query.filter_by(coaching_id=coaching.id).first()
     if existing:
-        if existing.reviewer_user_id != current_user.id:
-            flash('Diese Bewertung kann nicht geändert werden.', 'danger')
-            return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
-        existing.rating = form.rating.data
-        existing.comment = (form.comment.data or '').strip() or None
-        existing.updated_at = datetime.utcnow()
-    else:
-        db.session.add(CoachingReview(
-            coaching_id=coaching.id,
-            reviewer_user_id=current_user.id,
-            rating=form.rating.data,
-            comment=(form.comment.data or '').strip() or None,
-        ))
+        flash('Ihre Bewertung wurde bereits abgegeben und kann nicht mehr geändert werden.', 'warning')
+        return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
+
+    db.session.add(CoachingReview(
+        coaching_id=coaching.id,
+        reviewer_user_id=current_user.id,
+        rating=form.rating.data,
+        comment=(form.comment.data or '').strip() or None,
+    ))
     db.session.commit()
     flash('Vielen Dank! Ihre Bewertung wurde gespeichert.', 'success')
     return _redirect_after_coaching_review(form, my_coachings_filter_query_args())

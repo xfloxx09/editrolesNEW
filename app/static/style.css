@@ -203,3 +203,37 @@ footer {
     background-color: #555;
     color: #fff;
 }
+
+/* Sterne-Bewertung (links 1, rechts 5) */
+.star-rating-wrap .star-rating-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.15rem;
+    margin-top: 0.35rem;
+}
+.star-rating-star {
+    background: none;
+    border: none;
+    padding: 0.15rem 0.2rem;
+    cursor: pointer;
+    font-size: 1.85rem;
+    line-height: 1;
+    color: #666;
+    transition: transform 0.12s ease, color 0.12s ease;
+}
+.star-rating-star:hover,
+.star-rating-star:focus {
+    transform: scale(1.12);
+    outline: none;
+    color: #e20074;
+}
+.star-rating-star.is-lit {
+    color: #e20074;
+}
+.star-rating-star:not(.is-lit) {
+    color: #555;
+}
+.star-rating-star:not(.is-lit) i {
+    color: inherit;
+}

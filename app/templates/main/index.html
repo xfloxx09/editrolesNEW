@@ -321,12 +321,14 @@
                         <span class="text-muted">—</span>
                     {% endif %}
                 </td>
-                <td>
+                <td class="text-center">
                     {% if coached_self %}
-                    <button type="button" class="btn btn-sm btn-outline-info review-open-btn-dash"
-                            data-coaching-id="{{ coaching.id }}">
-                        {% if coaching.employee_review %}Ändern{% else %}Bewerten{% endif %}
-                    </button>
+                        {% if coaching.employee_review %}
+                        <span class="text-success" title="Bewertung abgegeben"><i class="fas fa-check-circle fa-lg"></i></span>
+                        {% else %}
+                        <button type="button" class="btn btn-sm btn-outline-info review-open-btn-dash"
+                                data-coaching-id="{{ coaching.id }}">Bewertung abgeben</button>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
@@ -439,9 +441,17 @@
                 </div>
                 <div class="modal-body">
                     {{ review_form_dashboard.coaching_id(id='dashModalCoachingId') }}
-                    <div class="form-group">
-                        {{ review_form_dashboard.rating.label(class="form-control-label") }}
-                        {{ review_form_dashboard.rating(class="form-control", min=1, max=5, id="dashModalRating") }}
+                    <div class="form-group star-rating-wrap">
+                        <label class="form-control-label">Sterne wählen <span class="text-muted font-weight-normal">(links 1 · rechts 5)</span></label>
+                        <div class="star-rating-row" id="dashModalStarRating" role="group" aria-label="Bewertung 1 bis 5 Sterne">
+                            {% for s in [1,2,3,4,5] %}
+                            <button type="button" class="star-rating-star is-lit" data-star="{{ s }}" aria-label="{{ s }} von 5 Sternen">
+                                <i class="fas fa-star"></i>
+                            </button>
+                            {% endfor %}
+                        </div>
+                        <p class="small text-muted mb-2"><span class="star-rating-value-label">5</span> von 5 Sternen</p>
+                        {{ review_form_dashboard.rating(id='dashModalRating') }}
                     </div>
                     <div class="form-group">
                         {{ review_form_dashboard.comment.label(class="form-control-label") }}
@@ -463,15 +473,21 @@
 {% block scripts %}
 {{ super() }}
 {% if can_leave_review and review_form_dashboard %}
+<script src="{{ url_for('static', filename='review_stars.js') }}"></script>
 <script>
-var reviewPrefillDash = {{ review_prefill | tojson }};
+document.addEventListener('DOMContentLoaded', function() {
+    var stars = document.getElementById('dashModalStarRating');
+    var ratingIn = document.getElementById('dashModalRating');
+    if (stars && ratingIn && window.hsReviewStarsInitOnce) window.hsReviewStarsInitOnce(stars, ratingIn);
+});
 document.querySelectorAll('.review-open-btn-dash').forEach(function(btn) {
     btn.addEventListener('click', function() {
-        var id = String(this.getAttribute('data-coaching-id'));
-        document.getElementById('dashModalCoachingId').value = id;
-        var p = reviewPrefillDash[id];
-        document.getElementById('dashModalRating').value = (p && p.rating) ? p.rating : '5';
-        document.getElementById('dashModalComment').value = (p && p.comment) ? p.comment : '';
+        document.getElementById('dashModalCoachingId').value = String(this.getAttribute('data-coaching-id'));
+        document.getElementById('dashModalComment').value = '';
+        var stars = document.getElementById('dashModalStarRating');
+        var ratingIn = document.getElementById('dashModalRating');
+        if (ratingIn) ratingIn.value = '5';
+        if (stars && ratingIn && window.hsReviewStarsSync) window.hsReviewStarsSync(stars, ratingIn, 5);
         $('#reviewModalDash').modal('show');
     });
 });
