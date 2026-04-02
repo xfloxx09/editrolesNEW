@@ -375,7 +375,8 @@ def edit_user(user_id):
         form.username.data = user_to_edit.username
         form.email.data = user_to_edit.email
         form.role_id.data = user_to_edit.role_id
-        form.team_ids.data = [team.id for team in user_to_edit.teams_led.all()]
+        # FIX: teams_led is a list, not a query
+        form.team_ids.data = [team.id for team in user_to_edit.teams_led]
         role = user_to_edit.role
         if role.name != ROLE_ABTEILUNGSLEITER:
             form.project_id.data = user_to_edit.project_id
@@ -512,7 +513,7 @@ def delete_team(team_id):
     return redirect(url_for('admin.panel'))
 
 
-# --- Team Member Management (kept for compatibility, but not used in new workflow) ---
+# --- Team Member Management (kept for compatibility) ---
 @bp.route('/teammembers/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
