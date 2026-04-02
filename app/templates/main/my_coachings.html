@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>Meine Coachings</h2>
+    {% if coachings.items %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Datum</th>
+                        <th>Coach</th>
+                        <th>Coaching Stil</th>
+                        <th>Thema</th>
+                        <th>Performance</th>
+                        <th>Notiz</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for coaching in coachings.items %}
+                        <tr>
+                            <td>{{ coaching.coaching_date|athens_time }}</td>
+                            <td>{{ coaching.coach.username if coaching.coach else '-' }}</td>
+                            <td>{{ coaching.coaching_style }}</td>
+                            <td>{{ coaching.coaching_subject or '-' }}</td>
+                            <td>{{ coaching.performance_mark }}</td>
+                            <td>{{ coaching.coach_notes|truncate(80) if coaching.coach_notes else '-' }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if coachings.pages > 1 %}
+        <nav>
+            <ul class="pagination justify-content-center">
+                {% if coachings.has_prev %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('main.my_coachings', page=coachings.prev_num) }}">Vorherige</a></li>
+                {% endif %}
+                {% for page_num in coachings.iter_pages() %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == coachings.page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('main.my_coachings', page=page_num) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if coachings.has_next %}
+                    <li class="page-item"><a class="page-link" href="{{ url_for('main.my_coachings', page=coachings.next_num) }}">Nächste</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    {% else %}
+        <p class="text-muted">Keine Coachings gefunden.</p>
+    {% endif %}
+</div>
+{% endblock %}

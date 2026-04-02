@@ -222,6 +222,16 @@ def coaching_dashboard():
                            config=current_app.config)
 
 
+@bp.route('/my-coachings')
+@login_required
+@permission_required('view_own_coachings')
+def my_coachings():
+    page = request.args.get('page', 1, type=int)
+    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(TeamMember.user_id == current_user.id)
+    coachings = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
+    return render_template('main/my_coachings.html', title='Meine Coachings', coachings=coachings, config=current_app.config)
+
+
 # --- Add Coaching (with the permission restriction only) ---
 @bp.route('/add-coaching', methods=['GET', 'POST'])
 @login_required
