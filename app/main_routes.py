@@ -450,6 +450,8 @@ def submit_coaching_review():
         reviewer_user_id=current_user.id,
         rating=form.rating.data,
         comment=(form.comment.data or '').strip() or None,
+        visible_to_coach=bool(form.visible_to_coach.data),
+        visible_to_manager=bool(form.visible_to_manager.data),
     ))
     db.session.commit()
     flash('Vielen Dank! Ihre Bewertung wurde gespeichert.', 'success')
@@ -468,7 +470,7 @@ def coach_received_reviews():
 
     query = CoachingReview.query.join(Coaching, CoachingReview.coaching_id == Coaching.id).filter(
         Coaching.coach_id == current_user.id
-    )
+    ).filter(CoachingReview.visible_to_coach.is_(True))
     query = filter_reviews_by_coaching_date(query, period_arg, year, month, day)
     reviews = query.order_by(desc(CoachingReview.created_at)).paginate(page=page, per_page=20, error_out=False)
 
@@ -513,7 +515,7 @@ def all_coaching_reviews():
 
     q = CoachingReview.query.join(Coaching, CoachingReview.coaching_id == Coaching.id).filter(
         Coaching.project_id.in_(project_ids)
-    )
+    ).filter(CoachingReview.visible_to_manager.is_(True))
     if project_filter and project_filter in project_ids:
         q = q.filter(Coaching.project_id == project_filter)
     q = filter_reviews_by_coaching_date(q, period_arg, year, month, day)

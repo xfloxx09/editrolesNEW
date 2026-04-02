@@ -259,6 +259,11 @@ class CoachingReview(db.Model):
     reviewer_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     rating = db.Column(db.Integer, nullable=False)
     comment = db.Column(db.Text)
+    # Visibility flags controlled by the coached employee.
+    # - view_review: visible to the coach (and roles that can view this list)
+    # - view_all_reviews: visible to manager roles (project-scoped list)
+    visible_to_coach = db.Column(db.Boolean, nullable=False, default=True)
+    visible_to_manager = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

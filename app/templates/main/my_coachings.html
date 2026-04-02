@@ -83,7 +83,7 @@
                                 {% if coaching.employee_review %}
                                     {{ coaching.employee_review.rating }}/5
                                     {% if coaching.employee_review.comment %}
-                                        <span class="text-muted">— {{ coaching.employee_review.comment|truncate(40) }}</span>
+                                        <div class="review-comment-full text-muted mt-1">— {{ coaching.employee_review.comment }}</div>
                                     {% endif %}
                                 {% else %}
                                     <span class="text-muted">—</span>
@@ -170,6 +170,17 @@
                         </div>
                         <p class="small text-muted mb-2"><span class="star-rating-value-label">5</span> von 5 Sternen</p>
                         {{ review_form.rating(id='modalRating') }}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-control-label">Wer soll die Bewertung sehen?</label>
+                        <div class="form-check">
+                            {{ review_form.visible_to_coach(class="form-check-input", id="modalVisibleToCoach") }}
+                            <label class="form-check-label" for="modalVisibleToCoach">Coach/Teamleiter</label>
+                        </div>
+                        <div class="form-check">
+                            {{ review_form.visible_to_manager(class="form-check-input", id="modalVisibleToManager") }}
+                            <label class="form-check-label" for="modalVisibleToManager">Projektleiter/Manager/Abteilungsleiter</label>
+                        </div>
                     </div>
                     <div class="form-group">
                         {{ review_form.comment.label(class="form-control-label") }}

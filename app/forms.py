@@ -374,6 +374,20 @@ class CoachingReviewForm(FlaskForm):
         default=5,
         validators=[DataRequired(message='Bitte eine Sternebewertung wählen.'), NumberRange(min=1, max=5)],
     )
+    # Visibility options controlled by the coached employee.
+    # The labels are purely for UX; the actual filtering is permission-driven in the routes.
+    visible_to_coach = BooleanField('Coach/Teamleiter', default=True)
+    visible_to_manager = BooleanField('Projektleiter/Manager/Abteilungsleiter', default=True)
     comment = TextAreaField('Kommentar (optional)', validators=[Optional(), Length(max=2000)])
     next = HiddenField(validators=[Optional(), Length(max=2048)])
     submit = SubmitField('Bewertung absenden')
+
+    def validate(self, *args, **kwargs):
+        rv = super().validate(*args, **kwargs)
+        if not rv:
+            return False
+        if not (self.visible_to_coach.data or self.visible_to_manager.data):
+            self.visible_to_coach.errors.append('Bitte wählen, für wen die Bewertung sichtbar sein soll.')
+            self.visible_to_manager.errors.append('Bitte wählen, für wen die Bewertung sichtbar sein soll.')
+            return False
+        return True

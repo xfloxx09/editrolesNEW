@@ -237,3 +237,16 @@ footer {
 .star-rating-star:not(.is-lit) i {
     color: inherit;
 }
+
+/* Review comments: show full text without truncation, but keep UI usable */
+.review-comment-full {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    border-left: 3px solid #e20074;
+    background-color: rgba(226, 0, 116, 0.05);
+    border-radius: 6px;
+}
