@@ -161,10 +161,16 @@ class Coaching(db.Model):
     assigned_coaching_id = db.Column(db.Integer, db.ForeignKey('assigned_coachings.id'))
 
     team_member = db.relationship('TeamMember', back_populates='coachings')
+    team_member_coached = db.relationship('TeamMember', foreign_keys=[team_member_id], overlaps='team_member,coachings', viewonly=True)
     coach = db.relationship('User', backref='coachings_done')
     team = db.relationship('Team')
     project = db.relationship('Project', back_populates='coachings')
     assigned_coaching = db.relationship('AssignedCoaching', back_populates='coachings')
+
+    @property
+    def overall_score(self):
+        """Calculate overall score as performance_mark * 10 (percentage)."""
+        return (self.performance_mark or 0) * 10
 
 
 class Workshop(db.Model):
