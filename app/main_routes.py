@@ -14,27 +14,22 @@ bp = Blueprint('main', __name__)
 # Helper to get the active project for the current user
 def get_visible_project_id():
     if current_user.is_authenticated:
-        # Admin and Betriebsleiter see all projects – they can select via session
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
             project_id = session.get('active_project')
             if project_id:
                 return project_id
-            # Fallback to first project
             first = Project.query.first()
             return first.id if first else None
         elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
-            # Abteilungsleiter have multiple projects – use session or first
             project_id = session.get('active_project')
             if project_id and project_id in [p.id for p in current_user.projects]:
                 return project_id
             first = current_user.projects.first()
             return first.id if first else None
         else:
-            # Regular users have a single project
             return current_user.project_id
     return None
 
-# Helper for date ranges
 def calculate_date_range(period_arg):
     today = datetime.now(timezone.utc).date()
     if period_arg == 'today':
@@ -93,112 +88,16 @@ def profile():
     return render_template('main/profile.html', form=form, config=current_app.config)
 
 
-# --- Coaching Dashboard (for coaches) ---
-@bp.route('/coaching-dashboard')
-@login_required
-@permission_required('view_coaching_dashboard')
-def coaching_dashboard():
-    # Get the coach's own team member (if any)
-    team_member = current_user.team_members[0] if current_user.team_members else None
-    if not team_member:
-        flash('Kein Teammitglied gefunden. Bitte kontaktieren Sie den Administrator.', 'warning')
-        return redirect(url_for('main.index'))
-    
-    page = request.args.get('page', 1, type=int)
-    period_arg = request.args.get('period', 'all')
-    team_arg = request.args.get('team', "all")
-    search_arg = request.args.get('search', default="", type=str).strip()
-    member_filter = request.args.get('member_id', type=int)
-    project_filter = get_visible_project_id()
-
-    coachings_query = Coaching.query \
-        .join(TeamMember, Coaching.team_member_id == TeamMember.id) \
-        .join(User, Coaching.coach_id == User.id, isouter=True) \
-        .join(Team, TeamMember.team_id == Team.id)
-
-    # Restrict to own team if the permission is present
-    if current_user.has_permission('coach_own_team_only') and team_member:
-        coachings_query = coachings_query.filter(TeamMember.team_id == team_member.team_id)
-        # Override team_arg to show only own team in filters
-        team_arg = str(team_member.team_id)
-    else:
-        # Original behaviour: exclude ARCHIV team when "all" is selected
-        if team_arg == 'all':
-            coachings_query = coachings_query.filter(Team.name != ARCHIV_TEAM_NAME)
-
-    if project_filter:
-        coachings_query = coachings_query.filter(Coaching.project_id == project_filter)
-
-    start_date, end_date = calculate_date_range(period_arg)
-    if start_date:
-        coachings_query = coachings_query.filter(Coaching.coaching_date >= start_date)
-    if end_date:
-        coachings_query = coachings_query.filter(Coaching.coaching_date <= end_date)
-
-    if team_arg != 'all' and team_arg.isdigit():
-        coachings_query = coachings_query.filter(Team.id == int(team_arg))
-
-    if member_filter:
-        coachings_query = coachings_query.filter(Coaching.team_member_id == member_filter)
-
-    if search_arg:
-        search_pattern = f"%{search_arg}%"
-        coachings_query = coachings_query.filter(
-            or_(
-                TeamMember.name.ilike(search_pattern),
-                User.username.ilike(search_pattern),
-                Coaching.coaching_subject.ilike(search_pattern),
-                Coaching.coach_notes.ilike(search_pattern)
-            )
-        )
-
-    coachings_paginated = coachings_query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
-
-    # Prepare filter dropdown lists (respect the permission)
-    if current_user.has_permission('coach_own_team_only') and team_member:
-        # Only show the coach's own team and its members
-        all_teams = [team_member.team]
-        all_team_members = TeamMember.query.filter_by(team_id=team_member.team_id).order_by(TeamMember.name).all()
-        all_coaches = [current_user]
-    else:
-        all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
-        all_team_members = TeamMember.query.join(Team).filter(Team.name != ARCHIV_TEAM_NAME).order_by(TeamMember.name).all()
-        all_coaches = User.query.filter(User.coachings_done.any()).distinct().order_by(User.username).all()
-
-    # Month options for period filter
-    now = datetime.now(timezone.utc)
-    current_year = now.year
-    previous_year = current_year - 1
-    month_options = []
-    for m in range(12, 0, -1):
-        month_options.append({'value': f"{previous_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {previous_year}"})
-    for m in range(now.month, 0, -1):
-        month_options.append({'value': f"{current_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {current_year}"})
-
-    return render_template('main/coaching_dashboard.html',
-                           coachings=coachings_paginated,
-                           all_teams=all_teams,
-                           all_team_members=all_team_members,
-                           all_coaches=all_coaches,
-                           month_options=month_options,
-                           current_period=period_arg,
-                           current_team=team_arg,
-                           current_member=member_filter,
-                           current_search=search_arg,
-                           config=current_app.config)
-
-
+# --- Add Coaching (Einzel Coaching) ---
 @bp.route('/add-coaching', methods=['GET', 'POST'])
 @login_required
 @permission_required('add_coaching')
 def add_coaching():
-    # Determine which project to use
     project_id = get_visible_project_id()
     if not project_id:
         flash('Kein Projekt ausgewählt oder zugeordnet.', 'danger')
         return redirect(url_for('main.index'))
 
-    # Prepare form with current user's role and team IDs
     current_user_role = current_user.role_name
     current_user_team_ids = [team.id for team in current_user.teams_led] if current_user_role == ROLE_TEAMLEITER else []
     form = CoachingForm(current_user_role=current_user_role, current_user_team_ids=current_user_team_ids)
@@ -231,7 +130,6 @@ def add_coaching():
         )
         if form.assigned_coaching_id.data and form.assigned_coaching_id.data != 0:
             coaching.assigned_coaching_id = form.assigned_coaching_id.data
-            # Update assignment status
             assignment = AssignedCoaching.query.get(form.assigned_coaching_id.data)
             if assignment:
                 assignment.status = 'in_progress'
@@ -239,19 +137,17 @@ def add_coaching():
         db.session.add(coaching)
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
-        return redirect(url_for('main.coaching_dashboard'))
+        # Redirect to the page where coachings are listed (e.g., PL/QM dashboard or index)
+        return redirect(url_for('main.pl_qm_dashboard'))
 
-    # For GET, if there is an assigned coaching ID in the URL, pre-fill
     assigned_id = request.args.get('assigned_id', type=int)
     if assigned_id:
         assignment = AssignedCoaching.query.get(assigned_id)
         if assignment and assignment.coach_id == current_user.id and assignment.status == 'pending':
             form.assigned_coaching_id.data = assigned_id
             form.team_member_id.data = assignment.team_member_id
-            # Optionally pre-fill desired performance note
             if assignment.desired_performance_note:
                 form.performance_mark.data = assignment.desired_performance_note
-            # Update assignment status to accepted
             assignment.status = 'accepted'
             db.session.commit()
             flash('Coaching-Aufgabe angenommen.', 'success')
@@ -266,10 +162,9 @@ def add_coaching():
 @permission_required('edit_coaching')
 def edit_coaching(coaching_id):
     coaching = Coaching.query.get_or_404(coaching_id)
-    # Permission check: only admin, betriebsleiter, or the coach who created it can edit
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Sie haben keine Berechtigung, dieses Coaching zu bearbeiten.', 'danger')
-        return redirect(url_for('main.coaching_dashboard'))
+        return redirect(url_for('main.pl_qm_dashboard'))
 
     form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=True, project_id=coaching.project_id)
@@ -280,7 +175,7 @@ def edit_coaching(coaching_id):
             coaching.tcap_id = None
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
-        return redirect(url_for('main.coaching_dashboard'))
+        return redirect(url_for('main.pl_qm_dashboard'))
 
     return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, config=current_app.config)
 
@@ -292,14 +187,14 @@ def delete_coaching(coaching_id):
     coaching = Coaching.query.get_or_404(coaching_id)
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Keine Berechtigung.', 'danger')
-        return redirect(url_for('main.coaching_dashboard'))
+        return redirect(url_for('main.pl_qm_dashboard'))
     db.session.delete(coaching)
     db.session.commit()
     flash('Coaching gelöscht.', 'success')
-    return redirect(url_for('main.coaching_dashboard'))
+    return redirect(url_for('main.pl_qm_dashboard'))
 
 
-# --- Workshop routes (simplified, add as needed) ---
+# --- Workshop routes ---
 @bp.route('/add-workshop', methods=['GET', 'POST'])
 @login_required
 @permission_required('add_workshop')
@@ -365,23 +260,21 @@ def workshop_dashboard():
     return render_template('main/workshop_dashboard.html', workshops=workshops_paginated, current_search=search_arg, current_period=period_arg, config=current_app.config)
 
 
-# --- Team View (for team leaders) ---
+# --- Team View ---
 @bp.route('/team-view')
 @login_required
 @permission_required('view_own_team')
 def team_view():
-    # Get teams that the current user leads
     teams_led = current_user.teams_led.all()
     if not teams_led:
         flash('Sie sind kein Teamleiter eines Teams.', 'info')
         return redirect(url_for('main.index'))
-    # For simplicity, show the first team
     team = teams_led[0]
     members = team.members.order_by(TeamMember.name).all()
     return render_template('main/team_view.html', team=team, members=members, config=current_app.config)
 
 
-# --- PL/QM Dashboard (project leader / quality manager) ---
+# --- PL/QM Dashboard ---
 @bp.route('/pl-qm-dashboard')
 @login_required
 @permission_required('view_pl_qm_dashboard')
@@ -397,12 +290,11 @@ def pl_qm_dashboard():
     return render_template('main/pl_qm_dashboard.html', project=project, teams=teams, members=members, coachings=coachings, config=current_app.config)
 
 
-# --- Project selection for admins and abteilungsleiter ---
+# --- Project selection ---
 @bp.route('/set-project/<int:project_id>')
 @login_required
 def set_project(project_id):
     project = Project.query.get_or_404(project_id)
-    # Check permission
     if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
         session['active_project'] = project_id
     elif current_user.role_name == ROLE_ABTEILUNGSLEITER and project in current_user.projects:
@@ -414,7 +306,7 @@ def set_project(project_id):
     return redirect(request.referrer or url_for('main.index'))
 
 
-# --- Assigned Coachings (for coaches) ---
+# --- Assigned Coachings ---
 @bp.route('/assigned-coachings')
 @login_required
 @permission_required('view_assigned_coachings')
