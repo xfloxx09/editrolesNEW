@@ -160,7 +160,7 @@ class CoachingForm(FlaskForm):
 
         # Restrict to own team if the coach has the 'coach_own_team_only' permission
         if current_user.is_authenticated and current_user.has_permission('coach_own_team_only'):
-            coach_team_member = current_user.team_members.first()
+            coach_team_member = current_user.team_members[0] if current_user.team_members else None
             if coach_team_member:
                 query = query.filter(TeamMember.team_id == coach_team_member.team_id)
             else:
