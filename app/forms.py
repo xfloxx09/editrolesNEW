@@ -22,7 +22,7 @@ class RegistrationForm(FlaskForm):
         validators=[DataRequired("Passwortwiederholung ist erforderlich."), EqualTo('password', message='Passwörter müssen übereinstimmen.')]
     )
     role_id = SelectField('Rolle', coerce=int, validators=[DataRequired("Rolle ist erforderlich.")], choices=[])
-    team_ids = SelectMultipleField('Zugeordnete Teams (nur für Teamleiter)', coerce=int, choices=[])
+    team_ids = SelectMultipleField('Zugeordnete Teams (nur für Rollen mit "assign_teams"-Berechtigung)', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
 
