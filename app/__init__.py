@@ -114,6 +114,7 @@ def create_app(config_class=Config):
             ('view_own_coachings', 'View own coachings'),
             ('coach', 'Can perform coaching'),
             ('assign_teams', 'Can be assigned as team leader (has teams_led)'),
+            ('coach_own_team_only', 'Coach can only coach members of their own team'),
             # Add any other permissions you need
         ]
         for name, desc in default_permissions:
