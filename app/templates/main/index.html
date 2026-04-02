@@ -275,6 +275,7 @@
                 <th>Min.</th>
                 <th>Score (%)</th>
                 <th>Notiz</th>
+                {% if can_leave_review %}<th>Ihre Bewertung</th><th>Coach</th>{% endif %}
                 <th>Details</th>
                 <th>Bearbeiten</th>
             </tr>
@@ -305,6 +306,32 @@
                         -
                     {% endif %}
                 </td>
+                {% if can_leave_review %}
+                <td>
+                    {% if coached_self %}
+                        {% if coaching.employee_review %}
+                            {{ coaching.employee_review.rating }}/5
+                            {% if coaching.employee_review.comment %}
+                                <span class="text-muted small d-block">{{ coaching.employee_review.comment|truncate(35) }}</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if coached_self %}
+                    <button type="button" class="btn btn-sm btn-outline-info review-open-btn-dash"
+                            data-coaching-id="{{ coaching.id }}">
+                        {% if coaching.employee_review %}Ändern{% else %}Bewerten{% endif %}
+                    </button>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                {% endif %}
                 <td>
                     <button class="btn-icon-circle" type="button" data-toggle="collapse" data-target="#coachingDetails{{ coaching.id }}" aria-expanded="false" aria-controls="coachingDetails{{ coaching.id }}" title="Details anzeigen">
                         <i class="fas fa-info"></i>
@@ -319,7 +346,7 @@
                 </td>
             </tr>
             <tr class="collapse" id="coachingDetails{{ coaching.id }}">
-                <td colspan="12">
+                <td colspan="{{ 14 if can_leave_review else 12 }}">
                     <div class="detail-card">
                         <div class="detail-section">
                             <div class="detail-section-title">Basis-Informationen</div>
@@ -397,10 +424,59 @@
 <p class="text-center mt-3">Keine Coachings gefunden, die den aktuellen Filtern entsprechen.</p>
 {% endif %}
 
+{% if can_leave_review and review_form_dashboard %}
+<div class="modal fade" id="reviewModalDash" tabindex="-1" role="dialog" aria-labelledby="reviewModalDashLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="post" action="{{ url_for('main.submit_coaching_review') }}">
+                {{ review_form_dashboard.hidden_tag() }}
+                {{ review_form_dashboard.next() }}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reviewModalDashLabel">Coach bewerten</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    {{ review_form_dashboard.coaching_id(id='dashModalCoachingId') }}
+                    <div class="form-group">
+                        {{ review_form_dashboard.rating.label(class="form-control-label") }}
+                        {{ review_form_dashboard.rating(class="form-control", min=1, max=5, id="dashModalRating") }}
+                    </div>
+                    <div class="form-group">
+                        {{ review_form_dashboard.comment.label(class="form-control-label") }}
+                        {{ review_form_dashboard.comment(class="form-control", rows=4, id="dashModalComment") }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                    {{ review_form_dashboard.submit(class="btn telekom-button") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block scripts %}
 {{ super() }}
+{% if can_leave_review and review_form_dashboard %}
+<script>
+var reviewPrefillDash = {{ review_prefill | tojson }};
+document.querySelectorAll('.review-open-btn-dash').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var id = String(this.getAttribute('data-coaching-id'));
+        document.getElementById('dashModalCoachingId').value = id;
+        var p = reviewPrefillDash[id];
+        document.getElementById('dashModalRating').value = (p && p.rating) ? p.rating : '5';
+        document.getElementById('dashModalComment').value = (p && p.comment) ? p.comment : '';
+        $('#reviewModalDash').modal('show');
+    });
+});
+</script>
+{% endif %}
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/1.4.0/chartjs-plugin-annotation.min.js"></script>
 <script>

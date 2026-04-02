@@ -371,4 +371,5 @@ class CoachingReviewForm(FlaskForm):
     coaching_id = IntegerField(widget=HiddenInput(), validators=[DataRequired()])
     rating = IntegerField('Bewertung (1–5 Sterne)', validators=[DataRequired(), NumberRange(min=1, max=5)])
     comment = TextAreaField('Kommentar (optional)', validators=[Optional(), Length(max=2000)])
+    next = StringField(widget=HiddenInput(), validators=[Optional(), Length(max=2048)])
     submit = SubmitField('Bewertung absenden')

@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm
@@ -12,6 +13,25 @@ import calendar
 
 bp = Blueprint('main', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
+
+
+def _safe_internal_path(path_val):
+    """Only allow same-app relative paths (no open redirects)."""
+    if not path_val or not isinstance(path_val, str):
+        return None
+    s = path_val.strip()
+    if not s.startswith('/') or s.startswith('//'):
+        return None
+    if any(c in s for c in '\n\r\t'):
+        return None
+    return s
+
+
+def _redirect_after_coaching_review(form, my_coachings_query_args):
+    target = _safe_internal_path((form.next.data or '').strip()) if getattr(form, 'next', None) else None
+    if target:
+        return redirect(target)
+    return redirect(url_for('main.my_coachings', **my_coachings_query_args))
 
 
 def get_active_leitfaden_items_safe():
@@ -244,14 +264,32 @@ def coaching_dashboard():
             )
         )
 
-    # Build query
-    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id)\
-                           .join(Team, TeamMember.team_id == Team.id)\
-                           .join(User, Coaching.coach_id == User.id, isouter=True)\
-                           .filter(*filters)
+    # Build query (eager employee_review for review buttons on own rows)
+    query = Coaching.query.options(joinedload(Coaching.employee_review)).join(
+        TeamMember, Coaching.team_member_id == TeamMember.id
+    ).join(Team, TeamMember.team_id == Team.id).join(
+        User, Coaching.coach_id == User.id, isouter=True
+    ).filter(*filters)
 
     # Pagination
     coachings_paginated = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
+
+    can_leave_review = current_user.has_permission('leave_coaching_review')
+    review_prefill = {}
+    review_form_dashboard = None
+    review_redirect_next = ''
+    if can_leave_review:
+        qv = request.query_string.decode()
+        review_redirect_next = request.path + (('?' + qv) if qv else '')
+        review_form_dashboard = CoachingReviewForm()
+        review_form_dashboard.next.data = review_redirect_next
+        for c in coachings_paginated.items:
+            tm = c.team_member_coached
+            if tm and tm.user_id == current_user.id and c.employee_review:
+                review_prefill[str(c.id)] = {
+                    'rating': c.employee_review.rating,
+                    'comment': c.employee_review.comment or '',
+                }
 
     # Compute total coachings count for the filter set
     total_coachings = query.count()
@@ -316,6 +354,10 @@ def coaching_dashboard():
                            current_project_filter=project_filter,
                            current_search_term=search_arg,
                            month_options=month_options,
+                           can_leave_review=can_leave_review,
+                           review_prefill=review_prefill,
+                           review_form_dashboard=review_form_dashboard,
+                           review_redirect_next=review_redirect_next,
                            config=current_app.config)
 
 
@@ -384,19 +426,22 @@ def submit_coaching_review():
         for _field, errors in form.errors.items():
             for err in errors:
                 flash(err, 'danger')
+        t = _safe_internal_path((request.form.get('next') or '').strip())
+        if t:
+            return redirect(t)
         return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
 
     coaching = Coaching.query.get_or_404(form.coaching_id.data)
     member = coaching.team_member
     if not member or member.user_id != current_user.id:
         flash('Keine Berechtigung für dieses Coaching.', 'danger')
-        return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+        return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
 
     existing = CoachingReview.query.filter_by(coaching_id=coaching.id).first()
     if existing:
         if existing.reviewer_user_id != current_user.id:
             flash('Diese Bewertung kann nicht geändert werden.', 'danger')
-            return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+            return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
         existing.rating = form.rating.data
         existing.comment = (form.comment.data or '').strip() or None
         existing.updated_at = datetime.utcnow()
@@ -409,7 +454,7 @@ def submit_coaching_review():
         ))
     db.session.commit()
     flash('Vielen Dank! Ihre Bewertung wurde gespeichert.', 'success')
-    return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+    return _redirect_after_coaching_review(form, my_coachings_filter_query_args())
 
 
 @bp.route('/reviews/for-me')

@@ -186,6 +186,18 @@ def create_app(config_class=Config):
                     )
             print("✅ Teamleiter hat 'assign_teams', 'coach', 'coach_own_team_only' Berechtigungen.")
 
+        # Agent / Mitarbeiter: eigene Coachings + Coach bewerten (rein über Berechtigungen; Rollenname ist egal)
+        for employee_role_name in ('Mitarbeiter', 'Agent'):
+            er = conn.execute(text("SELECT id FROM roles WHERE name = :n"), {"n": employee_role_name}).fetchone()
+            if er:
+                for perm_name in ('view_own_coachings', 'leave_coaching_review'):
+                    if perm_name in perm_map:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                            {"role_id": er[0], "perm_id": perm_map[perm_name]}
+                        )
+                print(f"✅ Rolle '{employee_role_name}': view_own_coachings + leave_coaching_review (falls nicht schon gesetzt).")
+
         # 9. user_id and custom fields in team_members
         if 'team_members' in inspector.get_table_names():
             columns_team_members = [col['name'] for col in inspector.get_columns('team_members')]

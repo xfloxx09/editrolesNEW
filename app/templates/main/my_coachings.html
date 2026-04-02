@@ -150,6 +150,7 @@
         <div class="modal-content">
             <form method="post" action="{{ url_for('main.submit_coaching_review') }}">
                 {{ review_form.hidden_tag() }}
+                {{ review_form.next() }}
                 <div class="modal-header">
                     <h5 class="modal-title" id="reviewModalLabel">Coaching bewerten</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
