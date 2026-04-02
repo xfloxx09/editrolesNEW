@@ -88,7 +88,7 @@ def profile():
     return render_template('main/profile.html', form=form, config=current_app.config)
 
 
-# --- Add Coaching (Einzel Coaching) ---
+# --- Coaching Form (add-coaching) – this is the only page that matters ---
 @bp.route('/add-coaching', methods=['GET', 'POST'])
 @login_required
 @permission_required('add_coaching')
@@ -137,8 +137,8 @@ def add_coaching():
         db.session.add(coaching)
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
-        # Redirect to the page where coachings are listed (e.g., PL/QM dashboard or index)
-        return redirect(url_for('main.pl_qm_dashboard'))
+        # Redirect to the user's coaching list (or wherever you want)
+        return redirect(url_for('main.index'))  # adjust if you have a different page
 
     assigned_id = request.args.get('assigned_id', type=int)
     if assigned_id:
@@ -164,7 +164,7 @@ def edit_coaching(coaching_id):
     coaching = Coaching.query.get_or_404(coaching_id)
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Sie haben keine Berechtigung, dieses Coaching zu bearbeiten.', 'danger')
-        return redirect(url_for('main.pl_qm_dashboard'))
+        return redirect(url_for('main.index'))
 
     form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=True, project_id=coaching.project_id)
@@ -175,7 +175,7 @@ def edit_coaching(coaching_id):
             coaching.tcap_id = None
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
-        return redirect(url_for('main.pl_qm_dashboard'))
+        return redirect(url_for('main.index'))
 
     return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, config=current_app.config)
 
@@ -187,11 +187,11 @@ def delete_coaching(coaching_id):
     coaching = Coaching.query.get_or_404(coaching_id)
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Keine Berechtigung.', 'danger')
-        return redirect(url_for('main.pl_qm_dashboard'))
+        return redirect(url_for('main.index'))
     db.session.delete(coaching)
     db.session.commit()
     flash('Coaching gelöscht.', 'success')
-    return redirect(url_for('main.pl_qm_dashboard'))
+    return redirect(url_for('main.index'))
 
 
 # --- Workshop routes ---
@@ -260,7 +260,7 @@ def workshop_dashboard():
     return render_template('main/workshop_dashboard.html', workshops=workshops_paginated, current_search=search_arg, current_period=period_arg, config=current_app.config)
 
 
-# --- Team View ---
+# --- Team View (for team leaders) ---
 @bp.route('/team-view')
 @login_required
 @permission_required('view_own_team')
@@ -306,7 +306,7 @@ def set_project(project_id):
     return redirect(request.referrer or url_for('main.index'))
 
 
-# --- Assigned Coachings ---
+# --- Assigned Coachings (for coaches) ---
 @bp.route('/assigned-coachings')
 @login_required
 @permission_required('view_assigned_coachings')
