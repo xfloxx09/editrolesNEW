@@ -2,6 +2,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
+from sqlalchemy.exc import SQLAlchemyError
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm
@@ -11,6 +12,14 @@ import calendar
 
 bp = Blueprint('main', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
+
+
+def get_active_leitfaden_items_safe():
+    try:
+        return LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return []
 
 # Helper to get the active project for the current user
 def get_visible_project_id():
@@ -227,7 +236,7 @@ def add_coaching():
     current_user_team_ids = [team.id for team in current_user.teams_led] if current_user_role == ROLE_TEAMLEITER else []
     form = CoachingForm(current_user_role=current_user_role, current_user_team_ids=current_user_team_ids)
     form.update_team_member_choices(exclude_archiv=True, project_id=project_id)
-    leitfaden_items = LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+    leitfaden_items = get_active_leitfaden_items_safe()
 
     if form.validate_on_submit():
         team_member = TeamMember.query.get(form.team_member_id.data)
@@ -310,22 +319,29 @@ def edit_coaching(coaching_id):
 
     form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=True, project_id=coaching.project_id)
-    leitfaden_items = LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
-    selected_leitfaden_values = {response.item_id: response.value for response in coaching.leitfaden_responses}
+    leitfaden_items = get_active_leitfaden_items_safe()
+    selected_leitfaden_values = {}
+    if leitfaden_items:
+        try:
+            selected_leitfaden_values = {response.item_id: response.value for response in coaching.leitfaden_responses}
+        except SQLAlchemyError:
+            db.session.rollback()
+            selected_leitfaden_values = {}
 
     if form.validate_on_submit():
         form.populate_obj(coaching)
         if form.coaching_style.data != 'TCAP':
             coaching.tcap_id = None
-        CoachingLeitfadenResponse.query.filter_by(coaching_id=coaching.id).delete()
-        for item in leitfaden_items:
-            selected_value = request.form.get(f'leitfaden_item_{item.id}', 'k.A.')
-            value = selected_value if selected_value in LEITFADEN_CHOICES else 'k.A.'
-            db.session.add(CoachingLeitfadenResponse(
-                coaching_id=coaching.id,
-                item_id=item.id,
-                value=value
-            ))
+        if leitfaden_items:
+            CoachingLeitfadenResponse.query.filter_by(coaching_id=coaching.id).delete()
+            for item in leitfaden_items:
+                selected_value = request.form.get(f'leitfaden_item_{item.id}', 'k.A.')
+                value = selected_value if selected_value in LEITFADEN_CHOICES else 'k.A.'
+                db.session.add(CoachingLeitfadenResponse(
+                    coaching_id=coaching.id,
+                    item_id=item.id,
+                    value=value
+                ))
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
         return redirect(url_for('main.coaching_dashboard'))

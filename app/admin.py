@@ -2,6 +2,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
+from sqlalchemy.exc import SQLAlchemyError
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm
@@ -14,6 +15,14 @@ import os
 
 bp = Blueprint('admin', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
+
+
+def get_active_leitfaden_items_safe():
+    try:
+        return LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return []
 
 
 @bp.route('/')
@@ -789,21 +798,28 @@ def edit_coaching_entry(coaching_id):
     coaching_to_edit = Coaching.query.get_or_404(coaching_id)
     form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=False, project_id=coaching_to_edit.project_id)
-    leitfaden_items = LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
-    selected_leitfaden_values = {response.item_id: response.value for response in coaching_to_edit.leitfaden_responses}
+    leitfaden_items = get_active_leitfaden_items_safe()
+    selected_leitfaden_values = {}
+    if leitfaden_items:
+        try:
+            selected_leitfaden_values = {response.item_id: response.value for response in coaching_to_edit.leitfaden_responses}
+        except SQLAlchemyError:
+            db.session.rollback()
+            selected_leitfaden_values = {}
 
     if form.validate_on_submit():
         try:
             form.populate_obj(coaching_to_edit)
-            CoachingLeitfadenResponse.query.filter_by(coaching_id=coaching_to_edit.id).delete()
-            for item in leitfaden_items:
-                selected_value = request.form.get(f'leitfaden_item_{item.id}', 'k.A.')
-                value = selected_value if selected_value in LEITFADEN_CHOICES else 'k.A.'
-                db.session.add(CoachingLeitfadenResponse(
-                    coaching_id=coaching_to_edit.id,
-                    item_id=item.id,
-                    value=value
-                ))
+            if leitfaden_items:
+                CoachingLeitfadenResponse.query.filter_by(coaching_id=coaching_to_edit.id).delete()
+                for item in leitfaden_items:
+                    selected_value = request.form.get(f'leitfaden_item_{item.id}', 'k.A.')
+                    value = selected_value if selected_value in LEITFADEN_CHOICES else 'k.A.'
+                    db.session.add(CoachingLeitfadenResponse(
+                        coaching_id=coaching_to_edit.id,
+                        item_id=item.id,
+                        value=value
+                    ))
             db.session.commit()
             flash(f'Coaching ID {coaching_id} erfolgreich aktualisiert!', 'success')
             return redirect(url_for('admin.manage_coachings'))
@@ -1096,7 +1112,12 @@ def delete_role(role_id):
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def manage_leitfaden():
-    items = LeitfadenItem.query.order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+    try:
+        items = LeitfadenItem.query.order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
+        items = []
     return render_template('admin/manage_leitfaden.html', items=items, config=current_app.config)
 
 
@@ -1106,8 +1127,13 @@ def manage_leitfaden():
 def create_leitfaden_item():
     form = LeitfadenItemForm()
     if request.method == 'GET' and form.position.data is None:
-        last_item = LeitfadenItem.query.order_by(LeitfadenItem.position.desc(), LeitfadenItem.id.desc()).first()
-        form.position.data = (last_item.position + 1) if last_item else 1
+        try:
+            last_item = LeitfadenItem.query.order_by(LeitfadenItem.position.desc(), LeitfadenItem.id.desc()).first()
+            form.position.data = (last_item.position + 1) if last_item else 1
+        except SQLAlchemyError:
+            db.session.rollback()
+            flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
+            return redirect(url_for('admin.manage_leitfaden'))
     if form.validate_on_submit():
         item = LeitfadenItem(
             name=form.name.data.strip(),
@@ -1125,7 +1151,12 @@ def create_leitfaden_item():
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_leitfaden_item(item_id):
-    item = LeitfadenItem.query.get_or_404(item_id)
+    try:
+        item = LeitfadenItem.query.get_or_404(item_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
+        return redirect(url_for('admin.manage_leitfaden'))
     form = LeitfadenItemForm(obj=item, original_name=item.name)
     if form.validate_on_submit():
         item.name = form.name.data.strip()
@@ -1141,10 +1172,14 @@ def edit_leitfaden_item(item_id):
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def delete_leitfaden_item(item_id):
-    item = LeitfadenItem.query.get_or_404(item_id)
-    db.session.delete(item)
-    db.session.commit()
-    flash('Leitfaden-Punkt gelöscht.', 'success')
+    try:
+        item = LeitfadenItem.query.get_or_404(item_id)
+        db.session.delete(item)
+        db.session.commit()
+        flash('Leitfaden-Punkt gelöscht.', 'success')
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
     return redirect(url_for('admin.manage_leitfaden'))
 
 

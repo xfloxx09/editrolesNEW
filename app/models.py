@@ -3,6 +3,7 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 from datetime import datetime
+from sqlalchemy.exc import SQLAlchemyError
 
 # Association tables
 team_leaders = db.Table('team_leaders',
@@ -180,8 +181,11 @@ class Coaching(db.Model):
     @property
     def leitfaden_fields_list(self):
         # Prefer dynamic responses; fallback to legacy fixed columns for old records.
-        if self.leitfaden_responses:
-            return [(r.item.name, r.value or 'k.A.') for r in sorted(self.leitfaden_responses, key=lambda x: x.item.position if x.item else 9999)]
+        try:
+            if self.leitfaden_responses:
+                return [(r.item.name, r.value or 'k.A.') for r in sorted(self.leitfaden_responses, key=lambda x: x.item.position if x.item else 9999)]
+        except SQLAlchemyError:
+            db.session.rollback()
 
         legacy = [
             ('Begrüßung', self.leitfaden_begruessung),
