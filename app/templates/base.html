@@ -19,10 +19,8 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
-                    {% if has_perm('view_own_coachings') %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('main.coaching_dashboard') }}">Meine Coachings</a></li>
-                    {% endif %}
-                    <!-- Fixed: use |length instead of .count() -->
+                    <!-- The link to "Meine Coachings" is removed because the route no longer exists -->
+                    <!-- Keep only the "Neues Coaching" button elsewhere -->
                     {% if has_perm('view_own_team') and current_user.teams_led|length > 0 %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}
