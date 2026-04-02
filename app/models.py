@@ -172,6 +172,12 @@ class Coaching(db.Model):
         back_populates='coaching',
         cascade='all, delete-orphan'
     )
+    employee_review = db.relationship(
+        'CoachingReview',
+        back_populates='coaching',
+        uselist=False,
+        cascade='all, delete-orphan'
+    )
 
     @property
     def overall_score(self):
@@ -232,6 +238,21 @@ class CoachingLeitfadenResponse(db.Model):
     __table_args__ = (
         db.UniqueConstraint('coaching_id', 'item_id', name='uq_coaching_leitfaden_item'),
     )
+
+
+class CoachingReview(db.Model):
+    """Employee review of the coach for a specific Einzel-Coaching (one per coaching)."""
+    __tablename__ = 'coaching_reviews'
+    id = db.Column(db.Integer, primary_key=True)
+    coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=False, unique=True)
+    reviewer_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    coaching = db.relationship('Coaching', back_populates='employee_review')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_user_id])
 
 
 class Workshop(db.Model):

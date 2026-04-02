@@ -110,6 +110,9 @@ def create_app(config_class=Config):
         # 6. Default permissions
         default_permissions = [
             ('view_own_coachings', 'View own coachings'),
+            ('leave_coaching_review', 'Leave a review for the coach after being coached'),
+            ('view_review', 'View reviews received as a coach'),
+            ('view_all_reviews', 'View all coaching reviews in allowed projects'),
             ('coach', 'Can perform coaching'),
             ('assign_teams', 'Can be assigned as team leader (has teams_led)'),
             ('coach_own_team_only', 'Coach can only coach members of their own team'),

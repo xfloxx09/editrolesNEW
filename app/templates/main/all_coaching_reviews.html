@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2 class="mb-3">Alle Bewertungen</h2>
+    <p class="text-muted small">Übersicht der Mitarbeiter-Bewertungen für Coaches in Ihren Projekten (und ggf. nach gewähltem Projekt gefiltert).</p>
+
+    <form method="get" class="mb-4">
+        <div class="form-row">
+            {% if filter_projects|length > 1 %}
+            <div class="col-md-3 mb-2">
+                <label class="small text-muted">Projekt</label>
+                <select name="project" class="form-control form-control-sm">
+                    <option value="">Alle zugänglichen Projekte</option>
+                    {% for p in filter_projects %}
+                        <option value="{{ p.id }}" {% if filter_project == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-md-3 mb-2">
+                <label class="small text-muted">Zeitraum</label>
+                <select name="period" class="form-control form-control-sm">
+                    <option value="all" {% if current_period == 'all' %}selected{% endif %}>Alle</option>
+                    <option value="today" {% if current_period == 'today' %}selected{% endif %}>Heute</option>
+                    <option value="yesterday" {% if current_period == 'yesterday' %}selected{% endif %}>Gestern</option>
+                    <option value="this_week" {% if current_period == 'this_week' %}selected{% endif %}>Diese Woche</option>
+                    <option value="last_week" {% if current_period == 'last_week' %}selected{% endif %}>Letzte Woche</option>
+                    <option value="this_month" {% if current_period == 'this_month' %}selected{% endif %}>Dieser Monat</option>
+                    <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>Letzter Monat</option>
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="small text-muted">Jahr (optional)</label>
+                <select name="year" class="form-control form-control-sm">
+                    <option value="">—</option>
+                    {% for y in year_options %}
+                        <option value="{{ y }}" {% if filter_year == y %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="small text-muted">Monat</label>
+                <select name="month" class="form-control form-control-sm">
+                    <option value="">—</option>
+                    {% for m in month_options_list %}
+                        <option value="{{ m.value }}" {% if filter_month == m.value %}selected{% endif %}>{{ m.text }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="small text-muted">Tag</label>
+                <select name="day" class="form-control form-control-sm">
+                    <option value="">—</option>
+                    {% for d in day_options %}
+                        <option value="{{ d }}" {% if filter_day == d %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="col-md-12 mb-2">
+                <button type="submit" class="btn btn-sm telekom-button mr-2">Filtern</button>
+                <a href="{{ url_for('main.all_coaching_reviews') }}" class="btn btn-sm btn-secondary">Zurücksetzen</a>
+            </div>
+        </div>
+    </form>
+
+    {% if reviews.items %}
+        <div class="table-responsive">
+            <table class="table table-striped table-sm">
+                <thead>
+                    <tr>
+                        <th>Coaching-Datum</th>
+                        <th>Projekt</th>
+                        <th>Coach</th>
+                        <th>Mitarbeiter</th>
+                        <th>Bewertung</th>
+                        <th>Kommentar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rev in reviews.items %}
+                        {% set c = rev.coaching %}
+                        <tr>
+                            <td>{% if c %}{{ c.coaching_date|athens_time }}{% else %}-{% endif %}</td>
+                            <td>{% if c and c.project %}{{ c.project.name }}{% else %}—{% endif %}</td>
+                            <td>{% if c and c.coach %}{{ c.coach.username }}{% else %}—{% endif %}</td>
+                            <td>{% if c and c.team_member %}{{ c.team_member.name }}{% else %}—{% endif %}</td>
+                            <td>{{ rev.rating }}/5</td>
+                            <td>{% if rev.comment %}{{ rev.comment }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if reviews.pages > 1 %}
+        <nav>
+            <ul class="pagination justify-content-center">
+                {% if reviews.has_prev %}
+                    <li class="page-item"><a class="page-link" href="{{ page_url(reviews.prev_num) }}">Vorherige</a></li>
+                {% endif %}
+                {% for page_num in reviews.iter_pages() %}
+                    {% if page_num %}
+                        <li class="page-item {% if page_num == reviews.page %}active{% endif %}">
+                            <a class="page-link" href="{{ page_url(page_num) }}">{{ page_num }}</a>
+                        </li>
+                    {% else %}
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if reviews.has_next %}
+                    <li class="page-item"><a class="page-link" href="{{ page_url(reviews.next_num) }}">Nächste</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    {% else %}
+        <p class="text-muted">Keine Bewertungen in diesem Zeitraum.</p>
+    {% endif %}
+</div>
+{% endblock %}

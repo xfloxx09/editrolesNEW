@@ -2,7 +2,57 @@
 
 {% block content %}
 <div class="container">
-    <h2>Meine Coachings</h2>
+    <h2 class="mb-3">Meine Coachings</h2>
+
+    <form method="get" class="mb-4">
+        <div class="form-row">
+            <div class="col-md-3 mb-2">
+                <label class="small text-muted">Zeitraum</label>
+                <select name="period" class="form-control form-control-sm">
+                    <option value="all" {% if current_period == 'all' %}selected{% endif %}>Alle</option>
+                    <option value="today" {% if current_period == 'today' %}selected{% endif %}>Heute</option>
+                    <option value="yesterday" {% if current_period == 'yesterday' %}selected{% endif %}>Gestern</option>
+                    <option value="this_week" {% if current_period == 'this_week' %}selected{% endif %}>Diese Woche</option>
+                    <option value="last_week" {% if current_period == 'last_week' %}selected{% endif %}>Letzte Woche</option>
+                    <option value="this_month" {% if current_period == 'this_month' %}selected{% endif %}>Dieser Monat</option>
+                    <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>Letzter Monat</option>
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="small text-muted">Jahr (optional)</label>
+                <select name="year" class="form-control form-control-sm">
+                    <option value="">—</option>
+                    {% for y in year_options %}
+                        <option value="{{ y }}" {% if filter_year == y %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="small text-muted">Monat</label>
+                <select name="month" class="form-control form-control-sm">
+                    <option value="">—</option>
+                    {% for m in month_options_list %}
+                        <option value="{{ m.value }}" {% if filter_month == m.value %}selected{% endif %}>{{ m.text }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 mb-2">
+                <label class="small text-muted">Tag</label>
+                <select name="day" class="form-control form-control-sm">
+                    <option value="">—</option>
+                    {% for d in day_options %}
+                        <option value="{{ d }}" {% if filter_day == d %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 mb-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-sm telekom-button mr-2">Filtern</button>
+                <a href="{{ url_for('main.my_coachings') }}" class="btn btn-sm btn-secondary">Zurücksetzen</a>
+            </div>
+        </div>
+        <p class="small text-muted mb-0">Wenn Sie Jahr wählen, überschreibt das die Schnellfilter (außer „Alle“ im Zeitraum wird ignoriert).</p>
+    </form>
+
     {% if coachings.items %}
         <div class="table-responsive">
             <table class="table table-striped">
@@ -13,7 +63,8 @@
                         <th>Coaching Stil</th>
                         <th>Thema</th>
                         <th>Performance</th>
-                        <th>Notiz</th>
+                        <th>Ihre Bewertung</th>
+                        {% if has_perm('leave_coaching_review') %}<th></th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -24,7 +75,24 @@
                             <td>{{ coaching.coaching_style }}</td>
                             <td>{{ coaching.coaching_subject or '-' }}</td>
                             <td>{{ coaching.performance_mark }}</td>
-                            <td>{{ coaching.coach_notes|truncate(80) if coaching.coach_notes else '-' }}</td>
+                            <td>
+                                {% if coaching.employee_review %}
+                                    {{ coaching.employee_review.rating }}/5
+                                    {% if coaching.employee_review.comment %}
+                                        <span class="text-muted">— {{ coaching.employee_review.comment|truncate(40) }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            {% if has_perm('leave_coaching_review') %}
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-info review-open-btn"
+                                        data-coaching-id="{{ coaching.id }}">
+                                    {% if coaching.employee_review %}Bewertung ändern{% else %}Bewertung abgeben{% endif %}
+                                </button>
+                            </td>
+                            {% endif %}
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -34,19 +102,19 @@
         <nav>
             <ul class="pagination justify-content-center">
                 {% if coachings.has_prev %}
-                    <li class="page-item"><a class="page-link" href="{{ url_for('main.my_coachings', page=coachings.prev_num) }}">Vorherige</a></li>
+                    <li class="page-item"><a class="page-link" href="{{ page_url(coachings.prev_num) }}">Vorherige</a></li>
                 {% endif %}
                 {% for page_num in coachings.iter_pages() %}
                     {% if page_num %}
                         <li class="page-item {% if page_num == coachings.page %}active{% endif %}">
-                            <a class="page-link" href="{{ url_for('main.my_coachings', page=page_num) }}">{{ page_num }}</a>
+                            <a class="page-link" href="{{ page_url(page_num) }}">{{ page_num }}</a>
                         </li>
                     {% else %}
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        <li class="page-item disabled"><span class="page-link">…</span></li>
                     {% endif %}
                 {% endfor %}
                 {% if coachings.has_next %}
-                    <li class="page-item"><a class="page-link" href="{{ url_for('main.my_coachings', page=coachings.next_num) }}">Nächste</a></li>
+                    <li class="page-item"><a class="page-link" href="{{ page_url(coachings.next_num) }}">Nächste</a></li>
                 {% endif %}
             </ul>
         </nav>
@@ -55,4 +123,56 @@
         <p class="text-muted">Keine Coachings gefunden.</p>
     {% endif %}
 </div>
+
+{% if has_perm('leave_coaching_review') %}
+<div class="modal fade" id="reviewModal" tabindex="-1" role="dialog" aria-labelledby="reviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="post" action="{{ url_for('main.submit_coaching_review') }}">
+                {{ review_form.hidden_tag() }}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reviewModalLabel">Coaching bewerten</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    {{ review_form.coaching_id(id='modalCoachingId') }}
+                    <div class="form-group">
+                        {{ review_form.rating.label(class="form-control-label") }}
+                        {{ review_form.rating(class="form-control", min=1, max=5, id="modalRating") }}
+                    </div>
+                    <div class="form-group">
+                        {{ review_form.comment.label(class="form-control-label") }}
+                        {{ review_form.comment(class="form-control", rows=4, id="modalComment") }}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                    {{ review_form.submit(class="btn telekom-button") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if has_perm('leave_coaching_review') %}
+<script>
+var reviewPrefill = {{ review_prefill | tojson }};
+document.querySelectorAll('.review-open-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var id = String(this.getAttribute('data-coaching-id'));
+        document.getElementById('modalCoachingId').value = id;
+        var p = reviewPrefill[id];
+        document.getElementById('modalRating').value = (p && p.rating) ? p.rating : '5';
+        document.getElementById('modalComment').value = (p && p.comment) ? p.comment : '';
+        $('#reviewModal').modal('show');
+    });
+});
+</script>
+{% endif %}
 {% endblock %}

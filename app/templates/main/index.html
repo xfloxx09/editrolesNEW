@@ -281,6 +281,7 @@
         </thead>
         <tbody>
             {% for coaching in coachings_paginated.items %}
+            {% set coached_self = coaching.team_member_coached and coaching.team_member_coached.user_id == current_user.id %}
             <tr>
                 <td>{{ coaching.coaching_date|athens_time }}</td>
                 <td>{{ coaching.team_member_coached.name if coaching.team_member_coached else 'N/A' }}</td>
@@ -347,7 +348,7 @@
                                 {% endfor %}
                             </div>
                         </div>
-                        {% if coaching.coach_notes %}
+                        {% if coaching.coach_notes and not coached_self %}
                         <div class="detail-section">
                             <div class="detail-section-title">Notizen des Coaches</div>
                             <div class="notes-box">{{ coaching.coach_notes }}</div>

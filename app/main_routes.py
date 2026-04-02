@@ -4,10 +4,10 @@ from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from sqlalchemy.exc import SQLAlchemyError
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
-from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
+from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 import calendar
 
 bp = Blueprint('main', __name__)
@@ -76,6 +76,103 @@ def calculate_date_range(period_arg):
 def get_month_name_german(month_num):
     return ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
             'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'][month_num-1]
+
+
+def get_allowed_project_ids_for_reviews():
+    """Projects a user may see when using view_all_reviews."""
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        ap = session.get('active_project')
+        if ap:
+            return [ap]
+        return [p.id for p in Project.query.order_by(Project.name).all()]
+    if current_user.role_name == ROLE_ABTEILUNGSLEITER:
+        return [p.id for p in current_user.projects]
+    if current_user.project_id:
+        return [current_user.project_id]
+    return []
+
+
+def apply_coaching_date_filters(query, period_arg, year, month, day):
+    """Preset period and/or explicit Jahr/Monat/Tag (UTC day boundaries). Query must be on Coaching."""
+    if year is not None:
+        try:
+            if month is not None and day is not None:
+                d0 = date(year, month, day)
+                start = datetime.combine(d0, datetime.min.time()).replace(tzinfo=timezone.utc)
+                end = datetime.combine(d0, datetime.max.time()).replace(tzinfo=timezone.utc)
+            elif month is not None:
+                last_d = calendar.monthrange(year, month)[1]
+                start = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+                end = datetime(year, month, last_d, 23, 59, 59, 999999, tzinfo=timezone.utc)
+            else:
+                start = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+                end = datetime(year, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+            query = query.filter(Coaching.coaching_date >= start, Coaching.coaching_date <= end)
+        except ValueError:
+            pass
+    else:
+        start, end = calculate_date_range(period_arg)
+        if start:
+            query = query.filter(Coaching.coaching_date >= start)
+        if end:
+            query = query.filter(Coaching.coaching_date <= end)
+    return query
+
+
+def filter_reviews_by_coaching_date(query, period_arg, year, month, day):
+    """CoachingReview query already joined to Coaching; filter on coaching_date."""
+    if year is not None:
+        try:
+            if month is not None and day is not None:
+                d0 = date(year, month, day)
+                start = datetime.combine(d0, datetime.min.time()).replace(tzinfo=timezone.utc)
+                end = datetime.combine(d0, datetime.max.time()).replace(tzinfo=timezone.utc)
+            elif month is not None:
+                last_d = calendar.monthrange(year, month)[1]
+                start = datetime(year, month, 1, 0, 0, 0, tzinfo=timezone.utc)
+                end = datetime(year, month, last_d, 23, 59, 59, 999999, tzinfo=timezone.utc)
+            else:
+                start = datetime(year, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+                end = datetime(year, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc)
+            query = query.filter(Coaching.coaching_date >= start, Coaching.coaching_date <= end)
+        except ValueError:
+            pass
+    else:
+        start, end = calculate_date_range(period_arg)
+        if start:
+            query = query.filter(Coaching.coaching_date >= start)
+        if end:
+            query = query.filter(Coaching.coaching_date <= end)
+    return query
+
+
+def my_coachings_filter_query_args():
+    """Preserve filters when redirecting after POST."""
+    d = {}
+    for key in ('period', 'year', 'month', 'day'):
+        v = request.args.get(key)
+        if v is not None and v != '':
+            d[key] = v
+    return d
+
+
+def build_filter_args(period_arg, year, month, day, extra=None):
+    args = {'period': period_arg}
+    if year is not None:
+        args['year'] = year
+    if month is not None:
+        args['month'] = month
+    if day is not None:
+        args['day'] = day
+    if extra:
+        args.update(extra)
+    return args
+
+
+def url_for_paginated(endpoint, page, filter_args):
+    kw = dict(filter_args)
+    kw['page'] = page
+    return url_for(endpoint, **kw)
 
 
 @bp.route('/')
@@ -227,9 +324,177 @@ def coaching_dashboard():
 @permission_required('view_own_coachings')
 def my_coachings():
     page = request.args.get('page', 1, type=int)
-    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(TeamMember.user_id == current_user.id)
+    period_arg = request.args.get('period', 'all')
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+    day = request.args.get('day', type=int)
+
+    query = Coaching.query.join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(
+        TeamMember.user_id == current_user.id
+    )
+    query = apply_coaching_date_filters(query, period_arg, year, month, day)
     coachings = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
-    return render_template('main/my_coachings.html', title='Meine Coachings', coachings=coachings, config=current_app.config)
+
+    now = datetime.now(timezone.utc)
+    year_options = list(range(now.year, now.year - 6, -1))
+    month_options_list = [{'value': m, 'text': get_month_name_german(m)} for m in range(1, 13)]
+    day_options = list(range(1, 32))
+
+    review_form = CoachingReviewForm()
+    filter_args = build_filter_args(period_arg, year, month, day)
+    review_prefill = {}
+    for c in coachings.items:
+        if c.employee_review:
+            review_prefill[str(c.id)] = {
+                'rating': c.employee_review.rating,
+                'comment': c.employee_review.comment or '',
+            }
+    return render_template(
+        'main/my_coachings.html',
+        title='Meine Coachings',
+        coachings=coachings,
+        current_period=period_arg,
+        filter_year=year,
+        filter_month=month,
+        filter_day=day,
+        year_options=year_options,
+        month_options_list=month_options_list,
+        day_options=day_options,
+        filter_args=filter_args,
+        page_url=lambda p: url_for_paginated('main.my_coachings', p, filter_args),
+        review_prefill=review_prefill,
+        review_form=review_form,
+        config=current_app.config
+    )
+
+
+@bp.route('/my-coachings/review', methods=['POST'])
+@login_required
+@permission_required('leave_coaching_review')
+def submit_coaching_review():
+    form = CoachingReviewForm()
+    if not form.validate_on_submit():
+        for _field, errors in form.errors.items():
+            for err in errors:
+                flash(err, 'danger')
+        return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+
+    coaching = Coaching.query.get_or_404(form.coaching_id.data)
+    member = coaching.team_member
+    if not member or member.user_id != current_user.id:
+        flash('Keine Berechtigung für dieses Coaching.', 'danger')
+        return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+
+    existing = CoachingReview.query.filter_by(coaching_id=coaching.id).first()
+    if existing:
+        if existing.reviewer_user_id != current_user.id:
+            flash('Diese Bewertung kann nicht geändert werden.', 'danger')
+            return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+        existing.rating = form.rating.data
+        existing.comment = (form.comment.data or '').strip() or None
+        existing.updated_at = datetime.utcnow()
+    else:
+        db.session.add(CoachingReview(
+            coaching_id=coaching.id,
+            reviewer_user_id=current_user.id,
+            rating=form.rating.data,
+            comment=(form.comment.data or '').strip() or None,
+        ))
+    db.session.commit()
+    flash('Vielen Dank! Ihre Bewertung wurde gespeichert.', 'success')
+    return redirect(url_for('main.my_coachings', **my_coachings_filter_query_args()))
+
+
+@bp.route('/reviews/for-me')
+@login_required
+@permission_required('view_review')
+def coach_received_reviews():
+    page = request.args.get('page', 1, type=int)
+    period_arg = request.args.get('period', 'all')
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+    day = request.args.get('day', type=int)
+
+    query = CoachingReview.query.join(Coaching, CoachingReview.coaching_id == Coaching.id).filter(
+        Coaching.coach_id == current_user.id
+    )
+    query = filter_reviews_by_coaching_date(query, period_arg, year, month, day)
+    reviews = query.order_by(desc(CoachingReview.created_at)).paginate(page=page, per_page=20, error_out=False)
+
+    now = datetime.now(timezone.utc)
+    year_options = list(range(now.year, now.year - 6, -1))
+    month_options_list = [{'value': m, 'text': get_month_name_german(m)} for m in range(1, 13)]
+    day_options = list(range(1, 32))
+
+    filter_args = build_filter_args(period_arg, year, month, day)
+    return render_template(
+        'main/coach_received_reviews.html',
+        title='Bewertungen über mich',
+        reviews=reviews,
+        current_period=period_arg,
+        filter_year=year,
+        filter_month=month,
+        filter_day=day,
+        year_options=year_options,
+        month_options_list=month_options_list,
+        day_options=day_options,
+        filter_args=filter_args,
+        page_url=lambda p: url_for_paginated('main.coach_received_reviews', p, filter_args),
+        config=current_app.config
+    )
+
+
+@bp.route('/reviews/all')
+@login_required
+@permission_required('view_all_reviews')
+def all_coaching_reviews():
+    project_ids = get_allowed_project_ids_for_reviews()
+    if not project_ids:
+        flash('Kein Projekt für die Bewertungsübersicht verfügbar.', 'warning')
+        return redirect(url_for('main.index'))
+
+    page = request.args.get('page', 1, type=int)
+    period_arg = request.args.get('period', 'all')
+    year = request.args.get('year', type=int)
+    month = request.args.get('month', type=int)
+    day = request.args.get('day', type=int)
+    project_filter = request.args.get('project', type=int)
+
+    q = CoachingReview.query.join(Coaching, CoachingReview.coaching_id == Coaching.id).filter(
+        Coaching.project_id.in_(project_ids)
+    )
+    if project_filter and project_filter in project_ids:
+        q = q.filter(Coaching.project_id == project_filter)
+    q = filter_reviews_by_coaching_date(q, period_arg, year, month, day)
+    reviews = q.order_by(desc(CoachingReview.created_at)).paginate(page=page, per_page=25, error_out=False)
+
+    now = datetime.now(timezone.utc)
+    year_options = list(range(now.year, now.year - 6, -1))
+    month_options_list = [{'value': m, 'text': get_month_name_german(m)} for m in range(1, 13)]
+    day_options = list(range(1, 32))
+    all_projects = Project.query.filter(Project.id.in_(project_ids)).order_by(Project.name).all()
+
+    extra_proj = {}
+    if project_filter:
+        extra_proj['project'] = project_filter
+    filter_args = build_filter_args(period_arg, year, month, day, extra=extra_proj)
+    return render_template(
+        'main/all_coaching_reviews.html',
+        title='Alle Bewertungen',
+        reviews=reviews,
+        current_period=period_arg,
+        filter_year=year,
+        filter_month=month,
+        filter_day=day,
+        filter_project=project_filter,
+        year_options=year_options,
+        month_options_list=month_options_list,
+        day_options=day_options,
+        filter_projects=all_projects,
+        filter_args=filter_args,
+        page_url=lambda p: url_for_paginated('main.all_coaching_reviews', p, filter_args),
+        config=current_app.config
+    )
 
 
 # --- Add Coaching (with the permission restriction only) ---

@@ -1,6 +1,7 @@
 # app/forms.py
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField, SelectField, SelectMultipleField, IntegerField, TextAreaField, DateField
+from wtforms.widgets import HiddenInput
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from flask_login import current_user
 from sqlalchemy import false
@@ -364,3 +365,10 @@ class LeitfadenItemForm(FlaskForm):
             return
         if query.first():
             raise ValidationError('Diese Leitfaden-Bezeichnung existiert bereits.')
+
+
+class CoachingReviewForm(FlaskForm):
+    coaching_id = IntegerField(widget=HiddenInput(), validators=[DataRequired()])
+    rating = IntegerField('Bewertung (1–5 Sterne)', validators=[DataRequired(), NumberRange(min=1, max=5)])
+    comment = TextAreaField('Kommentar (optional)', validators=[Optional(), Length(max=2000)])
+    submit = SubmitField('Bewertung absenden')
