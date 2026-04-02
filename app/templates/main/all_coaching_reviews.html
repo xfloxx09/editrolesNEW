@@ -3,23 +3,43 @@
 {% block content %}
 <div class="container">
     <h2 class="mb-3">Alle Bewertungen</h2>
-    <p class="text-muted small">Übersicht der Mitarbeiter-Bewertungen für Coaches in Ihren Projekten (und ggf. nach gewähltem Projekt gefiltert).</p>
+    <p class="text-muted small">Filter nach Projekt, Team und Coach. Kommentare per „+“ einblenden.</p>
 
     <form method="get" class="mb-4">
-        <div class="form-row">
-            {% if filter_projects|length > 1 %}
-            <div class="col-md-3 mb-2">
-                <label class="small text-muted">Projekt</label>
+        <div class="form-row align-items-end">
+            {% if filter_projects %}
+            <div class="col-6 col-md-3 mb-2">
+                <label class="small text-muted mb-0">Projekt</label>
                 <select name="project" class="form-control form-control-sm">
-                    <option value="">Alle zugänglichen Projekte</option>
+                    <option value="">Alle Projekte</option>
                     {% for p in filter_projects %}
                         <option value="{{ p.id }}" {% if filter_project == p.id %}selected{% endif %}>{{ p.name }}</option>
                     {% endfor %}
                 </select>
             </div>
             {% endif %}
-            <div class="col-md-3 mb-2">
-                <label class="small text-muted">Zeitraum</label>
+            <div class="col-6 col-md-3 mb-2">
+                <label class="small text-muted mb-0">Team</label>
+                <select name="team" class="form-control form-control-sm">
+                    <option value="">Alle Teams</option>
+                    {% for t in filter_teams %}
+                        <option value="{{ t.id }}" {% if filter_team == t.id %}selected{% endif %}>{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-3 mb-2">
+                <label class="small text-muted mb-0">Coach</label>
+                <select name="coach" class="form-control form-control-sm">
+                    <option value="">Alle Coaches</option>
+                    {% for u in filter_coaches %}
+                        <option value="{{ u.id }}" {% if filter_coach == u.id %}selected{% endif %}>{{ u.coach_display_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="form-row align-items-end">
+            <div class="col-6 col-md-3 mb-2">
+                <label class="small text-muted mb-0">Zeitraum</label>
                 <select name="period" class="form-control form-control-sm">
                     <option value="all" {% if current_period == 'all' %}selected{% endif %}>Alle</option>
                     <option value="today" {% if current_period == 'today' %}selected{% endif %}>Heute</option>
@@ -30,8 +50,8 @@
                     <option value="last_month" {% if current_period == 'last_month' %}selected{% endif %}>Letzter Monat</option>
                 </select>
             </div>
-            <div class="col-md-2 mb-2">
-                <label class="small text-muted">Jahr (optional)</label>
+            <div class="col-6 col-md-2 mb-2">
+                <label class="small text-muted mb-0">Jahr</label>
                 <select name="year" class="form-control form-control-sm">
                     <option value="">—</option>
                     {% for y in year_options %}
@@ -39,8 +59,8 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2 mb-2">
-                <label class="small text-muted">Monat</label>
+            <div class="col-6 col-md-2 mb-2">
+                <label class="small text-muted mb-0">Monat</label>
                 <select name="month" class="form-control form-control-sm">
                     <option value="">—</option>
                     {% for m in month_options_list %}
@@ -48,8 +68,8 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-2 mb-2">
-                <label class="small text-muted">Tag</label>
+            <div class="col-6 col-md-2 mb-2">
+                <label class="small text-muted mb-0">Tag</label>
                 <select name="day" class="form-control form-control-sm">
                     <option value="">—</option>
                     {% for d in day_options %}
@@ -57,9 +77,7 @@
                     {% endfor %}
                 </select>
             </div>
-        </div>
-        <div class="form-row">
-            <div class="col-md-12 mb-2">
+            <div class="col-12 col-md-3 mb-2">
                 <button type="submit" class="btn btn-sm telekom-button mr-2">Filtern</button>
                 <a href="{{ url_for('main.all_coaching_reviews') }}" class="btn btn-sm btn-secondary">Zurücksetzen</a>
             </div>
@@ -73,10 +91,11 @@
                     <tr>
                         <th>Coaching-Datum</th>
                         <th>Projekt</th>
+                        <th>Team</th>
                         <th>Coach</th>
                         <th>Mitarbeiter</th>
                         <th>Bewertung</th>
-                        <th>Kommentar</th>
+                        <th class="text-center" style="width:3rem;">Notiz</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -85,11 +104,25 @@
                         <tr>
                             <td>{% if c %}{{ c.coaching_date|athens_time }}{% else %}-{% endif %}</td>
                             <td>{% if c and c.project %}{{ c.project.name }}{% else %}—{% endif %}</td>
-                            <td>{% if c and c.coach %}{{ c.coach.username }}{% else %}—{% endif %}</td>
+                            <td>{% if c and c.team_member and c.team_member.team %}{{ c.team_member.team.name }}{% else %}—{% endif %}</td>
+                            <td>{% if c and c.coach %}{{ c.coach.coach_display_name }}{% else %}—{% endif %}</td>
                             <td>{% if c and c.team_member %}{{ c.team_member.name }}{% else %}—{% endif %}</td>
                             <td>{{ rev.rating }}/5</td>
-                            <td>{% if rev.comment %}{{ rev.comment }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td class="text-center">
+                                {% if rev.comment %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary btn-review-note py-0 px-2" data-toggle="collapse" data-target="#allRevNote{{ rev.id }}" aria-expanded="false" title="Kommentar">+</button>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
                         </tr>
+                        {% if rev.comment %}
+                        <tr>
+                            <td colspan="7" class="p-0 border-0">
+                                <div class="collapse" id="allRevNote{{ rev.id }}">
+                                    <div class="review-comment-panel small m-2">{{ rev.comment }}</div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
                     {% endfor %}
                 </tbody>
             </table>
@@ -116,7 +149,7 @@
         </nav>
         {% endif %}
     {% else %}
-        <p class="text-muted">Keine Bewertungen in diesem Zeitraum.</p>
+        <p class="text-muted">Keine Bewertungen mit diesen Filtern.</p>
     {% endif %}
 </div>
 {% endblock %}

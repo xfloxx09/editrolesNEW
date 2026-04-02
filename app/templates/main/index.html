@@ -312,7 +312,7 @@
                         {% if coaching.employee_review %}
                             {{ coaching.employee_review.rating }}/5
                             {% if coaching.employee_review.comment %}
-                                <div class="review-comment-full text-muted small d-block">— {{ coaching.employee_review.comment }}</div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ml-1 align-baseline btn-review-note py-0 px-2" data-toggle="collapse" data-target="#dashCoachingNote{{ coaching.id }}" aria-expanded="false" title="Kommentar">+</button>
                             {% endif %}
                         {% else %}
                             <span class="text-muted">—</span>
@@ -347,6 +347,15 @@
                     {% endif %}
                 </td>
             </tr>
+            {% if coached_self and coaching.employee_review and coaching.employee_review.comment %}
+            <tr>
+                <td colspan="{{ 14 if can_leave_review else 12 }}" class="p-0 border-0">
+                    <div class="collapse" id="dashCoachingNote{{ coaching.id }}">
+                        <div class="review-comment-panel small text-muted m-2">{{ coaching.employee_review.comment }}</div>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
             <tr class="collapse" id="coachingDetails{{ coaching.id }}">
                 <td colspan="{{ 14 if can_leave_review else 12 }}">
                     <div class="detail-card">

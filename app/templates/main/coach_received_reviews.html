@@ -62,7 +62,7 @@
                         <th>Mitarbeiter</th>
                         <th>Thema</th>
                         <th>Bewertung</th>
-                        <th>Kommentar</th>
+                        <th class="text-center" style="width:3rem;">Notiz</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -73,8 +73,21 @@
                             <td>{% if c and c.team_member %}{{ c.team_member.name }}{% else %}-{% endif %}</td>
                             <td>{% if c %}{{ c.coaching_subject or '—' }}{% else %}-{% endif %}</td>
                             <td>{{ rev.rating }}/5</td>
-                            <td>{% if rev.comment %}{{ rev.comment }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td class="text-center">
+                                {% if rev.comment %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary btn-review-note py-0 px-2" data-toggle="collapse" data-target="#coachRevNote{{ rev.id }}" aria-expanded="false" title="Kommentar">+</button>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            </td>
                         </tr>
+                        {% if rev.comment %}
+                        <tr>
+                            <td colspan="5" class="p-0 border-0">
+                                <div class="collapse" id="coachRevNote{{ rev.id }}">
+                                    <div class="review-comment-panel small m-2">{{ rev.comment }}</div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endif %}
                     {% endfor %}
                 </tbody>
             </table>

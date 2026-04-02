@@ -512,12 +512,40 @@ def all_coaching_reviews():
     month = request.args.get('month', type=int)
     day = request.args.get('day', type=int)
     project_filter = request.args.get('project', type=int)
+    if project_filter and project_filter not in project_ids:
+        project_filter = None
+
+    team_filter = request.args.get('team', type=int)
+    coach_filter = request.args.get('coach', type=int)
+
+    if team_filter:
+        t = Team.query.filter_by(id=team_filter).first()
+        if not t or t.project_id not in project_ids:
+            team_filter = None
+        elif project_filter and t.project_id != project_filter:
+            team_filter = None
+
+    if coach_filter:
+        cq_exists = Coaching.query.filter(
+            Coaching.coach_id == coach_filter,
+            Coaching.project_id.in_(project_ids),
+        )
+        if project_filter:
+            cq_exists = cq_exists.filter(Coaching.project_id == project_filter)
+        if not cq_exists.first():
+            coach_filter = None
 
     q = CoachingReview.query.join(Coaching, CoachingReview.coaching_id == Coaching.id).filter(
         Coaching.project_id.in_(project_ids)
     ).filter(CoachingReview.visible_to_manager.is_(True))
-    if project_filter and project_filter in project_ids:
+    if project_filter:
         q = q.filter(Coaching.project_id == project_filter)
+    if team_filter:
+        q = q.join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(
+            TeamMember.team_id == team_filter
+        )
+    if coach_filter:
+        q = q.filter(Coaching.coach_id == coach_filter)
     q = filter_reviews_by_coaching_date(q, period_arg, year, month, day)
     reviews = q.order_by(desc(CoachingReview.created_at)).paginate(page=page, per_page=25, error_out=False)
 
@@ -527,10 +555,31 @@ def all_coaching_reviews():
     day_options = list(range(1, 32))
     all_projects = Project.query.filter(Project.id.in_(project_ids)).order_by(Project.name).all()
 
-    extra_proj = {}
+    team_project_scope = [project_filter] if project_filter else project_ids
+    filter_teams = (
+        Team.query.filter(Team.project_id.in_(team_project_scope), Team.name != ARCHIV_TEAM_NAME)
+        .order_by(Team.name)
+        .all()
+    )
+
+    coach_q = (
+        db.session.query(User)
+        .options(selectinload(User.team_members))
+        .join(Coaching, Coaching.coach_id == User.id)
+        .filter(Coaching.project_id.in_(project_ids), Coaching.coach_id.isnot(None))
+    )
     if project_filter:
-        extra_proj['project'] = project_filter
-    filter_args = build_filter_args(period_arg, year, month, day, extra=extra_proj)
+        coach_q = coach_q.filter(Coaching.project_id == project_filter)
+    filter_coaches = coach_q.distinct().order_by(User.username).all()
+
+    extra_filters = {}
+    if project_filter:
+        extra_filters['project'] = project_filter
+    if team_filter:
+        extra_filters['team'] = team_filter
+    if coach_filter:
+        extra_filters['coach'] = coach_filter
+    filter_args = build_filter_args(period_arg, year, month, day, extra=extra_filters)
     return render_template(
         'main/all_coaching_reviews.html',
         title='Alle Bewertungen',
@@ -540,6 +589,10 @@ def all_coaching_reviews():
         filter_month=month,
         filter_day=day,
         filter_project=project_filter,
+        filter_team=team_filter,
+        filter_coach=coach_filter,
+        filter_teams=filter_teams,
+        filter_coaches=filter_coaches,
         year_options=year_options,
         month_options_list=month_options_list,
         day_options=day_options,
