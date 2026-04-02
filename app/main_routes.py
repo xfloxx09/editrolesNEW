@@ -447,7 +447,7 @@ def pl_qm_dashboard():
         return redirect(url_for('main.index'))
     project = Project.query.get(project_id)
     teams = Team.query.filter_by(project_id=project_id).order_by(Team.name).all()
-    members = TeamMember.query.join(Team).filter(Team.project_id == project_id).order_by(Team.name, TeamMember.name).all()
+    members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(Team.project_id == project_id).order_by(Team.name, TeamMember.name).all()
     coachings = Coaching.query.filter_by(project_id=project_id).order_by(desc(Coaching.coaching_date)).limit(50).all()
     return render_template('main/pl_qm_dashboard.html', project=project, teams=teams, members=members, coachings=coachings, config=current_app.config)
 
