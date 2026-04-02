@@ -11,7 +11,6 @@ import calendar
 
 bp = Blueprint('main', __name__)
 
-# Helper to get the active project for the current user
 def get_visible_project_id():
     if current_user.is_authenticated:
         if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
@@ -88,7 +87,97 @@ def profile():
     return render_template('main/profile.html', form=form, config=current_app.config)
 
 
-# --- Coaching Form (add-coaching) – this is the only page that matters ---
+# --- Coaching Dashboard (for coaches) ---
+@bp.route('/coaching-dashboard')
+@login_required
+@permission_required('view_coaching_dashboard')
+def coaching_dashboard():
+    # Get the coach's own team member (if any)
+    team_member = current_user.team_members[0] if current_user.team_members else None
+    page = request.args.get('page', 1, type=int)
+    period_arg = request.args.get('period', 'all')
+    team_arg = request.args.get('team', "all")
+    search_arg = request.args.get('search', default="", type=str).strip()
+    member_filter = request.args.get('member_id', type=int)
+    project_filter = get_visible_project_id()
+
+    coachings_query = Coaching.query \
+        .join(TeamMember, Coaching.team_member_id == TeamMember.id) \
+        .join(User, Coaching.coach_id == User.id, isouter=True) \
+        .join(Team, TeamMember.team_id == Team.id)
+
+    # Restrict to own team if the permission is present
+    if current_user.has_permission('coach_own_team_only') and team_member:
+        coachings_query = coachings_query.filter(TeamMember.team_id == team_member.team_id)
+        # Override team_arg to show only own team in filters
+        team_arg = str(team_member.team_id)
+    else:
+        # Original behaviour: exclude ARCHIV team when "all" is selected
+        if team_arg == 'all':
+            coachings_query = coachings_query.filter(Team.name != ARCHIV_TEAM_NAME)
+
+    if project_filter:
+        coachings_query = coachings_query.filter(Coaching.project_id == project_filter)
+
+    start_date, end_date = calculate_date_range(period_arg)
+    if start_date:
+        coachings_query = coachings_query.filter(Coaching.coaching_date >= start_date)
+    if end_date:
+        coachings_query = coachings_query.filter(Coaching.coaching_date <= end_date)
+
+    if team_arg != 'all' and team_arg.isdigit():
+        coachings_query = coachings_query.filter(Team.id == int(team_arg))
+
+    if member_filter:
+        coachings_query = coachings_query.filter(Coaching.team_member_id == member_filter)
+
+    if search_arg:
+        search_pattern = f"%{search_arg}%"
+        coachings_query = coachings_query.filter(
+            or_(
+                TeamMember.name.ilike(search_pattern),
+                User.username.ilike(search_pattern),
+                Coaching.coaching_subject.ilike(search_pattern),
+                Coaching.coach_notes.ilike(search_pattern)
+            )
+        )
+
+    coachings_paginated = coachings_query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
+
+    # Prepare filter dropdown lists (respect the permission)
+    if current_user.has_permission('coach_own_team_only') and team_member:
+        # Only show the coach's own team and its members
+        all_teams = [team_member.team]
+        all_team_members = TeamMember.query.filter_by(team_id=team_member.team_id).order_by(TeamMember.name).all()
+        all_coaches = [current_user]
+    else:
+        all_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
+        all_team_members = TeamMember.query.join(Team).filter(Team.name != ARCHIV_TEAM_NAME).order_by(TeamMember.name).all()
+        all_coaches = User.query.filter(User.coachings_done.any()).distinct().order_by(User.username).all()
+
+    # Month options for period filter
+    now = datetime.now(timezone.utc)
+    current_year = now.year
+    previous_year = current_year - 1
+    month_options = []
+    for m in range(12, 0, -1):
+        month_options.append({'value': f"{previous_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {previous_year}"})
+    for m in range(now.month, 0, -1):
+        month_options.append({'value': f"{current_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {current_year}"})
+
+    return render_template('main/coaching_dashboard.html',
+                           coachings=coachings_paginated,
+                           all_teams=all_teams,
+                           all_team_members=all_team_members,
+                           all_coaches=all_coaches,
+                           month_options=month_options,
+                           current_period=period_arg,
+                           current_team=team_arg,
+                           current_member=member_filter,
+                           current_search=search_arg,
+                           config=current_app.config)
+
+
 @bp.route('/add-coaching', methods=['GET', 'POST'])
 @login_required
 @permission_required('add_coaching')
@@ -137,8 +226,7 @@ def add_coaching():
         db.session.add(coaching)
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
-        # Redirect to the user's coaching list (or wherever you want)
-        return redirect(url_for('main.index'))  # adjust if you have a different page
+        return redirect(url_for('main.coaching_dashboard'))
 
     assigned_id = request.args.get('assigned_id', type=int)
     if assigned_id:
@@ -164,7 +252,7 @@ def edit_coaching(coaching_id):
     coaching = Coaching.query.get_or_404(coaching_id)
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Sie haben keine Berechtigung, dieses Coaching zu bearbeiten.', 'danger')
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.coaching_dashboard'))
 
     form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=True, project_id=coaching.project_id)
@@ -175,7 +263,7 @@ def edit_coaching(coaching_id):
             coaching.tcap_id = None
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.coaching_dashboard'))
 
     return render_template('main/add_coaching.html', form=form, is_edit_mode=True, coaching=coaching, config=current_app.config)
 
@@ -187,11 +275,11 @@ def delete_coaching(coaching_id):
     coaching = Coaching.query.get_or_404(coaching_id)
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Keine Berechtigung.', 'danger')
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.coaching_dashboard'))
     db.session.delete(coaching)
     db.session.commit()
     flash('Coaching gelöscht.', 'success')
-    return redirect(url_for('main.index'))
+    return redirect(url_for('main.coaching_dashboard'))
 
 
 # --- Workshop routes ---
