@@ -4,7 +4,7 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField, Selec
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from app.models import User, Team, TeamMember, Project, Role, Permission
 from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
-
+from flask_login import current_user
 
 class LoginForm(FlaskForm):
     username = StringField('Benutzername', validators=[DataRequired("Benutzername ist erforderlich.")])
