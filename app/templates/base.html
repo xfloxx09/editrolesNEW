@@ -19,7 +19,7 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
-                    {% if has_perm('view_own_coachings') %}
+                    {% if has_perm('view_own_coachings') or has_perm('leave_coaching_review') %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.my_coachings') }}">Meine Coachings</a></li>
                     {% endif %}
                     {% if has_perm('view_review') %}

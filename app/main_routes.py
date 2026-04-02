@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm
-from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
+from app.utils import role_required, permission_required, any_permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from datetime import datetime, timezone, timedelta, date
 import calendar
 
@@ -321,7 +321,7 @@ def coaching_dashboard():
 
 @bp.route('/my-coachings')
 @login_required
-@permission_required('view_own_coachings')
+@any_permission_required('view_own_coachings', 'leave_coaching_review')
 def my_coachings():
     page = request.args.get('page', 1, type=int)
     period_arg = request.args.get('period', 'all')

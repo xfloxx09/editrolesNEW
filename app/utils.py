@@ -45,6 +45,23 @@ def permission_required(permission_name):
         return decorated_function
     return decorator
 
+
+def any_permission_required(*permission_names):
+    """User must have at least one of the listed permissions."""
+
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                flash('Bitte melden Sie sich an.', 'warning')
+                return redirect(url_for('auth.login'))
+            if not any(current_user.has_permission(name) for name in permission_names):
+                flash('Sie haben keine Berechtigung für diese Aktion.', 'danger')
+                return redirect(url_for('main.index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
 def get_or_create_archiv_team():
     archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
     if not archiv_team:
