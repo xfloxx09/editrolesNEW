@@ -7,7 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, current_user
 from flask_migrate import Migrate
 from sqlalchemy import inspect, text
-from config import Config
+from config import Confi
 
 db = SQLAlchemy()
 login_manager = LoginManager()
