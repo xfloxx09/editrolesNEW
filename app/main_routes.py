@@ -505,10 +505,9 @@ def coaching_dashboard():
         ):
             chart_filters.append(Team.id == tid)
 
-    archiv_team = get_or_create_archiv_team()
-    chart_filters.append(TeamMember.team_id != archiv_team.id)
-
     list_filters = list(chart_filters)
+    archiv_team = get_or_create_archiv_team()
+    list_filters.append(TeamMember.team_id != archiv_team.id)
 
     if search_arg:
         pattern = f"%{search_arg}%"
@@ -1274,10 +1273,15 @@ def pl_qm_dashboard():
     project = Project.query.get(project_id)
     all_teams = (
         Team.query.filter_by(project_id=project_id)
-        .filter(Team.name != ARCHIV_TEAM_NAME, Team.active_for_coaching.is_(True))
+        .filter(
+            Team.name != ARCHIV_TEAM_NAME,
+            Team.active_for_coaching.is_(True),
+            exists().where(TeamMember.team_id == Team.id),
+        )
         .order_by(Team.name)
         .all()
     )
+    allowed_pl_qm_team_ids = {t.id for t in all_teams}
 
     # Compute per-team stats
     teams_stats = []
@@ -1332,14 +1336,7 @@ def pl_qm_dashboard():
     members_data_for_cards = []
     if selected_team_id_filter and selected_team_id_filter.isdigit():
         selected_team_object_for_cards = Team.query.get(int(selected_team_id_filter))
-        if (
-            selected_team_object_for_cards
-            and (
-                not selected_team_object_for_cards.active_for_coaching
-                or selected_team_object_for_cards.project_id != project_id
-                or selected_team_object_for_cards.name == ARCHIV_TEAM_NAME
-            )
-        ):
+        if not selected_team_object_for_cards or selected_team_object_for_cards.id not in allowed_pl_qm_team_ids:
             selected_team_object_for_cards = None
         if selected_team_object_for_cards:
             team_members = TeamMember.query.filter_by(team_id=selected_team_object_for_cards.id).order_by(TeamMember.name).all()
