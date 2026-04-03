@@ -20,7 +20,7 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <strong>Coach:</strong> {{ report.assignment.coach.username }}<br>
+                    <strong>Coach:</strong> {{ report.assignment.coach.coach_display_name }}<br>
                     <strong>Teammitglied:</strong> {{ report.assignment.team_member.name }} (Team: {{ report.assignment.team_member.team.name }})<br>
                     <strong>Deadline:</strong> {{ report.assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}<br>
                     <strong>Erwartete Coachings:</strong> {{ report.coachings_expected }}<br>
@@ -58,7 +58,7 @@
                         {% for coaching in report.coachings %}
                         <tr>
                             <td>{{ coaching.coaching_date|athens_time('%d.%m.%Y %H:%M') }}</td>
-                            <td>{{ coaching.coach.username }}</td>
+                            <td>{{ coaching.coach.coach_display_name if coaching.coach else '—' }}</td>
                             <td>{{ coaching.coaching_subject }}</td>
                             <td>{{ coaching.performance_mark }}/10</td>
                             <td>{{ coaching.overall_score }}%</td>

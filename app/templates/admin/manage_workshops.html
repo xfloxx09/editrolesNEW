@@ -74,7 +74,7 @@
                         <td><input type="checkbox" name="workshop_ids" value="{{ workshop.id }}" class="workshop-checkbox"></td>
                         <td>{{ workshop.workshop_date|athens_time('%d.%m.%y %H:%M') }}</td>
                         <td>{{ workshop.title }}</td>
-                        <td>{{ workshop.coach.username if workshop.coach else 'N/A' }}</td>
+                        <td>{{ workshop.coach.coach_display_name if workshop.coach else 'N/A' }}</td>
                         <td>
                             <button class="btn btn-sm btn-info" type="button" data-toggle="collapse" data-target="#participants{{ workshop.id }}" aria-expanded="false">
                                 {{ workshop.participants|length }} Teilnehmer

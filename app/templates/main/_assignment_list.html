@@ -19,7 +19,7 @@
                     <select name="coach" class="form-control form-control-sm">
                         <option value="">Alle Coaches</option>
                         {% for coach in all_coaches %}
-                            <option value="{{ coach.id }}" {% if coach_filter == coach.id %}selected{% endif %}>{{ coach.username }} ({{ coach.role_name }})</option>
+                            <option value="{{ coach.id }}" {% if coach_filter == coach.id %}selected{% endif %}>{{ coach.coach_display_name }} ({{ coach.role_name }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -81,7 +81,7 @@
                         <tr>
                             <td>{{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}</td>
                             <td>{{ assignment.team_member.name }} ({{ assignment.team_member.team.name }})</td>
-                            <td>{{ assignment.coach.username }}</td>
+                            <td>{{ assignment.coach.coach_display_name }}</td>
                             <td>{{ assignment.expected_coaching_count }}</td>
                             <td>
                                 <div class="progress" style="height: 10px; width: 100px;">

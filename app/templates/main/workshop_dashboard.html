@@ -88,7 +88,7 @@
                     <tr>
                         <td>{{ workshop.workshop_date|athens_time('%d.%m.%y %H:%M') }}</td>
                         <td>{{ workshop.title }}</td>
-                        <td>{{ workshop.coach.username if workshop.coach else 'N/A' }}</td>
+                        <td>{{ workshop.coach.coach_display_name if workshop.coach else 'N/A' }}</td>
                         <td>{{ workshop.participants|length }}</td>
                         <td>{{ workshop.overall_rating }}/10</td>
                         <td>{{ workshop.time_spent }}</td>

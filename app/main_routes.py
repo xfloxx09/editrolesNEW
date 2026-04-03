@@ -1781,9 +1781,10 @@ def assigned_coachings():
     ).distinct().all()
     coach_id_list = [r[0] for r in coach_id_rows if r[0]]
     all_coaches = (
-        User.query.filter(User.id.in_(coach_id_list)).order_by(User.username).all()
+        list(User.query.filter(User.id.in_(coach_id_list)).all())
         if coach_id_list else []
     )
+    all_coaches.sort(key=lambda u: (u.coach_display_name or '').lower())
 
     all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
@@ -1900,7 +1901,7 @@ def api_assignment_coaches():
             mid = None
     coaches = users_for_assignment_coach_dropdown(project_id, mid)
     return jsonify([
-        {'id': u.id, 'label': f"{u.username} ({u.role_name})"}
+        {'id': u.id, 'label': f"{u.coach_display_name} ({u.role_name})"}
         for u in coaches
     ])
 

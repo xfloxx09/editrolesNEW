@@ -164,6 +164,7 @@ def users_for_assignment_coach_dropdown(project_id, team_member_id=None):
         u for u in User.query.order_by(User.username).all()
         if user_eligible_assignable_coach(u, project_id, team_member_id)
     ]
+    eligible.sort(key=lambda u: (u.coach_display_name or '').lower())
     return eligible
 
 
