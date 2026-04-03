@@ -117,7 +117,7 @@
             <div class="form-group mr-2">
                 <label for="period_filter" class="mr-2">Zeitraum:</label>
                 <select name="period" id="period_filter" class="form-control custom-select form-control-sm">
-                    <option value="all" {% if not current_period_filter or current_period_filter == 'all' %}selected{% endif %}>Alles</option>
+                    <option value="all" {% if current_period_filter == 'all' %}selected{% endif %}>Alles</option>
                     <option value="7days" {% if current_period_filter == '7days' %}selected{% endif %}>Letzte 7 Tage</option>
                     <option value="30days" {% if current_period_filter == '30days' %}selected{% endif %}>Letzte 30 Tage</option>
                     <option value="current_quarter" {% if current_period_filter == 'current_quarter' %}selected{% endif %}>Dieses Quartal</option>
@@ -126,7 +126,7 @@
                     <optgroup label="📅 Monate">
                         {% for month in month_options %}
                         <option value="{{ month.value }}" {% if current_period_filter == month.value %}selected{% endif %}>
-                            {{ month.text }} ({{ month.count }})
+                            {{ month.text }}
                         </option>
                         {% endfor %}
                     </optgroup>

@@ -177,6 +177,32 @@ def calculate_date_range(period_arg):
         first_of_last_month = last_of_last_month.replace(day=1)
         start = datetime.combine(first_of_last_month, datetime.min.time())
         end = datetime.combine(last_of_last_month, datetime.max.time())
+    elif period_arg == '7days':
+        start_day = today - timedelta(days=6)
+        start = datetime.combine(start_day, datetime.min.time())
+        end = datetime.combine(today, datetime.max.time())
+    elif period_arg == '30days':
+        start_day = today - timedelta(days=29)
+        start = datetime.combine(start_day, datetime.min.time())
+        end = datetime.combine(today, datetime.max.time())
+    elif period_arg == 'current_quarter':
+        q = (today.month - 1) // 3
+        first_month = q * 3 + 1
+        start = datetime.combine(date(today.year, first_month, 1), datetime.min.time())
+        end = datetime.combine(today, datetime.max.time())
+    elif period_arg == 'current_year':
+        start = datetime.combine(date(today.year, 1, 1), datetime.min.time())
+        end = datetime.combine(today, datetime.max.time())
+    elif period_arg and len(period_arg) == 7 and period_arg[4] == '-':
+        try:
+            y = int(period_arg[0:4])
+            mo = int(period_arg[5:7])
+            last_d = calendar.monthrange(y, mo)[1]
+            start = datetime.combine(date(y, mo, 1), datetime.min.time())
+            end = datetime.combine(date(y, mo, last_d), datetime.max.time())
+        except ValueError:
+            start = None
+            end = None
     else:
         start = None
         end = None
@@ -444,7 +470,7 @@ def profile():
 @permission_required('view_coaching_dashboard')
 def coaching_dashboard():
     page = request.args.get('page', 1, type=int)
-    period_arg = request.args.get('period', 'all')
+    period_arg = request.args.get('period', '30days')
     team_arg = request.args.get('team', 'all')
     search_arg = request.args.get('search', default='', type=str).strip()
     project_filter = request.args.get('project', type=int)
@@ -452,26 +478,26 @@ def coaching_dashboard():
     sees_all_teams = _user_sees_all_teams_coaching_dashboard()
     my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else []
 
-    # Chart/KPI filters: project scope only (no „my teams“ restriction). Liste unten ist stärker gefiltert.
-    chart_filters = []
+    # Scope filters: Projekt + Zeitraum + Team-Dropdown. KPI-Karten zählen inkl. ARCHIV; Grafiken & Coaching-Liste ohne ARCHIV-Coachees.
+    scope_filters = []
     if accessible is None:
         if project_filter:
-            chart_filters.append(Coaching.project_id == project_filter)
+            scope_filters.append(Coaching.project_id == project_filter)
     elif not accessible:
-        chart_filters.append(Coaching.project_id == -1)
+        scope_filters.append(Coaching.project_id == -1)
     else:
         if project_filter is not None and project_filter not in accessible:
             project_filter = None
         if project_filter is not None:
-            chart_filters.append(Coaching.project_id == project_filter)
+            scope_filters.append(Coaching.project_id == project_filter)
         elif len(accessible) == 1:
-            chart_filters.append(Coaching.project_id == accessible[0])
+            scope_filters.append(Coaching.project_id == accessible[0])
         else:
             vid = get_visible_project_id()
             if vid and vid in accessible:
-                chart_filters.append(Coaching.project_id == vid)
+                scope_filters.append(Coaching.project_id == vid)
             else:
-                chart_filters.append(Coaching.project_id == accessible[0])
+                scope_filters.append(Coaching.project_id == accessible[0])
 
     if accessible is None:
         dashboard_project_id = project_filter
@@ -488,9 +514,9 @@ def coaching_dashboard():
 
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
-        chart_filters.append(Coaching.coaching_date >= start_date)
+        scope_filters.append(Coaching.coaching_date >= start_date)
     if end_date:
-        chart_filters.append(Coaching.coaching_date <= end_date)
+        scope_filters.append(Coaching.coaching_date <= end_date)
 
     if team_arg != 'all' and team_arg.isdigit():
         tid = int(team_arg)
@@ -503,10 +529,12 @@ def coaching_dashboard():
             and (accessible is None or team_row.project_id in accessible)
             and (dashboard_project_id is None or team_row.project_id == dashboard_project_id)
         ):
-            chart_filters.append(Team.id == tid)
+            scope_filters.append(Team.id == tid)
 
-    list_filters = list(chart_filters)
     archiv_team = get_or_create_archiv_team()
+    graph_filters = scope_filters + [TeamMember.team_id != archiv_team.id]
+
+    list_filters = list(scope_filters)
     list_filters.append(TeamMember.team_id != archiv_team.id)
 
     if search_arg:
@@ -551,7 +579,7 @@ def coaching_dashboard():
         .join(TeamMember, Team.id == TeamMember.team_id)
         .join(Coaching, TeamMember.id == Coaching.team_member_id)
         .outerjoin(User, Coaching.coach_id == User.id)
-        .filter(*chart_filters)
+        .filter(*graph_filters)
         .distinct()
         .all()
     )
@@ -560,7 +588,7 @@ def coaching_dashboard():
     chart_total_time = []
     chart_coachings_count = []
     for team in teams_for_charts:
-        team_filters = [TeamMember.team_id == team.id] + chart_filters
+        team_filters = [TeamMember.team_id == team.id] + graph_filters
         stats = (
             db.session.query(
                 db.func.avg(Coaching.performance_mark),
@@ -584,7 +612,7 @@ def coaching_dashboard():
         .join(TeamMember, Coaching.team_member_id == TeamMember.id)
         .join(Team, TeamMember.team_id == Team.id)
         .outerjoin(User, Coaching.coach_id == User.id)
-        .filter(*chart_filters)
+        .filter(*graph_filters)
         .group_by(Coaching.coaching_subject)
         .all()
     )
@@ -597,7 +625,7 @@ def coaching_dashboard():
         .join(TeamMember, Coaching.team_member_id == TeamMember.id)
         .join(Team, TeamMember.team_id == Team.id)
         .outerjoin(User, Coaching.coach_id == User.id)
-        .filter(*chart_filters)
+        .filter(*scope_filters)
         .first()
     )
     global_total_coachings_count = global_stats[0] or 0
