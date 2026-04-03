@@ -1657,26 +1657,34 @@ def sync_from_csv():
                             db.session.add(team)
                             created_teams += 1
 
-                    active_str = row.get(mapping.get('active_status', ''), '').strip() if mapping.get('active_status') else '1'
-                    is_active = active_str in ['1', 'true', 'True', 'aktiv', 'yes']
+                    # PLT aktiv?: nur exakt "1" (oder "1.0" aus Excel) = im Team; alles andere + leer + Spalte nicht gemappt = Archiv
+                    active_col = mapping.get('active_status')
+                    if active_col:
+                        raw_active = row.get(active_col, '')
+                        active_str = str(raw_active).strip() if raw_active is not None else ''
+                    else:
+                        active_str = ''
+                    is_active = active_str == '1' or active_str == '1.0'
 
                     team_member = TeamMember.query.filter_by(pylon=pylon).first()
 
                     if team_member:
-                        if not is_active and team_member.team_id != archiv_team.id:
-                            team_member.original_team_id = team_member.team_id
-                            team_member.original_project_id = team_member.team.project_id
-                            team_member.team_id = archiv_team.id
-                            archived_members += 1
-                        elif is_active and team_member.team_id == archiv_team.id:
-                            if team_member.original_team_id:
-                                team_member.team_id = team_member.original_team_id
-                                team_member.original_team_id = None
-                                team_member.original_project_id = None
+                        if not is_active:
+                            if team_member.team_id != archiv_team.id:
+                                team_member.original_team_id = team_member.team_id
+                                team_member.original_project_id = team_member.team.project_id if team_member.team else None
+                                team_member.team_id = archiv_team.id
+                                archived_members += 1
+                        else:
+                            if team_member.team_id == archiv_team.id:
+                                if team_member.original_team_id:
+                                    team_member.team_id = team_member.original_team_id
+                                    team_member.original_team_id = None
+                                    team_member.original_project_id = None
+                                else:
+                                    team_member.team_id = team.id
                             else:
                                 team_member.team_id = team.id
-                        elif is_active:
-                            team_member.team_id = team.id
 
                         team_member.name = full_name
                         if plt_id is not None:
@@ -1693,9 +1701,20 @@ def sync_from_csv():
                                 user.role_id = role.id
                                 db.session.add(user)
                     else:
+                        if is_active:
+                            new_tid = team.id
+                            orig_tid = None
+                            orig_pid = None
+                        else:
+                            new_tid = archiv_team.id
+                            orig_tid = team.id
+                            orig_pid = project.id
+                            archived_members += 1
                         team_member = TeamMember(
                             name=full_name,
-                            team_id=team.id,
+                            team_id=new_tid,
+                            original_team_id=orig_tid,
+                            original_project_id=orig_pid,
                             pylon=pylon,
                             plt_id=plt_id,
                             ma_kennung=ma_kennung,
