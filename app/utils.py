@@ -39,14 +39,30 @@ def iter_relationship(coll):
         yield item
 
 
+def _archiv_team_id():
+    t = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
+    return t.id if t else None
+
+
+def _is_live_team_in_project(team, project_id, archiv_id):
+    """Real project team (not ARCHIV) suitable for coaching context."""
+    if not team or team.project_id != project_id:
+        return False
+    if team.name == ARCHIV_TEAM_NAME:
+        return False
+    if archiv_id is not None and team.id == archiv_id:
+        return False
+    if not team.active_for_coaching:
+        return False
+    return True
+
+
 def user_eligible_assignable_coach(user, project_id, team_member_id=None):
     """
     Users who may be chosen as coach when creating an AssignedCoaching in project_id.
 
-    Includes: ``coach`` permission, primary project match, extra user projects,
-    leads any team in the project, ``multiple_teams`` with a TeamMember row in the project,
-    optional legacy ``team_id_if_leader``, or (if team_member_id given) is a leader of
-    that member's team.
+    Excludes ties that only exist via ARCHIV or inactive (``active_for_coaching``) teams.
+    ``coach_own_team_only`` requires a selected coachee on the same live team / led team.
     """
     if not user or not user.role:
         return False
@@ -54,37 +70,100 @@ def user_eligible_assignable_coach(user, project_id, team_member_id=None):
         return False
     if user.role_name == ROLE_ADMIN:
         return False
+
+    archiv_id = _archiv_team_id()
     pids = {project_id}
+
+    def live_proj(team):
+        return _is_live_team_in_project(team, project_id, archiv_id)
+
+    linked = False
     if user.project_id in pids:
-        return True
+        linked = True
     for p in iter_relationship(user.projects):
         if p.id in pids:
-            return True
+            linked = True
+            break
+
     for team in iter_relationship(user.teams_led):
-        if team.project_id in pids:
-            return True
+        if live_proj(team):
+            linked = True
+            break
+
     if user.has_permission('multiple_teams'):
         for tm in user.team_members:
-            if tm.team and tm.team.project_id in pids:
-                return True
+            if tm.team and live_proj(tm.team):
+                linked = True
+                break
+
     tid = getattr(user, 'team_id_if_leader', None)
     if tid:
         t = db.session.get(Team, tid)
-        if t and t.project_id in pids:
-            return True
+        if live_proj(t):
+            linked = True
+
+    leader_of_target = False
     if team_member_id:
-        tm = db.session.get(TeamMember, team_member_id)
-        if tm and tm.team and tm.team.project_id == project_id:
-            leader_ids = {l.id for l in iter_relationship(tm.team.leaders)}
+        tm_coachee = db.session.get(TeamMember, team_member_id)
+        if (
+            tm_coachee
+            and tm_coachee.team
+            and tm_coachee.team.project_id == project_id
+            and live_proj(tm_coachee.team)
+        ):
+            leader_ids = {l.id for l in iter_relationship(tm_coachee.team.leaders)}
             if user.id in leader_ids:
-                return True
-    return False
+                leader_of_target = True
+
+    if not linked and not leader_of_target:
+        return False
+
+    # Nur noch ARCHIV-Zeilen als Mitglied: nicht als Coach anbieten, außer anderer Bezug
+    tms = list(user.team_members)
+    if tms and archiv_id is not None:
+        only_archiv = all((tm.team_id == archiv_id) for tm in tms)
+        if only_archiv:
+            has_other = (
+                user.project_id in pids
+                or any(p.id in pids for p in iter_relationship(user.projects))
+                or any(live_proj(t) for t in iter_relationship(user.teams_led))
+                or leader_of_target
+            )
+            tid2 = getattr(user, 'team_id_if_leader', None)
+            if tid2:
+                t2 = db.session.get(Team, tid2)
+                if live_proj(t2):
+                    has_other = True
+            if not has_other:
+                return False
+
+    if user.has_permission('coach_own_team_only'):
+        if not team_member_id:
+            return False
+        tm_coachee = db.session.get(TeamMember, team_member_id)
+        if not tm_coachee or not tm_coachee.team_id:
+            return False
+        if not live_proj(tm_coachee.team):
+            return False
+        allowed_team_ids = set()
+        for team in iter_relationship(user.teams_led):
+            if live_proj(team):
+                allowed_team_ids.add(team.id)
+        for tm2 in user.team_members:
+            if tm2.team and live_proj(tm2.team):
+                allowed_team_ids.add(tm2.team_id)
+        if tm_coachee.team_id not in allowed_team_ids:
+            return False
+
+    return True
 
 
 def users_for_assignment_coach_dropdown(project_id, team_member_id=None):
     """Sorted users who may receive a coaching assignment in this project."""
-    eligible = [u for u in User.query.order_by(User.username).all()
-                if user_eligible_assignable_coach(u, project_id, team_member_id)]
+    eligible = [
+        u for u in User.query.order_by(User.username).all()
+        if user_eligible_assignable_coach(u, project_id, team_member_id)
+    ]
     return eligible
 
 

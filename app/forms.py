@@ -300,8 +300,8 @@ class ProjectForm(FlaskForm):
 
 
 class AssignedCoachingForm(FlaskForm):
-    coach_id = SelectField('Coach', coerce=int, validators=[DataRequired("Coach ist erforderlich.")], choices=[])
     team_member_id = SelectField('Teammitglied', coerce=int, validators=[DataRequired("Teammitglied ist erforderlich.")], choices=[])
+    coach_id = SelectField('Coach', coerce=int, validators=[DataRequired("Coach ist erforderlich.")], choices=[])
     deadline = DateField('Deadline', format='%Y-%m-%d', validators=[DataRequired("Deadline ist erforderlich.")])
     expected_coaching_count = IntegerField('Anzahl erwarteter Coachings', validators=[DataRequired("Anzahl ist erforderlich."), NumberRange(min=1, max=50)], default=1)
     desired_performance_note = IntegerField('Gewünschte Performance Note (0-10)', validators=[Optional(), NumberRange(min=0, max=10)], default=None)
@@ -311,15 +311,15 @@ class AssignedCoachingForm(FlaskForm):
         super(AssignedCoachingForm, self).__init__(*args, **kwargs)
         if allowed_project_ids:
             project_id = allowed_project_ids[0]
-            coaches = users_for_assignment_coach_dropdown(project_id, team_member_id)
-            self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in coaches]
-
             members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
                 Team.project_id.in_(allowed_project_ids),
                 Team.name != ARCHIV_TEAM_NAME,
                 Team.active_for_coaching.is_(True),
             ).order_by(Team.name, TeamMember.name).all()
             self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in members]
+
+            coaches = users_for_assignment_coach_dropdown(project_id, team_member_id)
+            self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in coaches]
 
 
 class RoleForm(FlaskForm):

@@ -40,9 +40,11 @@ $(document).ready(function() {
         }
     });
 
-    // If member is pre-selected (from query string), trigger change to load note
+    // Sync coaches + note: pre-selected member or initial broad coach list
     if ($('#team_member_id').val()) {
         $('#team_member_id').trigger('change');
+    } else {
+        reloadAssignmentCoaches('');
     }
 });
 </script>
@@ -60,15 +62,7 @@ $(document).ready(function() {
                     {{ form.hidden_tag() }}
 
                     <div class="form-group">
-                        {{ form.coach_id.label(class="form-control-label") }}
-                        {{ form.coach_id(class="form-control custom-select " + ("is-invalid" if form.coach_id.errors else ""), id="coach_id") }}
-                        {% if form.coach_id.errors %}
-                            <div class="invalid-feedback">{% for error in form.coach_id.errors %}{{ error }}{% endfor %}</div>
-                        {% endif %}
-                    </div>
-
-                    <div class="form-group">
-                        {{ form.team_member_id.label(class="form-control-label") }}
+                        <label class="form-control-label" for="team_member_id">{{ form.team_member_id.label.text }}</label>
                         <select name="team_member_id" id="team_member_id" class="form-control custom-select" required>
                             <option value="">-- Bitte wählen --</option>
                             {% set ns = namespace(prev_team='') %}
@@ -87,8 +81,18 @@ $(document).ready(function() {
                         {% if form.team_member_id.errors %}
                             <div class="invalid-feedback d-block">{% for error in form.team_member_id.errors %}{{ error }}{% endfor %}</div>
                         {% endif %}
-                        <small class="form-text text-muted">Aktuelle Performance Note: <span id="current_note_display">N/A</span></small>
+                        <small class="form-text text-muted">Zuerst wählen — die Coach-Liste passt sich dem Team an (ohne ARCHIV / deaktivierte Teams).</small>
+                        <div class="mt-1 text-muted small">Aktuelle Performance Note: <span id="current_note_display">N/A</span></div>
                         <input type="hidden" id="current_note_hidden" name="current_note">
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.coach_id.label(class="form-control-label") }}
+                        {{ form.coach_id(class="form-control custom-select " + ("is-invalid" if form.coach_id.errors else ""), id="coach_id") }}
+                        {% if form.coach_id.errors %}
+                            <div class="invalid-feedback">{% for error in form.coach_id.errors %}{{ error }}{% endfor %}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">Nur Coaches mit gültigem Bezug zum Projekt (keine reinen ARCHIV-Zuordnungen).</small>
                     </div>
 
                     <div class="form-group">
