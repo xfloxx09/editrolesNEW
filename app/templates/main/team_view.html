@@ -182,8 +182,8 @@
                     </div>
                     <div class="col-md-4 mb-2 mb-md-0">
     <strong class="stat-label">Teamleiter:</strong>
-    <p class="stat-value mb-0">
-        {{ team.leaders|map(attribute='username')|join(', ') or '-' }}
+    <p class="stat-value mb-0" title="Am Team eingetragen und/oder Rolle Teamleiter mit Mitgliedschaft in diesem Team">
+        {{ team_leaders_display|map(attribute='coach_display_name')|join(', ') or '—' }}
     </p>
 </div>
                     <div class="col-md-4">

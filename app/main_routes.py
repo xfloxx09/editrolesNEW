@@ -208,6 +208,28 @@ def _build_team_members_performance(team):
     return team_members_performance
 
 
+def _team_leaders_for_team_card(team):
+    """Teamleiter für die Infokarte: offizielle Zuordnung am Team + TL-Rolle mit Mitgliedschaft in diesem Team."""
+    seen = {}
+    try:
+        for u in team.leaders:
+            if u is not None and u.id:
+                seen[u.id] = u
+    except (TypeError, AttributeError):
+        pass
+    tl_here = (
+        User.query.options(selectinload(User.team_members))
+        .join(TeamMember, TeamMember.user_id == User.id)
+        .join(Role, User.role_id == Role.id)
+        .filter(TeamMember.team_id == team.id, Role.name == ROLE_TEAMLEITER)
+        .distinct()
+        .all()
+    )
+    for u in tl_here:
+        seen[u.id] = u
+    return sorted(seen.values(), key=lambda u: (u.coach_display_name or u.username or '').lower())
+
+
 def filter_reviews_by_coaching_date(query, period_arg, year, month, day):
     """CoachingReview query already joined to Coaching; filter on coaching_date."""
     if year is not None:
@@ -977,11 +999,13 @@ def team_view():
         ).order_by(desc(Coaching.coaching_date)).limit(10).all()
 
     members = TeamMember.query.filter_by(team_id=team.id).order_by(TeamMember.name).all()
+    team_leaders_display = _team_leaders_for_team_card(team)
     return render_template(
         'main/team_view.html',
         title='Mein Team',
         team=team,
         members=members,
+        team_leaders_display=team_leaders_display,
         team_members_performance=team_members_performance,
         team_coachings=team_coachings,
         all_teams_list=all_teams_list,
