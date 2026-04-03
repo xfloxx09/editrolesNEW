@@ -336,7 +336,10 @@ class AdminAssignedCoachingForm(FlaskForm):
     def __init__(self, *args, **kwargs):
         super(AdminAssignedCoachingForm, self).__init__(*args, **kwargs)
         self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in User.query.order_by(User.username).all()]
-        self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in TeamMember.query.join(Team).order_by(Team.name, TeamMember.name).all()]
+        self.team_member_id.choices = [
+            (m.id, f"{m.name} ({m.team.name})")
+            for m in TeamMember.query.join(Team, TeamMember.team_id == Team.id).order_by(Team.name, TeamMember.name).all()
+        ]
 
 
 class TeamMemberWithUserForm(FlaskForm):

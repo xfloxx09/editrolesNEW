@@ -69,7 +69,7 @@ def _user_can_assign_coachings():
 
 
 def _member_performance_for_assigned_page(project_id):
-    members = TeamMember.query.join(Team).filter(
+    members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
         Team.name != ARCHIV_TEAM_NAME,
     ).all()
@@ -1413,7 +1413,7 @@ def assigned_coachings():
         if coach_id_list else []
     )
 
-    all_members = TeamMember.query.join(Team).filter(
+    all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
         Team.name != ARCHIV_TEAM_NAME
     ).order_by(Team.name, TeamMember.name).all()
