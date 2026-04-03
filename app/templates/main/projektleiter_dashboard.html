@@ -101,6 +101,7 @@
 {% block content %}
 <div class="container-fluid">
     <h2>{{ title }}</h2>
+    {% include 'main/_project_context_bar.html' %}
 
     <!-- Summary Stats Cards -->
     <div class="row mb-4">
@@ -200,6 +201,9 @@
     <!-- Team Filter Dropdown for Member Cards (existing) -->
     <div class="my-3">
         <form method="GET" action="{{ url_for('main.pl_qm_dashboard') }}" id="selectTeamFilterForm" class="form-inline">
+            {% if show_project_switcher and active_project_id %}
+            <input type="hidden" name="project" value="{{ active_project_id }}">
+            {% endif %}
             <div class="form-group">
                 <label for="team_id_filter_select" class="mr-2">Teammitglieder anzeigen für:</label>
                 <select name="team_id_filter" id="team_id_filter_select" class="form-control custom-select form-control-sm" onchange="this.form.submit()">
@@ -387,6 +391,9 @@
                 {% set pagination_args = {} %}
                 {% if selected_team_id_filter %}
                     {% set _ = pagination_args.update({'team_id_filter': selected_team_id_filter}) %}
+                {% endif %}
+                {% if show_project_switcher and active_project_id %}
+                    {% set _ = pagination_args.update({'project': active_project_id}) %}
                 {% endif %}
 
                 {% if coachings_paginated.has_prev %}

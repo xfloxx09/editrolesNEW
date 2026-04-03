@@ -1,0 +1,21 @@
+{% if show_project_switcher %}
+<div class="card mb-3 border-secondary" style="background-color:#2c3238;">
+    <div class="card-body py-2">
+        <form method="get" action="{{ url_for(project_bar_endpoint) }}" class="form-inline mb-0 align-items-center flex-wrap">
+            {% if project_bar_extra_hidden %}
+                {% for key, val in project_bar_extra_hidden.items() %}
+                    {% if val is not none and val != '' %}
+                        <input type="hidden" name="{{ key }}" value="{{ val }}">
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+            <label for="pageProjectSelect" class="mr-2 mb-0 text-light small">Projekt</label>
+            <select name="project" id="pageProjectSelect" class="form-control form-control-sm bg-dark text-light border-secondary" style="min-width:12rem;" onchange="this.form.submit()" aria-label="Projekt wählen">
+                {% for p in user_allowed_projects %}
+                    <option value="{{ p.id }}" {% if p.id == active_project_id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+{% endif %}

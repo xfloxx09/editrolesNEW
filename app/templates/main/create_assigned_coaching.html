@@ -122,7 +122,7 @@ $(document).ready(function() {
 
                     <div class="form-group">
                         {{ form.submit(class="btn telekom-button") }}
-                        <a href="{{ url_for('main.assigned_coachings') }}" class="btn btn-secondary">Abbrechen</a>
+                        <a href="{{ url_for('main.assigned_coachings', project=active_project_id) }}" class="btn btn-secondary">Abbrechen</a>
                     </div>
                 </form>
             </div>

@@ -89,6 +89,28 @@ def get_visible_project_id():
     return None
 
 
+def _apply_query_project_to_session():
+    """If ?project=<id> is present and allowed, persist to session (same rules as set_project)."""
+    pid = request.args.get('project', type=int)
+    if pid is None:
+        return
+    project = Project.query.get(pid)
+    if not project:
+        return
+    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+        session['active_project'] = pid
+        session.modified = True
+        return
+    if current_user.role_name == ROLE_ABTEILUNGSLEITER and project in current_user.projects:
+        session['active_project'] = pid
+        session.modified = True
+        return
+    allowed = get_accessible_project_ids()
+    if allowed and pid in allowed:
+        session['active_project'] = pid
+        session.modified = True
+
+
 def _projects_for_coaching_workshop_picker():
     """Projects the user may target when adding a coaching or workshop."""
     accessible = get_accessible_project_ids()
@@ -1342,6 +1364,7 @@ def team_view():
 @login_required
 @permission_required('view_pl_qm_dashboard')
 def pl_qm_dashboard():
+    _apply_query_project_to_session()
     project_id = get_visible_project_id()
     if not project_id:
         flash('Kein Projekt ausgewählt.', 'danger')
@@ -1464,6 +1487,8 @@ def pl_qm_dashboard():
     role_label = (current_user.role_name or 'Benutzer').strip() or 'Benutzer'
     return render_template('main/projektleiter_dashboard.html',
                            title=f'{role_label} Dashboard',
+                           project_bar_endpoint='main.pl_qm_dashboard',
+                           project_bar_extra_hidden={},
                            project=project,
                            total_coachings_overall=total_coachings_overall,
                            total_time_overall=total_time_overall,
@@ -1591,6 +1616,7 @@ def set_project(project_id):
 @login_required
 @any_permission_required('view_assigned_coachings', 'view_pl_qm_dashboard', 'assign_coachings')
 def assigned_coachings():
+    _apply_query_project_to_session()
     project_id = get_visible_project_id()
     if not project_id:
         flash('Kein Projekt ausgewählt.', 'danger')
@@ -1693,9 +1719,25 @@ def assigned_coachings():
         top_performers = by_score[:5]
         bottom_performers = sorted(member_performance, key=lambda x: x['combined_score'])[:5]
 
+    project_bar_extra_hidden = {'status': tab_active}
+    if team_filter:
+        project_bar_extra_hidden['team'] = team_filter
+    if coach_filter:
+        project_bar_extra_hidden['coach'] = coach_filter
+    if member_filter:
+        project_bar_extra_hidden['member'] = member_filter
+    if search_term:
+        project_bar_extra_hidden['search'] = search_term
+    if sort_by != 'deadline':
+        project_bar_extra_hidden['sort_by'] = sort_by
+    if sort_dir != 'asc':
+        project_bar_extra_hidden['sort_dir'] = sort_dir
+
     return render_template(
         'main/assigned_coachings.html',
         assignments=assignments,
+        project_bar_endpoint='main.assigned_coachings',
+        project_bar_extra_hidden=project_bar_extra_hidden,
         status_filter=tab_active,
         tab_active=tab_active,
         view_type=view_type,
@@ -1719,6 +1761,7 @@ def assigned_coachings():
 @login_required
 @any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
 def create_assigned_coaching():
+    _apply_query_project_to_session()
     project_id = get_visible_project_id()
     if not project_id:
         flash('Kein Projekt ausgewählt.', 'danger')
@@ -1740,11 +1783,11 @@ def create_assigned_coaching():
             coach_u, project_id, form.team_member_id.data
         ):
             flash('Ungültige Coach-Auswahl.', 'danger')
-            return redirect(url_for('main.create_assigned_coaching'))
+            return redirect(url_for('main.create_assigned_coaching', project=project_id))
         tm_as = TeamMember.query.get(form.team_member_id.data)
         if not team_member_eligible_for_new_coaching(tm_as):
             flash('Dieses Teammitglied gehört zu einem Team, das für neue Zuweisungen deaktiviert ist.', 'danger')
-            return redirect(url_for('main.create_assigned_coaching'))
+            return redirect(url_for('main.create_assigned_coaching', project=project_id))
         d = form.deadline.data
         dl = datetime(d.year, d.month, d.day, 23, 59, 59)
         note_raw = request.form.get('current_note')
@@ -1765,7 +1808,7 @@ def create_assigned_coaching():
         db.session.add(assignment)
         db.session.commit()
         flash('Coaching-Aufgabe zugewiesen.', 'success')
-        return redirect(url_for('main.assigned_coachings'))
+        return redirect(url_for('main.assigned_coachings', project=project_id))
 
     return render_template('main/create_assigned_coaching.html', form=form, config=current_app.config)
 
@@ -1825,10 +1868,10 @@ def assigned_coaching_report(assignment_id):
 
     if assignment.team_member.team.project_id != project_id:
         flash('Aufgabe gehört nicht zum aktiven Projekt.', 'danger')
-        return redirect(url_for('main.assigned_coachings'))
+        return redirect(url_for('main.assigned_coachings', project=project_id))
     if assignment.project_leader_id != current_user.id:
         flash('Nur die zuweisende Person kann den Bericht einsehen.', 'danger')
-        return redirect(url_for('main.assigned_coachings'))
+        return redirect(url_for('main.assigned_coachings', project=project_id))
 
     done_list = Coaching.query.options(joinedload(Coaching.coach)).filter(
         Coaching.assigned_coaching_id == assignment.id
@@ -1850,7 +1893,12 @@ def assigned_coaching_report(assignment_id):
         'final_avg_score': final_avg,
         'status': assignment.status,
     }
-    return render_template('main/assigned_coaching_report.html', report=report, config=current_app.config)
+    return render_template(
+        'main/assigned_coaching_report.html',
+        report=report,
+        assigned_report_project_id=project_id,
+        config=current_app.config,
+    )
 
 
 @bp.route('/cancel-assigned-coaching/<int:assignment_id>', methods=['POST'])
@@ -1858,16 +1906,18 @@ def assigned_coaching_report(assignment_id):
 @any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
 def cancel_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
+    tm = TeamMember.query.options(joinedload(TeamMember.team)).get(assignment.team_member_id)
+    list_pid = tm.team.project_id if tm and tm.team else get_visible_project_id()
     if assignment.project_leader_id != current_user.id:
         flash('Nicht autorisiert.', 'danger')
-        return redirect(url_for('main.assigned_coachings'))
+        return redirect(url_for('main.assigned_coachings', project=list_pid))
     if assignment.status in ('pending', 'accepted', 'in_progress'):
         assignment.status = 'cancelled'
         db.session.commit()
         flash('Aufgabe storniert.', 'success')
     else:
         flash('Aufgabe kann nicht storniert werden.', 'warning')
-    return redirect(url_for('main.assigned_coachings'))
+    return redirect(url_for('main.assigned_coachings', project=list_pid))
 
 
 @bp.route('/accept-assigned/<int:assignment_id>', methods=['POST'])
@@ -1875,9 +1925,11 @@ def cancel_assigned_coaching(assignment_id):
 @permission_required('accept_assigned_coaching')
 def accept_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
+    tm = TeamMember.query.options(joinedload(TeamMember.team)).get(assignment.team_member_id)
+    list_pid = tm.team.project_id if tm and tm.team else get_visible_project_id()
     if assignment.coach_id != current_user.id:
         flash('Nicht autorisiert.', 'danger')
-        return redirect(url_for('main.assigned_coachings'))
+        return redirect(url_for('main.assigned_coachings', project=list_pid))
     if assignment.status == 'pending':
         tm_acc = TeamMember.query.get(assignment.team_member_id)
         if not team_member_eligible_for_new_coaching(tm_acc):
@@ -1888,7 +1940,7 @@ def accept_assigned_coaching(assignment_id):
             flash('Aufgabe angenommen.', 'success')
     else:
         flash('Aufgabe kann nicht angenommen werden.', 'warning')
-    return redirect(url_for('main.assigned_coachings'))
+    return redirect(url_for('main.assigned_coachings', project=list_pid))
 
 
 @bp.route('/reject-assigned/<int:assignment_id>', methods=['POST'])
@@ -1896,13 +1948,15 @@ def accept_assigned_coaching(assignment_id):
 @permission_required('reject_assigned_coaching')
 def reject_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
+    tm = TeamMember.query.options(joinedload(TeamMember.team)).get(assignment.team_member_id)
+    list_pid = tm.team.project_id if tm and tm.team else get_visible_project_id()
     if assignment.coach_id != current_user.id:
         flash('Nicht autorisiert.', 'danger')
-        return redirect(url_for('main.assigned_coachings'))
+        return redirect(url_for('main.assigned_coachings', project=list_pid))
     if assignment.status == 'pending':
         assignment.status = 'rejected'
         db.session.commit()
         flash('Aufgabe abgelehnt.', 'success')
     else:
         flash('Aufgabe kann nicht abgelehnt werden.', 'warning')
-    return redirect(url_for('main.assigned_coachings'))
+    return redirect(url_for('main.assigned_coachings', project=list_pid))

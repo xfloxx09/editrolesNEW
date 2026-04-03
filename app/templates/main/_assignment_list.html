@@ -3,6 +3,9 @@
     <div class="card-body">
         <form method="GET" action="{{ url_for('main.assigned_coachings') }}" id="assignmentFilterForm">
             <input type="hidden" name="status" value="{{ status_filter }}">
+            {% if active_project_id %}
+            <input type="hidden" name="project" value="{{ active_project_id }}">
+            {% endif %}
             <div class="row filter-row">
                 <div class="col-md-3">
                     <select name="team" class="form-control form-control-sm">
@@ -35,7 +38,7 @@
             <div class="row filter-row">
                 <div class="col-md-12 text-end">
                     <button type="submit" class="btn btn-primary btn-sm">Filtern</button>
-                    <a href="{{ url_for('main.assigned_coachings', status=status_filter) }}" class="btn btn-secondary btn-sm">Filter zurücksetzen</a>
+                    <a href="{{ url_for('main.assigned_coachings', project=active_project_id, status=status_filter) }}" class="btn btn-secondary btn-sm">Filter zurücksetzen</a>
                 </div>
             </div>
         </form>
@@ -51,19 +54,19 @@
                         <tr>
                             <th>
                                 Deadline
-                                <a href="{{ url_for('main.assigned_coachings', status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by='deadline', sort_dir='asc' if sort_by != 'deadline' or sort_dir == 'desc' else 'desc') }}" class="sort-link">
+                                <a href="{{ url_for('main.assigned_coachings', project=active_project_id, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by='deadline', sort_dir='asc' if sort_by != 'deadline' or sort_dir == 'desc' else 'desc') }}" class="sort-link">
                                     <i class="fas fa-sort{% if sort_by == 'deadline' %}-{{ 'up' if sort_dir == 'asc' else 'down' }}{% endif %}"></i>
                                 </a>
                             </th>
                             <th>
                                 Mitglied
-                                <a href="{{ url_for('main.assigned_coachings', status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by='member_name', sort_dir='asc' if sort_by != 'member_name' or sort_dir == 'desc' else 'desc') }}" class="sort-link">
+                                <a href="{{ url_for('main.assigned_coachings', project=active_project_id, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by='member_name', sort_dir='asc' if sort_by != 'member_name' or sort_dir == 'desc' else 'desc') }}" class="sort-link">
                                     <i class="fas fa-sort{% if sort_by == 'member_name' %}-{{ 'up' if sort_dir == 'asc' else 'down' }}{% endif %}"></i>
                                 </a>
                             </th>
                             <th>
                                 Coach
-                                <a href="{{ url_for('main.assigned_coachings', status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by='coach_name', sort_dir='asc' if sort_by != 'coach_name' or sort_dir == 'desc' else 'desc') }}" class="sort-link">
+                                <a href="{{ url_for('main.assigned_coachings', project=active_project_id, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by='coach_name', sort_dir='asc' if sort_by != 'coach_name' or sort_dir == 'desc' else 'desc') }}" class="sort-link">
                                     <i class="fas fa-sort{% if sort_by == 'coach_name' %}-{{ 'up' if sort_dir == 'asc' else 'down' }}{% endif %}"></i>
                                 </a>
                             </th>
@@ -120,19 +123,19 @@
             <nav aria-label="Assignment Navigation">
                 <ul class="pagination justify-content-center">
                     {% if assignments.has_prev %}
-                        <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings', page=assignments.prev_num, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Vorherige</a></li>
+                        <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings', project=active_project_id, page=assignments.prev_num, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Vorherige</a></li>
                     {% endif %}
                     {% for page_num in assignments.iter_pages() %}
                         {% if page_num %}
                             <li class="page-item {% if assignments.page == page_num %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('main.assigned_coachings', page=page_num, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">{{ page_num }}</a>
+                                <a class="page-link" href="{{ url_for('main.assigned_coachings', project=active_project_id, page=page_num, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">{{ page_num }}</a>
                             </li>
                         {% else %}
                             <li class="page-item disabled"><span class="page-link">...</span></li>
                         {% endif %}
                     {% endfor %}
                     {% if assignments.has_next %}
-                        <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings', page=assignments.next_num, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Nächste</a></li>
+                        <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings', project=active_project_id, page=assignments.next_num, status=status_filter, team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Nächste</a></li>
                     {% endif %}
                 </ul>
             </nav>

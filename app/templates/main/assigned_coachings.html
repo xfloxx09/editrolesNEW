@@ -185,11 +185,12 @@
 
 {% block content %}
 <div class="container-fluid">
-    
+    {% include 'main/_project_context_bar.html' %}
+
     {% if view_type == 'pl' %}
         <div class="row mb-3">
             <div class="col-md-12">
-                <a href="{{ url_for('main.create_assigned_coaching') }}" class="btn telekom-button">Neue Coaching-Aufgabe</a>
+                <a href="{{ url_for('main.create_assigned_coaching', project=active_project_id) }}" class="btn telekom-button">Neue Coaching-Aufgabe</a>
             </div>
         </div>
 
@@ -259,7 +260,7 @@
                                                 <td>{{ member.total_time }}</td>
                                                 <td>{{ member.last_coaching_date|athens_time('%d.%m.%Y') if member.last_coaching_date else '-' }}</td>
                                                 <td>
-                                                    <a href="{{ url_for('main.create_assigned_coaching', member_id=member.id) }}" class="btn btn-sm btn-sm-assign text-white">
+                                                    <a href="{{ url_for('main.create_assigned_coaching', member_id=member.id, project=active_project_id) }}" class="btn btn-sm btn-sm-assign text-white">
                                                         <i class="bi bi-plus-circle"></i> Zuweisen
                                                     </a>
                                                 </td>
@@ -306,10 +307,10 @@
     <!-- Tabs for assignments -->
     <ul class="nav nav-tabs mb-3" id="assignmentTabs" role="tablist">
         <li class="nav-item">
-            <a class="nav-link {% if tab_active == 'current' %}active{% endif %}" href="{{ url_for('main.assigned_coachings', status='current', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Aktuelle Aufträge</a>
+            <a class="nav-link {% if tab_active == 'current' %}active{% endif %}" href="{{ url_for('main.assigned_coachings', project=active_project_id, status='current', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Aktuelle Aufträge</a>
         </li>
         <li class="nav-item">
-            <a class="nav-link {% if tab_active == 'completed' %}active{% endif %}" href="{{ url_for('main.assigned_coachings', status='completed', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene & Archivierte</a>
+            <a class="nav-link {% if tab_active == 'completed' %}active{% endif %}" href="{{ url_for('main.assigned_coachings', project=active_project_id, status='completed', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene & Archivierte</a>
         </li>
     </ul>
 
