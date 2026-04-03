@@ -3,10 +3,10 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
-from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm
+from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
 from app.utils import role_required, permission_required, any_permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
 from datetime import datetime, timezone, timedelta, date
 import calendar
@@ -59,6 +59,66 @@ def get_visible_project_id():
         else:
             return current_user.project_id
     return None
+
+
+def _user_can_assign_coachings():
+    return (
+        current_user.has_permission('assign_coachings')
+        or current_user.has_permission('view_pl_qm_dashboard')
+    )
+
+
+def _member_performance_for_assigned_page(project_id):
+    members = TeamMember.query.join(Team).filter(
+        Team.project_id == project_id,
+        Team.name != ARCHIV_TEAM_NAME,
+    ).all()
+    raw = []
+    for m in members:
+        stats = db.session.query(
+            db.func.count(Coaching.id),
+            db.func.avg(Coaching.performance_mark),
+            db.func.sum(Coaching.time_spent),
+            db.func.max(Coaching.coaching_date),
+        ).filter(
+            Coaching.team_member_id == m.id,
+            Coaching.project_id == project_id,
+        ).first()
+        cnt = int(stats[0] or 0)
+        avg_m = stats[1]
+        total_t = int(stats[2] or 0)
+        last_d = stats[3]
+        avg_score = round(float(avg_m or 0) * 10, 1) if cnt > 0 else 0.0
+        raw.append({
+            'member': m,
+            'coaching_count': cnt,
+            'avg_score': avg_score,
+            'total_time': total_t,
+            'last_coaching_date': last_d,
+        })
+    if not raw:
+        return []
+    max_c = max(r['coaching_count'] for r in raw) or 1
+    max_t = max(r['total_time'] for r in raw) or 1
+    out = []
+    for r in raw:
+        m = r['member']
+        perf_part = float(r['avg_score'])
+        cnt_part = (r['coaching_count'] / max_c) * 100.0
+        time_part = (r['total_time'] / max_t) * 100.0 if max_t else 0.0
+        combined = 0.4 * perf_part + 0.3 * cnt_part + 0.3 * time_part
+        out.append({
+            'id': m.id,
+            'name': m.name,
+            'team_name': m.team.name if m.team else '',
+            'combined_score': combined,
+            'avg_score': r['avg_score'],
+            'coaching_count': r['coaching_count'],
+            'total_time': r['total_time'],
+            'last_coaching_date': r['last_coaching_date'],
+        })
+    return out
+
 
 # Helper for date ranges
 def calculate_date_range(period_arg):
@@ -287,7 +347,11 @@ def index():
     index_tile_count = sum([
         1 if u.has_permission('view_coaching_dashboard') else 0,
         1 if u.has_permission('view_workshop_dashboard') else 0,
-        1 if u.has_permission('view_assigned_coachings') else 0,
+        1 if (
+            u.has_permission('view_assigned_coachings')
+            or u.has_permission('assign_coachings')
+            or u.has_permission('view_pl_qm_dashboard')
+        ) else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
         1 if u.has_permission('view_all_reviews') else 0,
@@ -1256,24 +1320,258 @@ def set_project(project_id):
     return redirect(request.referrer or url_for('main.index'))
 
 
-# --- Assigned Coachings (for coaches) ---
+# --- Assigned Coachings (Coach-Ansicht + PL/Zuweiser-Ansicht) ---
 @bp.route('/assigned-coachings')
 @login_required
-@permission_required('view_assigned_coachings')
+@any_permission_required('view_assigned_coachings', 'view_pl_qm_dashboard', 'assign_coachings')
 def assigned_coachings():
+    project_id = get_visible_project_id()
+    if not project_id:
+        flash('Kein Projekt ausgewählt.', 'danger')
+        return redirect(url_for('main.index'))
+
+    can_assign = _user_can_assign_coachings()
+    can_coach_list = current_user.has_permission('view_assigned_coachings')
+    if not can_assign and not can_coach_list:
+        flash('Keine Berechtigung.', 'danger')
+        return redirect(url_for('main.index'))
+
+    view_type = 'pl' if can_assign else 'coach'
+
+    tab_active = request.args.get('status', 'current')
+    if tab_active not in ('current', 'completed'):
+        tab_active = 'current'
+
     page = request.args.get('page', 1, type=int)
-    status_filter = request.args.get('status', 'pending')
-    query = AssignedCoaching.query.filter_by(coach_id=current_user.id)
-    if status_filter != 'all':
-        query = query.filter_by(status=status_filter)
-    assignments = query.order_by(AssignedCoaching.deadline).paginate(page=page, per_page=15, error_out=False)
-    return render_template('main/assigned_coachings.html', assignments=assignments, status_filter=status_filter, config=current_app.config)
+    team_filter = request.args.get('team', type=int)
+    coach_filter = request.args.get('coach', type=int)
+    member_filter = request.args.get('member', type=int)
+    search_term = (request.args.get('search') or '').strip()
+    sort_by = request.args.get('sort_by', 'deadline')
+    sort_dir = request.args.get('sort_dir', 'asc')
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'asc'
+
+    q = AssignedCoaching.query.options(
+        joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team),
+        joinedload(AssignedCoaching.coach),
+    ).join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id).join(
+        Team, TeamMember.team_id == Team.id
+    ).filter(Team.project_id == project_id)
+
+    if view_type == 'pl':
+        q = q.filter(AssignedCoaching.project_leader_id == current_user.id)
+    else:
+        q = q.filter(AssignedCoaching.coach_id == current_user.id)
+
+    if tab_active == 'completed':
+        q = q.filter(AssignedCoaching.status.in_(['completed', 'expired', 'rejected', 'cancelled']))
+    else:
+        q = q.filter(AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']))
+
+    if team_filter:
+        q = q.filter(TeamMember.team_id == team_filter)
+    if coach_filter:
+        q = q.filter(AssignedCoaching.coach_id == coach_filter)
+    if member_filter:
+        q = q.filter(AssignedCoaching.team_member_id == member_filter)
+    if search_term:
+        st = f'%{search_term}%'
+        q = q.filter(or_(
+            AssignedCoaching.coach.has(User.username.ilike(st)),
+            TeamMember.name.ilike(st),
+        ))
+
+    CoachAlias = aliased(User)
+    if sort_by == 'coach_name':
+        q = q.join(CoachAlias, AssignedCoaching.coach_id == CoachAlias.id)
+        order_expr = CoachAlias.username
+    elif sort_by == 'member_name':
+        order_expr = TeamMember.name
+    else:
+        order_expr = AssignedCoaching.deadline
+
+    if sort_dir == 'desc':
+        q = q.order_by(desc(order_expr))
+    else:
+        q = q.order_by(order_expr)
+
+    assignments = q.paginate(page=page, per_page=15, error_out=False)
+
+    all_teams = Team.query.filter_by(project_id=project_id).filter(
+        Team.name != ARCHIV_TEAM_NAME
+    ).order_by(Team.name).all()
+
+    coach_id_rows = db.session.query(AssignedCoaching.coach_id).join(
+        TeamMember, AssignedCoaching.team_member_id == TeamMember.id
+    ).join(Team, TeamMember.team_id == Team.id).filter(
+        Team.project_id == project_id
+    ).distinct().all()
+    coach_id_list = [r[0] for r in coach_id_rows if r[0]]
+    all_coaches = (
+        User.query.filter(User.id.in_(coach_id_list)).order_by(User.username).all()
+        if coach_id_list else []
+    )
+
+    all_members = TeamMember.query.join(Team).filter(
+        Team.project_id == project_id,
+        Team.name != ARCHIV_TEAM_NAME
+    ).order_by(Team.name, TeamMember.name).all()
+
+    member_performance = _member_performance_for_assigned_page(project_id) if view_type == 'pl' else []
+    top_performers = []
+    bottom_performers = []
+    if member_performance:
+        by_score = sorted(member_performance, key=lambda x: x['combined_score'], reverse=True)
+        top_performers = by_score[:5]
+        bottom_performers = sorted(member_performance, key=lambda x: x['combined_score'])[:5]
+
+    return render_template(
+        'main/assigned_coachings.html',
+        assignments=assignments,
+        status_filter=tab_active,
+        tab_active=tab_active,
+        view_type=view_type,
+        team_filter=team_filter,
+        coach_filter=coach_filter,
+        member_filter=member_filter,
+        search_term=search_term,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        all_teams=all_teams,
+        all_coaches=all_coaches,
+        all_members=all_members,
+        member_performance=member_performance,
+        top_performers=top_performers,
+        bottom_performers=bottom_performers,
+        config=current_app.config,
+    )
 
 
-@bp.route('/accept-assigned/<int:assignment_id>')
+@bp.route('/create-assigned-coaching', methods=['GET', 'POST'])
+@login_required
+@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+def create_assigned_coaching():
+    project_id = get_visible_project_id()
+    if not project_id:
+        flash('Kein Projekt ausgewählt.', 'danger')
+        return redirect(url_for('main.index'))
+
+    form = AssignedCoachingForm(allowed_project_ids=[project_id])
+    pre_member = request.args.get('member_id', type=int)
+    if pre_member and request.method == 'GET':
+        form.team_member_id.data = pre_member
+
+    if form.validate_on_submit():
+        d = form.deadline.data
+        dl = datetime(d.year, d.month, d.day, 23, 59, 59)
+        note_raw = request.form.get('current_note')
+        try:
+            cur_note = float(note_raw) if note_raw else None
+        except (TypeError, ValueError):
+            cur_note = None
+        assignment = AssignedCoaching(
+            project_leader_id=current_user.id,
+            coach_id=form.coach_id.data,
+            team_member_id=form.team_member_id.data,
+            deadline=dl,
+            expected_coaching_count=form.expected_coaching_count.data,
+            desired_performance_note=form.desired_performance_note.data,
+            current_performance_note_at_assign=cur_note,
+            status='pending',
+        )
+        db.session.add(assignment)
+        db.session.commit()
+        flash('Coaching-Aufgabe zugewiesen.', 'success')
+        return redirect(url_for('main.assigned_coachings'))
+
+    return render_template('main/create_assigned_coaching.html', form=form, config=current_app.config)
+
+
+@bp.route('/api/member-current-score')
+@login_required
+@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+def get_member_current_score():
+    mid = request.args.get('member_id', type=int)
+    if not mid:
+        return jsonify({'score': 0})
+    project_id = get_visible_project_id()
+    m = TeamMember.query.get(mid)
+    if not m or not m.team or m.team.project_id != project_id:
+        return jsonify({'score': 0})
+    avg = db.session.query(db.func.avg(Coaching.performance_mark)).filter(
+        Coaching.team_member_id == mid,
+        Coaching.project_id == project_id,
+    ).scalar()
+    score = round(float(avg or 0) * 10, 1) if avg is not None else 0.0
+    return jsonify({'score': score})
+
+
+@bp.route('/assigned-coaching-report/<int:assignment_id>')
+@login_required
+@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+def assigned_coaching_report(assignment_id):
+    project_id = get_visible_project_id()
+    if not project_id:
+        flash('Kein Projekt ausgewählt.', 'danger')
+        return redirect(url_for('main.index'))
+
+    assignment = AssignedCoaching.query.options(
+        joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team),
+        joinedload(AssignedCoaching.coach),
+    ).get_or_404(assignment_id)
+
+    if assignment.team_member.team.project_id != project_id:
+        flash('Aufgabe gehört nicht zum aktiven Projekt.', 'danger')
+        return redirect(url_for('main.assigned_coachings'))
+    if assignment.project_leader_id != current_user.id:
+        flash('Nur die zuweisende Person kann den Bericht einsehen.', 'danger')
+        return redirect(url_for('main.assigned_coachings'))
+
+    done_list = Coaching.query.options(joinedload(Coaching.coach)).filter(
+        Coaching.assigned_coaching_id == assignment.id
+    ).order_by(Coaching.coaching_date).all()
+
+    coachings_done = len(done_list)
+    if done_list:
+        final_avg = sum(c.overall_score for c in done_list) / len(done_list)
+    else:
+        final_avg = 0.0
+
+    report = {
+        'assignment': assignment,
+        'coachings': done_list,
+        'coachings_expected': assignment.expected_coaching_count,
+        'coachings_done': coachings_done,
+        'start_note': assignment.current_performance_note_at_assign,
+        'target_note': assignment.desired_performance_note,
+        'final_avg_score': final_avg,
+        'status': assignment.status,
+    }
+    return render_template('main/assigned_coaching_report.html', report=report, config=current_app.config)
+
+
+@bp.route('/cancel-assigned-coaching/<int:assignment_id>', methods=['POST'])
+@login_required
+@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+def cancel_assigned_coaching(assignment_id):
+    assignment = AssignedCoaching.query.get_or_404(assignment_id)
+    if assignment.project_leader_id != current_user.id:
+        flash('Nicht autorisiert.', 'danger')
+        return redirect(url_for('main.assigned_coachings'))
+    if assignment.status in ('pending', 'accepted', 'in_progress'):
+        assignment.status = 'cancelled'
+        db.session.commit()
+        flash('Aufgabe storniert.', 'success')
+    else:
+        flash('Aufgabe kann nicht storniert werden.', 'warning')
+    return redirect(url_for('main.assigned_coachings'))
+
+
+@bp.route('/accept-assigned/<int:assignment_id>', methods=['POST'])
 @login_required
 @permission_required('accept_assigned_coaching')
-def accept_assigned(assignment_id):
+def accept_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
     if assignment.coach_id != current_user.id:
         flash('Nicht autorisiert.', 'danger')
@@ -1287,10 +1585,10 @@ def accept_assigned(assignment_id):
     return redirect(url_for('main.assigned_coachings'))
 
 
-@bp.route('/reject-assigned/<int:assignment_id>')
+@bp.route('/reject-assigned/<int:assignment_id>', methods=['POST'])
 @login_required
 @permission_required('reject_assigned_coaching')
-def reject_assigned(assignment_id):
+def reject_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
     if assignment.coach_id != current_user.id:
         flash('Nicht autorisiert.', 'danger')

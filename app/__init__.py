@@ -123,6 +123,13 @@ def create_app(config_class=Config):
             ('coach', 'Can perform coaching'),
             ('assign_teams', 'Can be assigned as team leader (has teams_led)'),
             ('coach_own_team_only', 'Coach can only coach members of their own team'),
+            ('view_coaching_dashboard', 'View coaching dashboard'),
+            ('view_workshop_dashboard', 'View workshop dashboard'),
+            ('view_pl_qm_dashboard', 'View PL/QM project dashboard'),
+            ('assign_coachings', 'Assign coaching tasks to coaches'),
+            ('view_assigned_coachings', 'View assigned coaching tasks'),
+            ('accept_assigned_coaching', 'Accept assigned coaching task'),
+            ('reject_assigned_coaching', 'Reject assigned coaching task'),
         ]
         for name, desc in default_permissions:
             res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
@@ -182,13 +189,46 @@ def create_app(config_class=Config):
         # Teamleiter: u. a. view_own_team, multiple_teams (mehrere TeamMember-Zeilen)
         teamleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
         if teamleiter_role:
-            for perm_name in ['assign_teams', 'coach', 'coach_own_team_only', 'view_own_team', 'multiple_teams']:
+            for perm_name in [
+                'assign_teams', 'coach', 'coach_own_team_only', 'view_own_team', 'multiple_teams',
+                'view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching',
+            ]:
                 if perm_name in perm_map:
                     conn.execute(
                         text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
                         {"role_id": teamleiter_role[0], "perm_id": perm_map[perm_name]}
                     )
-            print("✅ Teamleiter hat u. a. 'assign_teams', 'coach', 'coach_own_team_only', 'view_own_team'.")
+            print("✅ Teamleiter hat u. a. Coach- und Zuweisungs-Berechtigungen (inkl. zugewiesene Coachings).")
+
+        for pl_role_name in ('Projektleiter', 'Qualitätsmanager', 'Abteilungsleiter'):
+            plrid = conn.execute(text("SELECT id FROM roles WHERE name = :n"), {"n": pl_role_name}).fetchone()
+            if plrid:
+                for perm_name in (
+                    'view_pl_qm_dashboard',
+                    'assign_coachings',
+                    'view_coaching_dashboard',
+                    'view_workshop_dashboard',
+                    'view_assigned_coachings',
+                    'accept_assigned_coaching',
+                    'reject_assigned_coaching',
+                ):
+                    if perm_name in perm_map:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                            {"role_id": plrid[0], "perm_id": perm_map[perm_name]}
+                        )
+                print(f"✅ Rolle '{pl_role_name}': PL/QM-Dashboard, Coaching zuweisen, zugewiesene Coachings.")
+
+        for coach_role_name in ('Trainer', 'SalesCoach'):
+            crid = conn.execute(text("SELECT id FROM roles WHERE name = :n"), {"n": coach_role_name}).fetchone()
+            if crid:
+                for perm_name in ('view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching'):
+                    if perm_name in perm_map:
+                        conn.execute(
+                            text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
+                            {"role_id": crid[0], "perm_id": perm_map[perm_name]}
+                        )
+                print(f"✅ Rolle '{coach_role_name}': zugewiesene Coachings (Annehmen/Ablehnen).")
 
         # Agent / Mitarbeiter: eigene Coachings + Coach bewerten (rein über Berechtigungen; Rollenname ist egal)
         for employee_role_name in ('Mitarbeiter', 'Agent'):

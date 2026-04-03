@@ -16,7 +16,7 @@
                     <select name="coach" class="form-control form-control-sm">
                         <option value="">Alle Coaches</option>
                         {% for coach in all_coaches %}
-                            <option value="{{ coach.id }}" {% if coach_filter == coach.id %}selected{% endif %}>{{ coach.username }} ({{ coach.role }})</option>
+                            <option value="{{ coach.id }}" {% if coach_filter == coach.id %}selected{% endif %}>{{ coach.username }} ({{ coach.role_name }})</option>
                         {% endfor %}
                     </select>
                 </div>

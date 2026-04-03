@@ -2,7 +2,7 @@
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.exc import SQLAlchemyError
 
 # Association tables
@@ -314,3 +314,15 @@ class AssignedCoaching(db.Model):
             return 0
         done = Coaching.query.filter_by(assigned_coaching_id=self.id).count()
         return min(100, int(round(100.0 * done / exp)))
+
+    @property
+    def is_overdue(self):
+        if self.status in ('completed', 'expired', 'cancelled', 'rejected'):
+            return False
+        if not self.deadline:
+            return False
+        now = datetime.utcnow()
+        dl = self.deadline
+        if dl.tzinfo is not None:
+            now = datetime.now(timezone.utc)
+        return dl < now
