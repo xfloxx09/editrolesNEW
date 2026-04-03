@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mb-3">
+    <p class="text-muted small mb-0">
+        Für diese CSV wurden <strong>{{ total_changes|int }}</strong> Abweichung(en) zur Datenbank gefunden
+        ({{ total_csv_rows_with_pylon|int }} Pylon-Zeilen, bei Duplikaten zählt die letzte Zeile).
+        Der Prüfdialog sollte sich automatisch öffnen.
+    </p>
+    <p class="mb-0"><a href="{{ url_for('admin.sync_from_csv') }}" class="btn btn-sm btn-secondary mt-2">CSV neu hochladen / Abbrechen</a></p>
+</div>
+
+<div class="modal fade" id="csvChangesModal" tabindex="-1" role="dialog" aria-labelledby="csvChangesModalTitle" data-backdrop="static" data-keyboard="false" aria-hidden="false">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary">
+                <div class="w-100">
+                    <h4 class="modal-title" id="csvChangesModalTitle">Änderungen vor dem Import prüfen</h4>
+                    <p class="small text-muted mb-0 mt-1">
+                        Jede Zeile ist eine CSV-Spalte mit altem DB-Wert und neuem CSV-Wert (z.&nbsp;B. <code>PLT aktiv?: 1 → 0</code>).
+                        Deaktivieren, was nicht importiert werden soll. Unveränderte Pylone fehlen in der Liste.
+                    </p>
+                    {% if preview_truncated %}
+                    <div class="alert alert-warning py-2 small mt-2 mb-0">
+                        Es gibt {{ total_changes|int }} Änderungen; angezeigt werden {{ preview_count|int }}.
+                        Die übrigen führt dieser Lauf <strong>nicht</strong> aus — bitte danach erneut synchronisieren.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('admin.sync_from_csv') }}" id="csvPreviewForm">
+                <input type="hidden" name="apply_import" value="1">
+                {% for field in map_fields %}
+                    {% if mapping.get(field) %}
+                    <input type="hidden" name="map_{{ field }}" value="{{ mapping[field] }}">
+                    {% endif %}
+                {% endfor %}
+
+                <div class="modal-body border-top border-secondary pt-3">
+                    <div class="card bg-secondary border-dark mb-3">
+                        <div class="form-row align-items-center p-2">
+                            <div class="col-md-4 mb-2 mb-md-0">
+                                <label class="sr-only" for="csvPreviewSearch">Suche</label>
+                                <div class="input-group input-group-sm">
+                                    <div class="input-group-prepend"><span class="input-group-text bg-dark text-light border-secondary"><i class="fas fa-search"></i></span></div>
+                                    <input type="search" class="form-control bg-dark text-light border-secondary" id="csvPreviewSearch"
+                                           placeholder="Pylon, Name, geplante Änderung …" autocomplete="off">
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="d-flex flex-wrap align-items-center">
+                                    <div class="custom-control custom-checkbox mr-3 mb-1">
+                                        <input type="checkbox" class="custom-control-input" id="csvPreviewErrorsOnly">
+                                        <label class="custom-control-label small" for="csvPreviewErrorsOnly">Nur Fehlerzeilen</label>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-light mb-1 mr-1" id="csvBtnAll">Alle auswählen</button>
+                                    <button type="button" class="btn btn-sm btn-outline-light mb-1 mr-1" id="csvBtnNone">Alle abwählen</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info mb-1 mr-1" id="csvExpandAll">Alles aufklappen</button>
+                                    <button type="button" class="btn btn-sm btn-outline-info mb-1 mr-1" id="csvCollapseAll">Alles zuklappen</button>
+                                    <span class="small text-light mb-1 mr-2" id="csvFilterStatus" aria-live="polite"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion border border-secondary rounded" id="csvImportAccordion">
+                        {% for project_label, teams_dict in grouped|dictsort %}
+                        {% set pidx = loop.index0 %}
+                        <div class="card csv-proj-card bg-dark border-secondary border-left-0 border-right-0 border-top-0 rounded-0 mb-0">
+                            <div class="card-header py-2 d-flex align-items-start" id="csv-ph-{{ pidx }}">
+                                <div class="custom-control custom-checkbox mr-3 mt-1">
+                                    <input type="checkbox" class="custom-control-input csv-grp-proj" id="csv-gp-{{ pidx }}" data-proj-class="csv-pgrp-{{ pidx }}" checked>
+                                    <label class="custom-control-label small" for="csv-gp-{{ pidx }}">Alle</label>
+                                </div>
+                                <button class="btn btn-link text-info text-left flex-grow-1 p-0 {% if large_ui and not loop.first %}collapsed{% endif %}" type="button"
+                                        data-toggle="collapse" data-target="#csv-pc-{{ pidx }}"
+                                        aria-expanded="{{ 'true' if (not large_ui or loop.first) else 'false' }}" aria-controls="csv-pc-{{ pidx }}">
+                                    <strong>Projekt:</strong> {{ project_label }}
+                                </button>
+                            </div>
+                            <div id="csv-pc-{{ pidx }}" class="csv-proj-body collapse {% if not large_ui or loop.first %}show{% endif %}">
+                                <div class="card-body py-2 bg-secondary border-top border-dark">
+                                    {% for team_label, roles_dict in teams_dict|dictsort %}
+                                    {% set tidx = loop.index0 %}
+                                    {% set ns = namespace(n=0) %}
+                                    {% for role_label, items in roles_dict.items() %}{% set ns.n = ns.n + items|length %}{% endfor %}
+                                    <div class="csv-team-block mb-3 ml-2">
+                                        <div class="d-flex align-items-center mb-1 flex-wrap">
+                                            <div class="custom-control custom-checkbox mr-2 mt-1">
+                                                <input type="checkbox" class="custom-control-input csv-grp-team" id="csv-gt-{{ pidx }}-{{ tidx }}"
+                                                       data-team-class="csv-tgrp-{{ pidx }}-{{ tidx }}" checked>
+                                                <label class="custom-control-label small" for="csv-gt-{{ pidx }}-{{ tidx }}">Alle</label>
+                                            </div>
+                                            <button class="btn btn-sm btn-link text-light p-0 mr-2 {% if not loop.first %}collapsed{% endif %}" type="button"
+                                                    data-toggle="collapse" data-target="#csv-tc-{{ pidx }}-{{ tidx }}"
+                                                    aria-expanded="{{ 'true' if loop.first else 'false' }}">
+                                                <i class="fas fa-chevron-down small"></i>
+                                                <strong class="ml-1">Team:</strong> {{ team_label }}
+                                            </button>
+                                            <span class="badge badge-secondary small ml-2">{{ ns.n }} Änderung(en)</span>
+                                        </div>
+                                        <div class="csv-team-body collapse {% if loop.first %}show{% endif %}" id="csv-tc-{{ pidx }}-{{ tidx }}">
+                                            {% for role_label, items in roles_dict|dictsort %}
+                                            <div class="csv-role-block mb-2 pl-2 border-left border-info">
+                                                <div class="small text-muted mb-1"><strong>Rolle (CSV):</strong> {{ role_label }}</div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-dark table-bordered mb-0">
+                                                        <thead>
+                                                            <tr>
+                                                                <th style="width:2.5rem;"></th>
+                                                                <th>Pylon</th>
+                                                                <th>Name</th>
+                                                                <th>Art</th>
+                                                                <th>Geplante Änderungen</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for it in items %}
+                                                            {% set search_blob = (project_label ~ ' ' ~ team_label ~ ' ' ~ role_label ~ ' ' ~ it.pylon ~ ' ' ~ it.full_name ~ ' ' ~ (it.change_lines|join(' ')))|lower %}
+                                                            <tr class="csv-preview-row {% if it.change_kind == 'error' %}table-danger{% endif %}"
+                                                                data-csv-search="{{ search_blob|e }}"
+                                                                {% if it.change_kind == 'error' %}data-csv-error="1"{% endif %}>
+                                                                <td class="text-center align-middle">
+                                                                    <input type="checkbox" name="include_pylon" value="{{ it.pylon }}"
+                                                                           class="csv-pylon-chk csv-pgrp-{{ pidx }} csv-tgrp-{{ pidx }}-{{ tidx }}"
+                                                                           {% if not it.checkbox_disabled %}checked{% else %}disabled{% endif %}>
+                                                                </td>
+                                                                <td class="align-middle"><code>{{ it.pylon }}</code></td>
+                                                                <td class="align-middle">{{ it.full_name }}</td>
+                                                                <td class="align-middle">
+                                                                    {% if it.change_kind == 'error' %}
+                                                                    <span class="badge badge-dark">Blockiert</span>
+                                                                    {% elif it.change_kind == 'create' %}
+                                                                    <span class="badge badge-success">Neuanlage</span>
+                                                                    {% elif it.change_kind == 'archive' %}
+                                                                    <span class="badge badge-danger">Archiv</span>
+                                                                    {% elif it.change_kind == 'restore' %}
+                                                                    <span class="badge badge-warning text-dark">Reaktivierung</span>
+                                                                    {% else %}
+                                                                    <span class="badge badge-info">Aktualisierung</span>
+                                                                    {% endif %}
+                                                                </td>
+                                                                <td class="small align-middle">
+                                                                    <ul class="mb-0 pl-3">
+                                                                        {% for line in it.change_lines %}<li>{{ line }}</li>{% endfor %}
+                                                                    </ul>
+                                                                </td>
+                                                            </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <a href="{{ url_for('admin.sync_from_csv') }}" class="btn btn-secondary">Abbrechen</a>
+                    <button type="submit" class="btn telekom-button">Ausgewählte Änderungen importieren</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    if (window.jQuery) {
+        window.jQuery('#csvChangesModal').modal({ backdrop: 'static', keyboard: false, show: true });
+    }
+
+    var form = document.getElementById('csvPreviewForm');
+    var searchEl = document.getElementById('csvPreviewSearch');
+    var errorsOnlyEl = document.getElementById('csvPreviewErrorsOnly');
+    var filterStatusEl = document.getElementById('csvFilterStatus');
+    var totalRows = document.querySelectorAll('tr.csv-preview-row').length;
+
+    function debounce(fn, ms) {
+        var t;
+        return function () {
+            var ctx = this, args = arguments;
+            clearTimeout(t);
+            t = setTimeout(function () { fn.apply(ctx, args); }, ms);
+        };
+    }
+
+    function syncOneGroupHead(cb, classAttr) {
+        var cls = cb.getAttribute(classAttr);
+        if (!cls) return;
+        var boxes = Array.prototype.filter.call(
+            document.querySelectorAll('input.csv-pylon-chk'),
+            function (c) { return !c.disabled && c.classList.contains(cls); }
+        );
+        if (boxes.length === 0) return;
+        var checked = boxes.filter(function (c) { return c.checked; }).length;
+        cb.indeterminate = checked > 0 && checked < boxes.length;
+        cb.checked = checked === boxes.length;
+    }
+
+    function syncAllGroupHeaders() {
+        document.querySelectorAll('.csv-grp-team').forEach(function (cb) {
+            syncOneGroupHead(cb, 'data-team-class');
+        });
+        document.querySelectorAll('.csv-grp-proj').forEach(function (cb) {
+            syncOneGroupHead(cb, 'data-proj-class');
+        });
+    }
+
+    function resetSectionVisibility() {
+        document.querySelectorAll('.csv-role-block, .csv-team-block, .csv-proj-card').forEach(function (el) {
+            el.classList.remove('d-none');
+        });
+    }
+
+    function pruneEmptySections() {
+        document.querySelectorAll('.csv-role-block').forEach(function (el) {
+            var n = el.querySelectorAll('tr.csv-preview-row:not(.d-none)').length;
+            el.classList.toggle('d-none', n === 0);
+        });
+        document.querySelectorAll('.csv-team-block').forEach(function (el) {
+            var n = el.querySelectorAll('.csv-role-block:not(.d-none)').length;
+            el.classList.toggle('d-none', n === 0);
+        });
+        document.querySelectorAll('.csv-proj-card').forEach(function (el) {
+            var n = el.querySelectorAll('.csv-team-block:not(.d-none)').length;
+            el.classList.toggle('d-none', n === 0);
+        });
+    }
+
+    function applyFilters() {
+        var q = (searchEl.value || '').trim().toLowerCase();
+        var errOnly = errorsOnlyEl.checked;
+        var shown = 0;
+        document.querySelectorAll('tr.csv-preview-row').forEach(function (tr) {
+            var hay = tr.getAttribute('data-csv-search') || '';
+            var matchQ = !q || hay.indexOf(q) !== -1;
+            var matchE = !errOnly || tr.getAttribute('data-csv-error') === '1';
+            var show = matchQ && matchE;
+            tr.classList.toggle('d-none', !show);
+            if (show) shown += 1;
+        });
+        resetSectionVisibility();
+        pruneEmptySections();
+        filterStatusEl.textContent = (q || errOnly) ? (shown + ' von ' + totalRows + ' sichtbar') : '';
+        syncAllGroupHeaders();
+    }
+
+    var debouncedFilter = debounce(applyFilters, 200);
+
+    function allBoxes(sel, fn) {
+        document.querySelectorAll(sel).forEach(fn);
+    }
+
+    searchEl.addEventListener('input', debouncedFilter);
+    errorsOnlyEl.addEventListener('change', applyFilters);
+
+    document.getElementById('csvBtnAll').addEventListener('click', function () {
+        allBoxes('input.csv-pylon-chk:not(:disabled)', function (c) { c.checked = true; });
+        allBoxes('.csv-grp-proj', function (c) { c.checked = true; c.indeterminate = false; });
+        allBoxes('.csv-grp-team', function (c) { c.checked = true; c.indeterminate = false; });
+        syncAllGroupHeaders();
+    });
+    document.getElementById('csvBtnNone').addEventListener('click', function () {
+        allBoxes('input.csv-pylon-chk', function (c) { c.checked = false; });
+        allBoxes('.csv-grp-proj', function (c) { c.checked = false; c.indeterminate = false; });
+        allBoxes('.csv-grp-team', function (c) { c.checked = false; c.indeterminate = false; });
+    });
+
+    document.querySelectorAll('.csv-grp-proj').forEach(function (headCb) {
+        headCb.addEventListener('change', function () {
+            headCb.indeterminate = false;
+            var cls = headCb.getAttribute('data-proj-class');
+            document.querySelectorAll('input.csv-pylon-chk.' + cls).forEach(function (c) {
+                if (!c.disabled) { c.checked = headCb.checked; }
+            });
+            var card = headCb.closest('.csv-proj-card');
+            if (card) {
+                card.querySelectorAll('.csv-grp-team').forEach(function (tc) {
+                    tc.checked = headCb.checked;
+                    tc.indeterminate = false;
+                });
+            }
+            syncAllGroupHeaders();
+        });
+    });
+    document.querySelectorAll('.csv-grp-team').forEach(function (teamCb) {
+        teamCb.addEventListener('change', function () {
+            teamCb.indeterminate = false;
+            var cls = teamCb.getAttribute('data-team-class');
+            document.querySelectorAll('input.csv-pylon-chk.' + cls).forEach(function (c) {
+                if (!c.disabled) { c.checked = teamCb.checked; }
+            });
+            syncAllGroupHeaders();
+        });
+    });
+
+    form.addEventListener('change', function (e) {
+        if (e.target.classList.contains('csv-pylon-chk')) {
+            syncAllGroupHeaders();
+        }
+    });
+
+    var $f = window.jQuery && window.jQuery('#csvPreviewForm');
+    document.getElementById('csvExpandAll').addEventListener('click', function () {
+        if ($f) { $f.find('.collapse').collapse('show'); }
+    });
+    document.getElementById('csvCollapseAll').addEventListener('click', function () {
+        if ($f) { $f.find('.collapse').collapse('hide'); }
+    });
+
+    syncAllGroupHeaders();
+})();
+</script>
+{% endblock %}

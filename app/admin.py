@@ -10,6 +10,7 @@ from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRI
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
+import json
 import tempfile
 import os
 
@@ -1491,6 +1492,666 @@ def create_team_member_with_user():
     return render_template('admin/create_team_member_with_user.html', form=form, config=current_app.config)
 
 
+# --- CSV Import: Mapping-Felder & Vorschau ---
+CSV_IMPORT_MAP_FIELDS = [
+    'pylon', 'plt_id', 'first_name', 'last_name', 'ma_kennung', 'dag_id', 'email',
+    'team', 'project', 'active_status', 'agent_status', 'role',
+]
+
+# Vorschau begrenzen (HTML/ORM); nicht sichtbare Zeilen gelten beim Import als „angehakt“
+CSV_PREVIEW_MAX_ROWS = 6000
+# Ab diese Größe: UI standardmäßig zugeklappt + Suchleiste
+CSV_PREVIEW_LARGE_UI_THRESHOLD = 100
+_PREVIEW_PYLONS_SIDE_SUFFIX = '.preview_pylons.json'
+
+
+def _csv_preview_sidecar_path(temp_path):
+    return temp_path + _PREVIEW_PYLONS_SIDE_SUFFIX
+
+
+def _remove_csv_preview_sidecar(temp_path):
+    path = _csv_preview_sidecar_path(temp_path)
+    if os.path.isfile(path):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def _csv_row_pylon_value(row, mapping):
+    if not mapping.get('pylon'):
+        return None
+    raw = row.get(mapping['pylon'], '')
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
+def _csv_mapping_from_request(form):
+    mapping = {}
+    for field in CSV_IMPORT_MAP_FIELDS:
+        col_name = form.get(f'map_{field}')
+        if col_name:
+            mapping[field] = col_name
+    return mapping
+
+
+def _csv_row_active_flag(row, mapping):
+    active_col = mapping.get('active_status')
+    if active_col:
+        raw_active = row.get(active_col, '')
+        active_str = str(raw_active).strip() if raw_active is not None else ''
+    else:
+        active_str = ''
+    return active_str == '1' or active_str == '1.0'
+
+
+def _norm_csv_cmp(val):
+    if val is None:
+        return ''
+    return str(val).strip()
+
+
+def _csv_row_role_name(row, mapping):
+    col = mapping.get('role') or mapping.get('agent_status')
+    if not col:
+        return 'Mitarbeiter'
+    v = row.get(col, '')
+    if v is None:
+        return 'Mitarbeiter'
+    s = str(v).strip()
+    return s if s else 'Mitarbeiter'
+
+
+def _csv_import_row_strings(row, mapping):
+    """Felder wie beim Import (leere Strings möglich)."""
+    def pull(field):
+        col = mapping.get(field)
+        if not col:
+            return None
+        v = row.get(col, '')
+        if v is None:
+            return None
+        return str(v).strip()
+
+    first_name = pull('first_name') or ''
+    last_name = pull('last_name') or ''
+    full_name = f'{first_name} {last_name}'.strip()
+    role_name = _csv_row_role_name(row, mapping)
+    return {
+        'first_name': first_name,
+        'last_name': last_name,
+        'full_name': full_name,
+        'role_name': role_name,
+        'plt_id': pull('plt_id'),
+        'ma_kennung': pull('ma_kennung'),
+        'dag_id': pull('dag_id'),
+        'email': pull('email'),
+    }
+
+
+def _csv_resolve_row_context(row, mapping, archiv_team):
+    """Liest eine CSV-Zeile wie der Import (ohne Schreiben)."""
+    pylon = _csv_row_pylon_value(row, mapping)
+    if not pylon:
+        return None
+
+    fs = _csv_import_row_strings(row, mapping)
+    full_name = fs['full_name'] or pylon
+    role_name = fs['role_name']
+
+    project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
+    team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
+
+    project = None
+    will_create_project = False
+    proj_label = ''
+
+    if project_name:
+        project = Project.query.filter_by(name=project_name).first()
+        if not project:
+            will_create_project = True
+            proj_label = f'{project_name} (wird neu angelegt)'
+        else:
+            proj_label = project.name
+    else:
+        project = Project.query.first()
+        if not project:
+            return {
+                'error': True,
+                'pylon': pylon,
+                'full_name': full_name,
+                'role_name': role_name,
+                'messages': ['Kein Projekt in der CSV und kein Standardprojekt in der Datenbank.'],
+                'group_key': ('! Fehler', '! Fehler', role_name),
+            }
+        proj_label = project.name
+
+    team = None
+    will_create_team = False
+    team_label = ''
+    if not will_create_project and project:
+        if team_name:
+            team = Team.query.filter_by(name=team_name, project_id=project.id).first()
+            if not team:
+                will_create_team = True
+                team_label = f'{team_name} (wird neu angelegt)'
+            else:
+                team_label = team.name
+        else:
+            team = Team.query.filter_by(project_id=project.id).first()
+            if not team:
+                will_create_team = True
+                team_label = 'Default (wird neu angelegt)'
+            else:
+                team_label = team.name
+    else:
+        team_label = team_name or '(Team folgt nach Projekt-Anlage)'
+
+    is_active = _csv_row_active_flag(row, mapping)
+    team_member = TeamMember.query.filter_by(pylon=pylon).first()
+
+    return {
+        'pylon': pylon,
+        'full_name': full_name,
+        'role_name': role_name,
+        'project': project,
+        'project_name_csv': project_name,
+        'will_create_project': will_create_project,
+        'proj_label': proj_label,
+        'team': team,
+        'team_name_csv': team_name,
+        'will_create_team': will_create_team,
+        'team_label': team_label,
+        'is_active': is_active,
+        'team_member': team_member,
+        'archiv_team': archiv_team,
+        'plt_id': fs['plt_id'],
+        'ma_kennung': fs['ma_kennung'],
+        'dag_id': fs['dag_id'],
+        'email': fs['email'],
+        'group_key': (proj_label, team_label, role_name),
+    }
+
+
+def _csv_simulate_target_team_id(ctx):
+    """Team-ID nach Importlogik; None wenn aktives Ziel-Team noch nicht in DB existiert."""
+    archiv_team = ctx['archiv_team']
+    team = ctx['team']
+    team_member = ctx['team_member']
+    is_active = ctx['is_active']
+    will_create_project = ctx['will_create_project']
+    will_create_team = ctx['will_create_team']
+
+    if will_create_project or will_create_team:
+        if not is_active:
+            return archiv_team.id
+        return None
+
+    if not team:
+        return archiv_team.id if not is_active else None
+
+    if not team_member:
+        if not is_active:
+            return archiv_team.id
+        return team.id
+
+    if not is_active:
+        return archiv_team.id
+
+    if team_member.team_id == archiv_team.id:
+        if team_member.original_team_id:
+            return team_member.original_team_id
+        return team.id
+    return team.id
+
+
+def _csv_member_snapshot(team_member, archiv_team):
+    if not team_member:
+        return None
+    in_archiv = team_member.team_id == archiv_team.id
+    team_n = ''
+    proj_n = ''
+    if team_member.team:
+        team_n = team_member.team.name or ''
+        if team_member.team.project:
+            proj_n = team_member.team.project.name or ''
+    user = User.query.get(team_member.user_id) if team_member.user_id else None
+    role_n = user.role.name if user and user.role else None
+    return {
+        'in_archiv': in_archiv,
+        'project': proj_n,
+        'team': 'ARCHIV' if in_archiv else team_n,
+        'name': team_member.name or '',
+        'plt_id': _norm_csv_cmp(team_member.plt_id),
+        'ma_kennung': _norm_csv_cmp(team_member.ma_kennung),
+        'dag_id': _norm_csv_cmp(team_member.dag_id),
+        'role': role_n,
+    }
+
+
+def _csv_target_snapshot(ctx):
+    archiv_team = ctx['archiv_team']
+    tid = _csv_simulate_target_team_id(ctx)
+    fs_name = ctx['full_name']
+    role_name = ctx['role_name']
+
+    if tid == archiv_team.id:
+        loc = f'Herkunft für ARCHIV: „{ctx["team_label"]}“ ({ctx["proj_label"]})'
+        if ctx['team_member'] and ctx['team_member'].original_team_id and ctx['team_member'].original_team:
+            ot = ctx['team_member'].original_team.name
+            loc = f'ARCHIV (Reaktivierung möglich über Ursprungs-Team „{ot}“)'
+        return {
+            'in_archiv': True,
+            'project': '',
+            'team': loc,
+            'name': fs_name,
+            'plt_id': _norm_csv_cmp(ctx['plt_id']),
+            'ma_kennung': _norm_csv_cmp(ctx['ma_kennung']),
+            'dag_id': _norm_csv_cmp(ctx['dag_id']),
+            'role': role_name,
+        }
+
+    if tid is not None and ctx['team'] and ctx['team'].id == tid:
+        t = ctx['team']
+        p = t.project.name if t.project else ''
+        return {
+            'in_archiv': False,
+            'project': p,
+            'team': t.name,
+            'name': fs_name,
+            'plt_id': _norm_csv_cmp(ctx['plt_id']),
+            'ma_kennung': _norm_csv_cmp(ctx['ma_kennung']),
+            'dag_id': _norm_csv_cmp(ctx['dag_id']),
+            'role': role_name,
+        }
+
+    if tid is not None:
+        t = Team.query.get(tid)
+        if t:
+            p = t.project.name if t.project else ''
+            return {
+                'in_archiv': False,
+                'project': p,
+                'team': t.name,
+                'name': fs_name,
+                'plt_id': _norm_csv_cmp(ctx['plt_id']),
+                'ma_kennung': _norm_csv_cmp(ctx['ma_kennung']),
+                'dag_id': _norm_csv_cmp(ctx['dag_id']),
+                'role': role_name,
+            }
+
+    return {
+        'in_archiv': False,
+        'project': ctx['proj_label'],
+        'team': ctx['team_label'],
+        'name': fs_name,
+        'plt_id': _norm_csv_cmp(ctx['plt_id']),
+        'ma_kennung': _norm_csv_cmp(ctx['ma_kennung']),
+        'dag_id': _norm_csv_cmp(ctx['dag_id']),
+        'role': role_name,
+    }
+
+
+_CSV_DIFF_FIELD_ORDER = [
+    'project', 'team', 'active_status', 'role', 'agent_status',
+    'first_name', 'last_name', 'plt_id', 'ma_kennung', 'dag_id', 'email', 'pylon',
+]
+
+
+def _csv_cell_display(row, column_header):
+    if not column_header:
+        return ''
+    v = row.get(column_header, '')
+    if v is None:
+        return ''
+    return str(v).strip()
+
+
+def _csv_display_cell_csv(s):
+    t = (s or '').strip()
+    return t if t else '(leer)'
+
+
+def _csv_name_split_parts(display_name):
+    name = (display_name or '').strip()
+    if not name:
+        return '(leer)', '(leer)'
+    parts = name.split()
+    if len(parts) == 1:
+        return parts[0], '(leer)'
+    return parts[0], ' '.join(parts[1:])
+
+
+def _csv_db_display_for_field(field, team_member, archiv_team):
+    """Ist-Wert aus der DB, vergleichbar mit CSV-Zelle."""
+    if not team_member:
+        return '(leer)'
+    snap = _csv_member_snapshot(team_member, archiv_team)
+    user = User.query.get(team_member.user_id) if team_member.user_id else None
+    if field == 'pylon':
+        return _csv_display_cell_csv(team_member.pylon)
+    if field == 'project':
+        return _csv_display_cell_csv(snap['project'])
+    if field == 'team':
+        if snap['in_archiv']:
+            return 'ARCHIV'
+        return _csv_display_cell_csv(snap['team'])
+    if field == 'active_status':
+        return '1' if not snap['in_archiv'] else '0'
+    if field == 'role':
+        return _csv_display_cell_csv(snap['role'])
+    if field == 'agent_status':
+        return '(leer)'
+    if field == 'first_name':
+        fn, _ln = _csv_name_split_parts(team_member.name)
+        return fn
+    if field == 'last_name':
+        _fn, ln = _csv_name_split_parts(team_member.name)
+        return ln
+    if field == 'plt_id':
+        return _csv_display_cell_csv(team_member.plt_id)
+    if field == 'ma_kennung':
+        return _csv_display_cell_csv(team_member.ma_kennung)
+    if field == 'dag_id':
+        return _csv_display_cell_csv(team_member.dag_id)
+    if field == 'email':
+        return _csv_display_cell_csv(user.email if user else None)
+    return '(leer)'
+
+
+def _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, is_new):
+    """
+    Pro geänderter Spalte genau: „<CSV-Spaltenname>: <vorher> → <nachher>“ (Zellinhalte wie in der CSV).
+    Neu: „<Spaltenname>: <Wert>“ nur für nicht-leere Zellen oder Stammdaten-Spalten (Pylon, Projekt, Team, aktiv, Rolle).
+    """
+    lines = []
+    seen_cols = set()
+    new_always_show_fields = frozenset({
+        'pylon', 'project', 'team', 'active_status', 'role', 'agent_status',
+    })
+    for field in _CSV_DIFF_FIELD_ORDER:
+        col = mapping.get(field)
+        if not col or col in seen_cols:
+            continue
+        seen_cols.add(col)
+        csv_raw = _csv_cell_display(row, col)
+        after = _csv_display_cell_csv(csv_raw)
+
+        if is_new:
+            if csv_raw != '' or field in new_always_show_fields:
+                lines.append(f'{col}: {after}')
+            continue
+
+        before = _csv_db_display_for_field(field, team_member, archiv_team)
+        if before != after:
+            lines.append(f'{col}: {before} → {after}')
+
+    if not is_new and team_member:
+        if not mapping.get('active_status'):
+            db_a = _csv_db_display_for_field('active_status', team_member, archiv_team)
+            csv_a = '1' if _csv_row_active_flag(row, mapping) else '0'
+            if db_a != csv_a:
+                lines.append(f'PLT aktiv (ohne Zuordnung): {db_a} → {csv_a}')
+        if not mapping.get('role') and not mapping.get('agent_status'):
+            db_r = _csv_db_display_for_field('role', team_member, archiv_team)
+            if db_r != 'Mitarbeiter':
+                lines.append(f'Rolle (ohne Zuordnung): {db_r} → Mitarbeiter')
+
+    return lines
+
+
+def _csv_build_change_item(row, mapping, archiv_team):
+    """Nur echte Abweichungen zur DB (oder Blocker-Fehler)."""
+    ctx = _csv_resolve_row_context(row, mapping, archiv_team)
+    if ctx is None:
+        return None
+    if ctx.get('error'):
+        return {
+            'pylon': ctx['pylon'],
+            'full_name': ctx['full_name'],
+            'change_lines': ctx['messages'],
+            'group_key': ctx['group_key'],
+            'change_kind': 'error',
+            'checkbox_disabled': True,
+        }
+
+    team_member = ctx['team_member']
+    after_snap = _csv_target_snapshot(ctx)
+
+    if team_member is None:
+        lines = _csv_diff_concrete_lines(row, mapping, None, archiv_team, True)
+        if not lines and mapping.get('pylon'):
+            pyl_col = mapping['pylon']
+            lines = [f'{pyl_col}: {_csv_cell_display(row, pyl_col)}']
+        return {
+            'pylon': ctx['pylon'],
+            'full_name': ctx['full_name'],
+            'change_lines': lines,
+            'group_key': ctx['group_key'],
+            'change_kind': 'create',
+            'checkbox_disabled': False,
+        }
+
+    before = _csv_member_snapshot(team_member, archiv_team)
+    lines = _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, False)
+    if not lines:
+        return None
+
+    kind = 'archive' if after_snap['in_archiv'] and not before['in_archiv'] else (
+        'restore' if before['in_archiv'] and not after_snap['in_archiv'] else 'update'
+    )
+    return {
+        'pylon': ctx['pylon'],
+        'full_name': ctx['full_name'],
+        'change_lines': lines,
+        'group_key': ctx['group_key'],
+        'change_kind': kind,
+        'checkbox_disabled': False,
+    }
+
+
+def _csv_collect_last_row_by_pylon(temp_path, delimiter, mapping):
+    from collections import OrderedDict
+    last = OrderedDict()
+    with open(temp_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f, delimiter=delimiter)
+        for row in reader:
+            pylon = _csv_row_pylon_value(row, mapping)
+            if pylon:
+                last[pylon] = row
+    return last
+
+
+def _group_csv_preview_items(items):
+    from collections import defaultdict
+    tree = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for it in items:
+        pk, tk, rk = it['group_key']
+        tree[pk][tk][rk].append(it)
+    return tree
+
+
+def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, included_pylons):
+    """Führt den Import aus; nur Zeilen deren Pylon in included_pylons liegt (Set)."""
+    stats = {
+        'created_members': 0, 'updated_members': 0, 'archived_members': 0,
+        'created_projects': 0, 'created_teams': 0, 'created_users': 0, 'created_roles': 0,
+        'errors': 0, 'skipped': 0,
+    }
+    batch = []
+    BATCH_SIZE = 100
+    processed = 0
+
+    with open(temp_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f, delimiter=delimiter)
+        for row in reader:
+            processed += 1
+            try:
+                pylon = _csv_row_pylon_value(row, mapping)
+                if not pylon:
+                    continue
+                if pylon not in included_pylons:
+                    stats['skipped'] += 1
+                    continue
+
+                first_name = row.get(mapping.get('first_name', ''), '').strip() if mapping.get('first_name') else ''
+                last_name = row.get(mapping.get('last_name', ''), '').strip() if mapping.get('last_name') else ''
+                full_name = f"{first_name} {last_name}".strip()
+                if not full_name:
+                    full_name = pylon
+
+                plt_id = row.get(mapping.get('plt_id', ''), '').strip() if mapping.get('plt_id') else None
+                ma_kennung = row.get(mapping.get('ma_kennung', ''), '').strip() if mapping.get('ma_kennung') else None
+                dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
+                email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
+
+                role_name = _csv_row_role_name(row, mapping)
+
+                role = Role.query.filter_by(name=role_name).first()
+                if not role:
+                    role = get_or_create_role(role_name)
+                    stats['created_roles'] += 1
+
+                project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
+                project = None
+                if project_name:
+                    project = Project.query.filter_by(name=project_name).first()
+                    if not project:
+                        project = Project(name=project_name)
+                        db.session.add(project)
+                        db.session.flush()
+                        stats['created_projects'] += 1
+                else:
+                    project = Project.query.first()
+                    if not project:
+                        stats['errors'] += 1
+                        continue
+
+                team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
+                team = None
+                if team_name:
+                    team = Team.query.filter_by(name=team_name, project_id=project.id).first()
+                    if not team:
+                        team = Team(name=team_name, project_id=project.id)
+                        db.session.add(team)
+                        db.session.flush()
+                        stats['created_teams'] += 1
+                else:
+                    team = Team.query.filter_by(project_id=project.id).first()
+                    if not team:
+                        team = Team(name="Default", project_id=project.id)
+                        db.session.add(team)
+                        db.session.flush()
+                        stats['created_teams'] += 1
+
+                is_active = _csv_row_active_flag(row, mapping)
+                team_member = TeamMember.query.filter_by(pylon=pylon).first()
+
+                if team_member:
+                    if not is_active:
+                        if team_member.team_id != archiv_team.id:
+                            team_member.original_team_id = team_member.team_id
+                            team_member.original_project_id = team_member.team.project_id if team_member.team else None
+                            team_member.team_id = archiv_team.id
+                            stats['archived_members'] += 1
+                    else:
+                        if team_member.team_id == archiv_team.id:
+                            if team_member.original_team_id:
+                                team_member.team_id = team_member.original_team_id
+                                team_member.original_team_id = None
+                                team_member.original_project_id = None
+                            else:
+                                team_member.team_id = team.id
+                        else:
+                            team_member.team_id = team.id
+
+                    team_member.name = full_name
+                    if plt_id is not None:
+                        team_member.plt_id = plt_id
+                    if ma_kennung is not None:
+                        team_member.ma_kennung = ma_kennung
+                    if dag_id is not None:
+                        team_member.dag_id = dag_id
+                    stats['updated_members'] += 1
+
+                    if team_member.user_id:
+                        user = User.query.get(team_member.user_id)
+                        if user and user.role_id != role.id:
+                            user.role_id = role.id
+                            db.session.add(user)
+                else:
+                    if is_active:
+                        new_tid = team.id
+                        orig_tid = None
+                        orig_pid = None
+                    else:
+                        new_tid = archiv_team.id
+                        orig_tid = team.id
+                        orig_pid = project.id
+                        stats['archived_members'] += 1
+                    team_member = TeamMember(
+                        name=full_name,
+                        team_id=new_tid,
+                        original_team_id=orig_tid,
+                        original_project_id=orig_pid,
+                        pylon=pylon,
+                        plt_id=plt_id,
+                        ma_kennung=ma_kennung,
+                        dag_id=dag_id
+                    )
+                    db.session.add(team_member)
+                    db.session.flush()
+                    stats['created_members'] += 1
+
+                    if not team_member.user_id:
+                        first_part = first_name[:4].lower() if first_name else ''
+                        last_part = last_name.lower() if last_name else ''
+                        username_base = f"{first_part}{last_part}"
+                        username_base = ''.join(c for c in username_base if c.isalnum() or c == '.')
+                        if not username_base:
+                            if email:
+                                username_base = email.split('@')[0]
+                            else:
+                                username_base = pylon.lower()
+                        username = username_base
+                        existing = User.query.filter_by(username=username).first()
+                        counter = 1
+                        orig_username = username
+                        while existing:
+                            username = f"{orig_username}{counter}"
+                            existing = User.query.filter_by(username=username).first()
+                            counter += 1
+
+                        user = User(
+                            username=username,
+                            email=email,
+                            role_id=role.id,
+                            project_id=project.id
+                        )
+                        user.set_password("Start123")
+                        db.session.add(user)
+                        db.session.flush()
+                        team_member.user_id = user.id
+                        stats['created_users'] += 1
+
+                batch.append(team_member)
+                if len(batch) >= BATCH_SIZE:
+                    db.session.commit()
+                    batch = []
+
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"CSV Import Zeile ~{processed}: {e}")
+                stats['errors'] += 1
+                continue
+
+    if batch:
+        db.session.commit()
+    return stats
+
+
 # --- CSV Sync Route ---
 @bp.route('/sync_from_csv', methods=['GET', 'POST'])
 @login_required
@@ -1504,7 +2165,17 @@ def sync_from_csv():
             return redirect(url_for('admin.sync_from_csv'))
 
         delimiter = request.form.get('delimiter', 'auto')
-        
+
+        prev_path = session.get('csv_temp_file')
+        if prev_path:
+            if os.path.isfile(prev_path):
+                try:
+                    os.unlink(prev_path)
+                except OSError:
+                    pass
+            _remove_csv_preview_sidecar(prev_path)
+        session.pop('csv_preview_truncated', None)
+
         # Save uploaded file to a temporary file
         temp_fd, temp_path = tempfile.mkstemp(suffix='.csv')
         os.close(temp_fd)
@@ -1556,227 +2227,127 @@ def sync_from_csv():
                                delimiter=delimiter,
                                config=current_app.config)
 
-    # Step 2: Process after mapping
-    if request.method == 'POST' and 'process' in request.form:
-        mapping = {}
-        for field in ['pylon', 'plt_id', 'first_name', 'last_name', 'ma_kennung', 'dag_id', 'email', 'team', 'project', 'active_status', 'agent_status', 'role']:
-            col_name = request.form.get(f'map_{field}')
-            if col_name:
-                mapping[field] = col_name
-
+    # Schritt 2a: Vorschau bauen (keine Änderungen an der DB)
+    if request.method == 'POST' and 'preview_import' in request.form:
+        mapping = _csv_mapping_from_request(request.form)
+        if not mapping.get('pylon'):
+            flash('Pylon-Nr muss zugeordnet sein.', 'danger')
+            return redirect(url_for('admin.sync_from_csv'))
         delimiter = session.get('csv_delimiter', ';')
         temp_path = session.get('csv_temp_file')
         if not temp_path or not os.path.exists(temp_path):
             flash('Keine CSV-Daten gefunden. Bitte erneut hochladen.', 'danger')
             return redirect(url_for('admin.sync_from_csv'))
 
-        with open(temp_path, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f, delimiter=delimiter)
-            
-            archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
-            if not archiv_team:
-                default_project = Project.query.first()
-                if not default_project:
-                    flash('Kein Projekt vorhanden. Bitte zuerst ein Projekt erstellen.', 'danger')
-                    return redirect(url_for('admin.sync_from_csv'))
-                archiv_team = Team(name=ARCHIV_TEAM_NAME, project_id=default_project.id)
-                db.session.add(archiv_team)
-                db.session.commit()
+        archiv_team = get_or_create_archiv_team()
+        last_rows = _csv_collect_last_row_by_pylon(temp_path, delimiter, mapping)
+        total_with_pylon = len(last_rows)
+        if not total_with_pylon:
+            flash('Keine Zeilen mit Pylon-Nr in der CSV.', 'warning')
+            return redirect(url_for('admin.sync_from_csv'))
 
-            mitarbeiter_role = Role.query.filter_by(name='Mitarbeiter').first()
-            if not mitarbeiter_role:
-                mitarbeiter_role = get_or_create_role('Mitarbeiter')
+        change_items = []
+        for row in last_rows.values():
+            item = _csv_build_change_item(row, mapping, archiv_team)
+            if item:
+                change_items.append(item)
 
-            created_members = 0
-            updated_members = 0
-            archived_members = 0
-            created_projects = 0
-            created_teams = 0
-            created_users = 0
-            created_roles = 0
-            errors = 0
-            processed = 0
-            batch = []
-            BATCH_SIZE = 100
+        if not change_items:
+            flash('Keine Abweichungen zur aktuellen Datenbank — der Import würde nichts ändern.', 'info')
+            return redirect(url_for('admin.sync_from_csv'))
 
-            for row in reader:
-                processed += 1
+        preview_truncated = len(change_items) > CSV_PREVIEW_MAX_ROWS
+        preview_items = change_items[:CSV_PREVIEW_MAX_ROWS]
+        preview_pylons = [x['pylon'] for x in preview_items]
+        sidecar = _csv_preview_sidecar_path(temp_path)
+        if preview_truncated:
+            session['csv_preview_truncated'] = True
+            with open(sidecar, 'w', encoding='utf-8') as sf:
+                json.dump({'preview_pylons': preview_pylons, 'total_changes': len(change_items)}, sf)
+            flash(
+                f'{len(change_items):,} Änderungen erkannt. Es werden die ersten {len(preview_items):,} zur Prüfung angezeigt. '
+                f'Weitere Änderungen sind in dieser Runde nicht zur Auswahl — bitte danach erneut synchronisieren.',
+                'warning',
+            )
+        else:
+            session.pop('csv_preview_truncated', None)
+            _remove_csv_preview_sidecar(temp_path)
+
+        grouped = _group_csv_preview_items(preview_items)
+        large_ui = len(change_items) >= CSV_PREVIEW_LARGE_UI_THRESHOLD
+        return render_template(
+            'admin/csv_import_preview.html',
+            grouped=grouped,
+            mapping=mapping,
+            map_fields=CSV_IMPORT_MAP_FIELDS,
+            delimiter=delimiter,
+            preview_count=len(preview_items),
+            total_csv_rows_with_pylon=total_with_pylon,
+            total_changes=len(change_items),
+            preview_truncated=preview_truncated,
+            large_ui=large_ui,
+            preview_max_rows=CSV_PREVIEW_MAX_ROWS,
+            config=current_app.config,
+        )
+
+    # Schritt 2b: Nur ausgewählte Pylonen importieren
+    if request.method == 'POST' and 'apply_import' in request.form:
+        mapping = _csv_mapping_from_request(request.form)
+        if not mapping.get('pylon'):
+            flash('Ungültige Import-Anfrage (Zuordnung fehlt).', 'danger')
+            return redirect(url_for('admin.sync_from_csv'))
+        included = set(request.form.getlist('include_pylon'))
+        delimiter = session.get('csv_delimiter', ';')
+        temp_path = session.get('csv_temp_file')
+        if not temp_path or not os.path.exists(temp_path):
+            flash('Keine CSV-Daten gefunden. Bitte erneut hochladen.', 'danger')
+            return redirect(url_for('admin.sync_from_csv'))
+
+        preview_was_truncated = session.pop('csv_preview_truncated', False)
+        sidecar = _csv_preview_sidecar_path(temp_path)
+        extra_changes_not_shown = 0
+        if preview_was_truncated:
+            if os.path.isfile(sidecar):
+                with open(sidecar, encoding='utf-8') as sf:
+                    meta = json.load(sf)
+                if isinstance(meta, dict):
+                    extra_changes_not_shown = max(
+                        0,
+                        int(meta.get('total_changes', 0)) - len(meta.get('preview_pylons', [])),
+                    )
                 try:
-                    pylon = row.get(mapping.get('pylon', ''), '').strip() if mapping.get('pylon') else None
-                    if not pylon:
-                        errors += 1
-                        continue
+                    os.unlink(sidecar)
+                except OSError:
+                    pass
+            else:
+                flash(
+                    'Vorschau-Metadaten fehlten; es wurden nur die angehakten Änderungen importiert.',
+                    'warning',
+                )
+        else:
+            _remove_csv_preview_sidecar(temp_path)
 
-                    first_name = row.get(mapping.get('first_name', ''), '').strip() if mapping.get('first_name') else ''
-                    last_name = row.get(mapping.get('last_name', ''), '').strip() if mapping.get('last_name') else ''
-                    full_name = f"{first_name} {last_name}".strip()
-                    if not full_name:
-                        full_name = pylon
+        if not included:
+            flash('Keine Zeilen ausgewählt.', 'warning')
+            return redirect(url_for('admin.sync_from_csv'))
 
-                    plt_id = row.get(mapping.get('plt_id', ''), '').strip() if mapping.get('plt_id') else None
-                    ma_kennung = row.get(mapping.get('ma_kennung', ''), '').strip() if mapping.get('ma_kennung') else None
-                    dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
-                    email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
-
-                    # Role: get or create
-                    role_name = row.get(mapping.get('role', ''), '').strip() if mapping.get('role') else None
-                    if not role_name:
-                        role_name = 'Mitarbeiter'
-                    
-                    role = Role.query.filter_by(name=role_name).first()
-                    if not role:
-                        role = get_or_create_role(role_name)
-                        created_roles += 1
-
-                    project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
-                    project = None
-                    if project_name:
-                        project = Project.query.filter_by(name=project_name).first()
-                        if not project:
-                            project = Project(name=project_name)
-                            db.session.add(project)
-                            created_projects += 1
-                    else:
-                        project = Project.query.first()
-                        if not project:
-                            errors += 1
-                            continue
-
-                    team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
-                    team = None
-                    if team_name:
-                        team = Team.query.filter_by(name=team_name, project_id=project.id).first()
-                        if not team:
-                            team = Team(name=team_name, project_id=project.id)
-                            db.session.add(team)
-                            created_teams += 1
-                    else:
-                        team = Team.query.filter_by(project_id=project.id).first()
-                        if not team:
-                            team = Team(name="Default", project_id=project.id)
-                            db.session.add(team)
-                            created_teams += 1
-
-                    # PLT aktiv?: nur exakt "1" (oder "1.0" aus Excel) = im Team; alles andere + leer + Spalte nicht gemappt = Archiv
-                    active_col = mapping.get('active_status')
-                    if active_col:
-                        raw_active = row.get(active_col, '')
-                        active_str = str(raw_active).strip() if raw_active is not None else ''
-                    else:
-                        active_str = ''
-                    is_active = active_str == '1' or active_str == '1.0'
-
-                    team_member = TeamMember.query.filter_by(pylon=pylon).first()
-
-                    if team_member:
-                        if not is_active:
-                            if team_member.team_id != archiv_team.id:
-                                team_member.original_team_id = team_member.team_id
-                                team_member.original_project_id = team_member.team.project_id if team_member.team else None
-                                team_member.team_id = archiv_team.id
-                                archived_members += 1
-                        else:
-                            if team_member.team_id == archiv_team.id:
-                                if team_member.original_team_id:
-                                    team_member.team_id = team_member.original_team_id
-                                    team_member.original_team_id = None
-                                    team_member.original_project_id = None
-                                else:
-                                    team_member.team_id = team.id
-                            else:
-                                team_member.team_id = team.id
-
-                        team_member.name = full_name
-                        if plt_id is not None:
-                            team_member.plt_id = plt_id
-                        if ma_kennung is not None:
-                            team_member.ma_kennung = ma_kennung
-                        if dag_id is not None:
-                            team_member.dag_id = dag_id
-                        updated_members += 1
-
-                        if team_member.user_id:
-                            user = User.query.get(team_member.user_id)
-                            if user and user.role_id != role.id:
-                                user.role_id = role.id
-                                db.session.add(user)
-                    else:
-                        if is_active:
-                            new_tid = team.id
-                            orig_tid = None
-                            orig_pid = None
-                        else:
-                            new_tid = archiv_team.id
-                            orig_tid = team.id
-                            orig_pid = project.id
-                            archived_members += 1
-                        team_member = TeamMember(
-                            name=full_name,
-                            team_id=new_tid,
-                            original_team_id=orig_tid,
-                            original_project_id=orig_pid,
-                            pylon=pylon,
-                            plt_id=plt_id,
-                            ma_kennung=ma_kennung,
-                            dag_id=dag_id
-                        )
-                        db.session.add(team_member)
-                        created_members += 1
-
-                        if not team_member.user_id:
-                            first_part = first_name[:4].lower() if first_name else ''
-                            last_part = last_name.lower() if last_name else ''
-                            username_base = f"{first_part}{last_part}"
-                            username_base = ''.join(c for c in username_base if c.isalnum() or c == '.')
-                            if not username_base:
-                                if email:
-                                    username_base = email.split('@')[0]
-                                else:
-                                    username_base = pylon.lower()
-                            username = username_base
-                            existing = User.query.filter_by(username=username).first()
-                            counter = 1
-                            orig_username = username
-                            while existing:
-                                username = f"{orig_username}{counter}"
-                                existing = User.query.filter_by(username=username).first()
-                                counter += 1
-
-                            user = User(
-                                username=username,
-                                email=email,
-                                role_id=role.id,
-                                project_id=project.id
-                            )
-                            user.set_password("Start123")
-                            db.session.add(user)
-                            db.session.flush()
-                            team_member.user_id = user.id
-                            created_users += 1
-
-                    batch.append(team_member)
-                    if len(batch) >= BATCH_SIZE:
-                        db.session.commit()
-                        batch = []
-                        current_app.logger.info(f"Committed {processed} rows so far")
-
-                except Exception as e:
-                    db.session.rollback()
-                    current_app.logger.error(f"Fehler in Zeile {processed}: {e}")
-                    errors += 1
-                    continue
-
-            if batch:
-                db.session.commit()
-            current_app.logger.info(f"Import finished. Processed {processed} rows, errors {errors}")
-
+        archiv_team = get_or_create_archiv_team()
+        stats = _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, included)
         try:
             os.unlink(temp_path)
-        except:
+        except OSError:
             pass
         session.pop('csv_temp_file', None)
 
-        flash(f'Import abgeschlossen: {created_members} neu, {updated_members} aktualisiert, {archived_members} archiviert, {created_projects} Projekte, {created_teams} Teams, {created_users} Benutzer, {created_roles} neue Rollen, {errors} Fehler.', 'success')
+        msg = (
+            f'Import abgeschlossen: {stats["created_members"]} neu, {stats["updated_members"]} aktualisiert, '
+            f'{stats["archived_members"]} archiviert, {stats["created_projects"]} Projekte, {stats["created_teams"]} Teams, '
+            f'{stats["created_users"]} Benutzer, {stats["created_roles"]} neue Rollen, {stats["errors"]} Fehler, '
+            f'{stats["skipped"]} CSV-Zeilen übersprungen (nicht zur Übernahme gewählt oder ohne Pylon).'
+        )
+        if extra_changes_not_shown:
+            msg += f' Achtung: {extra_changes_not_shown:,} weitere Änderungen waren nicht in der Liste — bitte erneut synchronisieren.'
+        flash(msg, 'success')
         return redirect(url_for('admin.sync_from_csv'))
 
     return render_template('admin/sync_from_csv.html', config=current_app.config)

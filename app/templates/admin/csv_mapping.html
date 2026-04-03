@@ -32,8 +32,8 @@
         </div>
         <div class="col-md-6">
             <h4>Zuordnung</h4>
-            <form method="POST">
-                <input type="hidden" name="process" value="1">
+            <form method="POST" action="{{ url_for('admin.sync_from_csv') }}">
+                <input type="hidden" name="preview_import" value="1">
                 <div class="form-group">
                     <label>Spalten zum Import auswählen:</label><br>
                     <div class="row">
@@ -130,9 +130,9 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Status aktiv (1 = aktiv, 0 = inaktiv)</label>
+                    <label>PLT aktiv? (nur <strong>1</strong> = im Team; leer/sonst = ARCHIV)</label>
                     <select name="map_active_status" class="form-control">
-                        <option value="">-- Ignorieren (immer aktiv) --</option>
+                        <option value="">-- Nicht zuordnen (alle wie „inaktiv“ → ARCHIV) --</option>
                         {% for header in headers %}
                             <option value="{{ header }}" {% if mapping.active_status == header %}selected{% endif %}>{{ header }}</option>
                         {% endfor %}
@@ -156,7 +156,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <button type="submit" class="btn telekom-button">Import starten</button>
+                <button type="submit" class="btn telekom-button">Geänderte Einträge prüfen …</button>
                 <a href="{{ url_for('admin.sync_from_csv') }}" class="btn btn-secondary">Abbrechen</a>
             </form>
         </div>
