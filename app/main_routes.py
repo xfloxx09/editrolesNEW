@@ -1745,12 +1745,6 @@ def assigned_coachings():
     ).order_by(Team.name, TeamMember.name).all()
 
     member_performance = _member_performance_for_assigned_page(project_id) if view_type == 'pl' else []
-    top_performers = []
-    bottom_performers = []
-    if member_performance:
-        by_score = sorted(member_performance, key=lambda x: x['combined_score'], reverse=True)
-        top_performers = by_score[:5]
-        bottom_performers = sorted(member_performance, key=lambda x: x['combined_score'])[:5]
 
     project_bar_extra_hidden = {'status': tab_active}
     if team_filter:
@@ -1784,8 +1778,6 @@ def assigned_coachings():
         all_coaches=all_coaches,
         all_members=all_members,
         member_performance=member_performance,
-        top_performers=top_performers,
-        bottom_performers=bottom_performers,
         config=current_app.config,
     )
 
