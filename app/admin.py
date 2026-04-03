@@ -1959,13 +1959,10 @@ def _csv_review_cell_value(row, mapping, field_key):
     return _csv_display_cell_csv(_csv_cell_display(row, col))
 
 
-def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, users_by_id, baseline_row=None):
-    """
-    Zeilen für Alt/Neu-Tabelle. Alt = Baseline-CSV (falls gesetzt) sonst DB-Ist.
-    """
+def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, users_by_id):
+    """Zeilen für Alt/Neu-Tabelle: Alt = Live-Datenbank, Neu = hochgeladene CSV."""
     rows = []
     seen_cols = set()
-    baseline_mode = baseline_row is not None
     for field_key in CSV_REVIEW_DISPLAY_KEYS:
         col = mapping.get(field_key)
         if not col or col in seen_cols:
@@ -1974,18 +1971,14 @@ def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, use
         new_val = _csv_review_cell_value(new_row, mapping, field_key)
         if new_val is None:
             continue
-        if baseline_mode:
-            old_val = _csv_review_cell_value(baseline_row, mapping, field_key)
-            if old_val is None:
-                old_val = '(leer)'
-        elif team_member:
+        if team_member:
             old_val = _csv_db_display_for_field(field_key, team_member, archiv_team, users_by_id)
         else:
             old_val = '—'
         changed = old_val != new_val
         rows.append({'label': col, 'old': old_val, 'new': new_val, 'changed': changed})
 
-    if not baseline_mode and team_member and not mapping.get('active_status'):
+    if team_member and not mapping.get('active_status'):
         db_a = _csv_db_display_for_field('active_status', team_member, archiv_team, users_by_id)
         csv_a = '1' if _csv_row_active_flag(new_row, mapping) else '0'
         if db_a != csv_a:
@@ -1994,7 +1987,7 @@ def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, use
                 'old': db_a, 'new': csv_a, 'changed': True,
             })
 
-    if not baseline_mode and team_member and not mapping.get('role') and not mapping.get('agent_status'):
+    if team_member and not mapping.get('role') and not mapping.get('agent_status'):
         db_r = _csv_db_display_for_field('role', team_member, archiv_team, users_by_id)
         if db_r != 'Mitarbeiter':
             rows.append({
@@ -2031,26 +2024,25 @@ def _csv_change_item_payload(ctx, comparison, change_kind, checkbox_disabled, er
     }
 
 
-def _csv_build_change_item(row, mapping, archiv_team, preview_caches=None, baseline_rows=None):
-    """Vorschau: Alt (Baseline-CSV oder DB) vs Neu (Import-CSV)."""
+def _csv_build_change_item(row, mapping, archiv_team, preview_caches=None):
+    """Vorschau: Alt (Live-DB) vs Neu (Import-CSV)."""
     ctx = _csv_resolve_row_context(row, mapping, archiv_team, preview_caches)
     if ctx is None:
         return None
 
     users_by_id = preview_caches.users_by_id if preview_caches else None
     pylon = ctx['pylon']
-    baseline_row = baseline_rows.get(pylon) if baseline_rows else None
 
     if ctx.get('error'):
         tm = None
         if preview_caches:
             tm = preview_caches.members_by_pylon.get(pylon)
-        comparison = _csv_build_review_comparison(row, mapping, tm, archiv_team, users_by_id, baseline_row)
+        comparison = _csv_build_review_comparison(row, mapping, tm, archiv_team, users_by_id)
         return _csv_change_item_payload(ctx, comparison, 'error', True, error_messages=ctx['messages'])
 
     team_member = ctx['team_member']
     after_snap = _csv_target_snapshot(ctx, preview_caches)
-    comparison = _csv_build_review_comparison(row, mapping, team_member, archiv_team, users_by_id, baseline_row)
+    comparison = _csv_build_review_comparison(row, mapping, team_member, archiv_team, users_by_id)
 
     if not any(c['changed'] for c in comparison):
         return None
@@ -2307,21 +2299,8 @@ def sync_from_csv():
                     pass
             _remove_csv_preview_sidecar(prev_path)
         session.pop('csv_preview_truncated', None)
-
-        # Optional: zweite CSV als „Stand vorher“ (z. B. ALL.csv vs ALL NEW.csv)
-        baseline_file = request.files.get('baseline_csv')
         _remove_baseline_csv_session(session)
-        if baseline_file and baseline_file.filename and baseline_file.filename.lower().endswith('.csv'):
-            b_fd, b_temp = tempfile.mkstemp(suffix='.csv')
-            os.close(b_fd)
-            baseline_file.save(b_temp)
-            with open(b_temp, 'r', encoding='utf-8-sig') as bf:
-                b_sample = bf.read(1024)
-                bf.seek(0)
-                b_delim = ';' if ';' in b_sample else ','
-            session['csv_baseline_temp_file'] = b_temp
-            session['csv_baseline_delimiter'] = b_delim
-            flash('Vergleichs-CSV (alt) gespeichert — die Vorschau zeigt Alt vs Neu aus den Dateien.', 'info')
+
         # Save uploaded file to a temporary file
         temp_fd, temp_path = tempfile.mkstemp(suffix='.csv')
         os.close(temp_fd)
@@ -2372,7 +2351,6 @@ def sync_from_csv():
             preview_rows=preview_rows,
             mapping=mapping,
             delimiter=delimiter,
-            has_baseline_csv=bool(session.get('csv_baseline_temp_file')),
             config=current_app.config,
         )
 
@@ -2395,24 +2373,15 @@ def sync_from_csv():
             flash('Keine Zeilen mit Pylon-Nr in der CSV.', 'warning')
             return redirect(url_for('admin.sync_from_csv'))
 
-        baseline_rows = None
-        bpath = session.get('csv_baseline_temp_file')
-        bdelim = session.get('csv_baseline_delimiter', delimiter)
-        if bpath and os.path.isfile(bpath):
-            baseline_rows = _csv_collect_last_row_by_pylon(bpath, bdelim, mapping)
-
         preview_caches = _CsvPreviewCaches(last_rows.keys())
         change_items = []
         for row in last_rows.values():
-            item = _csv_build_change_item(row, mapping, archiv_team, preview_caches, baseline_rows)
+            item = _csv_build_change_item(row, mapping, archiv_team, preview_caches)
             if item:
                 change_items.append(item)
 
         if not change_items:
-            if baseline_rows is not None:
-                flash('Keine Unterschiede zwischen alter und neuer CSV für die zugeordneten Spalten.', 'info')
-            else:
-                flash('Keine Abweichungen zur aktuellen Datenbank — der Import würde nichts ändern.', 'info')
+            flash('Keine Abweichungen zur Live-Datenbank — der Import würde nichts ändern.', 'info')
             return redirect(url_for('admin.sync_from_csv'))
 
         preview_truncated = len(change_items) > CSV_PREVIEW_MAX_ROWS
@@ -2446,7 +2415,6 @@ def sync_from_csv():
             preview_truncated=preview_truncated,
             large_ui=large_ui,
             preview_max_rows=CSV_PREVIEW_MAX_ROWS,
-            preview_compare_baseline=baseline_rows is not None,
             config=current_app.config,
         )
 

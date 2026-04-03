@@ -2,32 +2,29 @@
 
 {% block content %}
 <div class="container-fluid mb-3">
-    <p class="text-muted small mb-0">
-        {% if preview_compare_baseline %}
-        <strong>{{ total_changes|int }}</strong> Zeilen unterscheiden sich zwischen <strong>alter</strong> und <strong>neuer</strong> CSV
-        ({{ total_csv_rows_with_pylon|int }} Pylone in der neuen Datei; gelbe Zeilen = geänderte Felder).
-        {% else %}
-        <strong>{{ total_changes|int }}</strong> Abweichung(en) zum <strong>aktuellen Datenbank-Stand</strong>
-        ({{ total_csv_rows_with_pylon|int }} Pylon-Zeilen).
-        {% endif %}
-        Der Prüfdialog öffnet sich automatisch.
+    <p class="text-muted small mb-2">
+        <strong>{{ total_changes|int }}</strong> Abweichung(en) zur <strong>Live-Datenbank</strong>
+        ({{ total_csv_rows_with_pylon|int }} Pylon-Zeilen in der CSV; gelbe Tabellenzeilen = geänderte Felder).
     </p>
-    <p class="mb-0"><a href="{{ url_for('admin.sync_from_csv') }}" class="btn btn-sm btn-secondary mt-2">CSV neu hochladen / Abbrechen</a></p>
+    <p class="mb-2">
+        <button type="button" class="btn btn-primary btn-sm" id="csvOpenReviewBtn" data-toggle="modal" data-target="#csvChangesModal">
+            Prüfdialog öffnen
+        </button>
+        <span class="text-muted small ml-2">Öffnet sich normalerweise automatisch nach dem Laden der Seite.</span>
+    </p>
+    <p class="mb-0"><a href="{{ url_for('admin.sync_from_csv') }}" class="btn btn-sm btn-secondary mt-1">CSV neu hochladen / Abbrechen</a></p>
 </div>
 
-<div class="modal fade" id="csvChangesModal" tabindex="-1" role="dialog" aria-labelledby="csvChangesModalTitle" data-backdrop="static" data-keyboard="false" aria-hidden="false">
+<div class="modal fade" id="csvChangesModal" tabindex="-1" role="dialog" aria-labelledby="csvChangesModalTitle" data-backdrop="static" data-keyboard="false" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document" style="max-width: min(96vw, 1400px);">
         <div class="modal-content bg-dark text-light border-secondary">
             <div class="modal-header border-secondary">
                 <div class="w-100">
                     <h4 class="modal-title" id="csvChangesModalTitle">Änderungen vor dem Import prüfen</h4>
                     <p class="small text-muted mb-0 mt-1">
-                        {% if preview_compare_baseline %}
-                        Spalte <strong>Alt</strong> = vorherige CSV, <strong>Neu</strong> = diese Import-Datei. Hervorgehobene Zeilen = konkrete Änderung.
-                        {% else %}
-                        Spalte <strong>Alt</strong> = Ist aus der Datenbank, <strong>Neu</strong> = Wert aus der CSV.
-                        {% endif %}
-                        Deaktivieren Sie Zeilen, die nicht importiert werden sollen.
+                        <strong>Alt</strong> = Ist-Zustand in der <strong>Datenbank (live)</strong>,
+                        <strong>Neu</strong> = Wert aus Ihrer <strong>CSV</strong>.
+                        Hervorgehobene Zeilen sind die tatsächlichen Änderungen.
                     </p>
                     {% if preview_truncated %}
                     <div class="alert alert-warning py-2 small mt-2 mb-0">
@@ -53,7 +50,7 @@
                                 <div class="input-group input-group-sm">
                                     <div class="input-group-prepend"><span class="input-group-text bg-dark text-light border-secondary"><i class="fas fa-search"></i></span></div>
                                     <input type="search" class="form-control bg-dark text-light border-secondary" id="csvPreviewSearch"
-                                           placeholder="Pylon, Name, geplante Änderung …" autocomplete="off">
+                                           placeholder="Pylon, Name, Feld …" autocomplete="off">
                                 </div>
                             </div>
                             <div class="col-md-8">
@@ -120,7 +117,7 @@
                                                                 <th>Pylon</th>
                                                                 <th>Name</th>
                                                                 <th>Art</th>
-                                                                <th style="min-width: 320px;">Alt → Neu (alle relevanten Felder)</th>
+                                                                <th style="min-width: 320px;">DB (Alt) → CSV (Neu)</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
@@ -152,7 +149,7 @@
                                                                 <td class="small align-top p-1">
                                                                     <table class="table table-sm table-borderless mb-0 text-light csv-compare-inner">
                                                                         <thead>
-                                                                            <tr class="border-bottom border-secondary"><th class="py-1" style="width:32%;">Feld</th><th class="py-1" style="width:34%;">Alt</th><th class="py-1" style="width:34%;">Neu</th></tr>
+                                                                            <tr class="border-bottom border-secondary"><th class="py-1" style="width:32%;">Feld</th><th class="py-1" style="width:34%;">Alt (DB)</th><th class="py-1" style="width:34%;">Neu (CSV)</th></tr>
                                                                         </thead>
                                                                         <tbody>
                                                                             {% for c in it.comparison %}
@@ -193,10 +190,41 @@
     </div>
 </div>
 
+{% include 'admin/_csv_loading_overlay.html' %}
+{% endblock %}
+
+{% block scripts %}
 <script>
 (function () {
+    // Muss nach jQuery + bootstrap.js laufen (siehe base.html — {% block scripts %} liegt unten).
+    function openCsvPreviewModal() {
+        var $m = window.jQuery && window.jQuery('#csvChangesModal');
+        if ($m && $m.length && typeof $m.modal === 'function') {
+            $m.modal({ backdrop: 'static', keyboard: false, show: true });
+            return;
+        }
+        var el = document.getElementById('csvChangesModal');
+        if (el) {
+            el.classList.add('show');
+            el.style.display = 'block';
+            el.removeAttribute('aria-hidden');
+            el.setAttribute('aria-modal', 'true');
+            document.body.classList.add('modal-open');
+            var bd = document.createElement('div');
+            bd.className = 'modal-backdrop fade show';
+            bd.id = 'csvModalBackdropFallback';
+            document.body.appendChild(bd);
+        }
+    }
+
     if (window.jQuery) {
-        window.jQuery('#csvChangesModal').modal({ backdrop: 'static', keyboard: false, show: true });
+        window.jQuery(openCsvPreviewModal);
+    } else {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', openCsvPreviewModal);
+        } else {
+            openCsvPreviewModal();
+        }
     }
 
     var form = document.getElementById('csvPreviewForm');
@@ -341,5 +369,4 @@
     syncAllGroupHeaders();
 })();
 </script>
-{% include 'admin/_csv_loading_overlay.html' %}
 {% endblock %}
