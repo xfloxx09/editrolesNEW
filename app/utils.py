@@ -27,6 +27,18 @@ def team_member_eligible_for_new_coaching(team_member):
     return bool(team_member.team.active_for_coaching)
 
 
+def team_member_eligible_for_coaching_assignment(team_member):
+    """True if this member may receive a coaching *assignment* (Coaching zuweisen), including admin-whitelisted inactive teams."""
+    if not team_member or not team_member.team:
+        return False
+    if team_member.team.name == ARCHIV_TEAM_NAME:
+        return False
+    t = team_member.team
+    if t.active_for_coaching:
+        return True
+    return bool(getattr(t, 'visible_for_coaching_assignment', False))
+
+
 def iter_relationship(coll):
     """Iterate SQLAlchemy relation: dynamic (``.all()``) or static list / InstrumentedList."""
     if coll is None:
@@ -44,25 +56,35 @@ def _archiv_team_id():
     return t.id if t else None
 
 
-def _is_live_team_in_project(team, project_id, archiv_id):
-    """Real project team (not ARCHIV) suitable for coaching context."""
+def _team_usable_for_coach_link(team, project_id, archiv_id, for_assignment=False):
+    """Project team usable when linking coaches to coachees (add coaching / assignments)."""
     if not team or team.project_id != project_id:
         return False
     if team.name == ARCHIV_TEAM_NAME:
         return False
     if archiv_id is not None and team.id == archiv_id:
         return False
-    if not team.active_for_coaching:
-        return False
-    return True
+    if team.active_for_coaching:
+        return True
+    if for_assignment and getattr(team, 'visible_for_coaching_assignment', False):
+        return True
+    return False
 
 
-def user_eligible_assignable_coach(user, project_id, team_member_id=None):
+def _is_live_team_in_project(team, project_id, archiv_id):
+    """Real project team (not ARCHIV) with active coaching — workshops, neue Coachings, etc."""
+    return _team_usable_for_coach_link(team, project_id, archiv_id, for_assignment=False)
+
+
+def user_eligible_assignable_coach(user, project_id, team_member_id=None, for_assignment=False):
     """
     Users who may be chosen as coach when creating an AssignedCoaching in project_id.
 
-    Excludes ties that only exist via ARCHIV or inactive (``active_for_coaching``) teams.
+    Excludes ties that only exist via ARCHIV or inactive teams, except when
+    ``for_assignment`` and the coachee team is whitelisted (``visible_for_coaching_assignment``).
     ``coach_own_team_only`` requires a selected coachee on the same live team / led team.
+
+    ``for_assignment``: coachee teams may be inactive if marked visible for assignment in admin.
     """
     if not user or not user.role:
         return False
@@ -75,7 +97,7 @@ def user_eligible_assignable_coach(user, project_id, team_member_id=None):
     pids = {project_id}
 
     def live_proj(team):
-        return _is_live_team_in_project(team, project_id, archiv_id)
+        return _team_usable_for_coach_link(team, project_id, archiv_id, for_assignment=for_assignment)
 
     linked = False
     if user.project_id in pids:
@@ -162,7 +184,7 @@ def users_for_assignment_coach_dropdown(project_id, team_member_id=None):
     """Sorted users who may receive a coaching assignment in this project."""
     eligible = [
         u for u in User.query.order_by(User.username).all()
-        if user_eligible_assignable_coach(u, project_id, team_member_id)
+        if user_eligible_assignable_coach(u, project_id, team_member_id, for_assignment=True)
     ]
     eligible.sort(key=lambda u: (u.coach_display_name or '').lower())
     return eligible

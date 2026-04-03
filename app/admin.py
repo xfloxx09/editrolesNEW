@@ -256,11 +256,19 @@ def manage_teams_coaching():
     form = TeamsCoachingBulkForm()
     if form.validate_on_submit():
         active_ids = {int(x) for x in request.form.getlist('active_team') if str(x).isdigit()}
+        assignment_visible_ids = {
+            int(x) for x in request.form.getlist('assignment_visible_team') if str(x).isdigit()
+        }
         teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).all()
         for team in teams:
-            team.active_for_coaching = team.id in active_ids
+            is_active = team.id in active_ids
+            team.active_for_coaching = is_active
+            if is_active:
+                team.visible_for_coaching_assignment = False
+            else:
+                team.visible_for_coaching_assignment = team.id in assignment_visible_ids
         db.session.commit()
-        flash('Team-Sichtbarkeit für aktives Coaching gespeichert.', 'success')
+        flash('Team-Sichtbarkeit für Coaching, Workshops und Zuweisungen gespeichert.', 'success')
         return redirect(url_for('admin.manage_teams_coaching'))
 
     projects = Project.query.order_by(Project.name).all()

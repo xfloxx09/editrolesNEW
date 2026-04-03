@@ -342,7 +342,7 @@ class AssignedCoachingForm(FlaskForm):
             members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
                 Team.project_id.in_(allowed_project_ids),
                 Team.name != ARCHIV_TEAM_NAME,
-                Team.active_for_coaching.is_(True),
+                or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
             ).order_by(Team.name, TeamMember.name).all()
             self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in members]
 
@@ -387,7 +387,10 @@ class AdminAssignedCoachingForm(FlaskForm):
         self.coach_id.choices = [(u.id, f"{u.coach_display_name} ({u.role_name})") for u in coaches]
         self.team_member_id.choices = [
             (m.id, f"{m.name} ({m.team.name})")
-            for m in TeamMember.query.join(Team, TeamMember.team_id == Team.id).order_by(Team.name, TeamMember.name).all()
+            for m in TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
+                Team.name != ARCHIV_TEAM_NAME,
+                or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
+            ).order_by(Team.name, TeamMember.name).all()
         ]
 
 

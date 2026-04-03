@@ -23,6 +23,7 @@ from app.utils import (
     ARCHIV_TEAM_NAME,
     get_accessible_project_ids,
     team_member_eligible_for_new_coaching,
+    team_member_eligible_for_coaching_assignment,
     user_eligible_assignable_coach,
     users_for_assignment_coach_dropdown,
     workshop_individual_rating_from_request,
@@ -171,7 +172,7 @@ def _member_performance_for_assigned_page(project_id):
     members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
         Team.name != ARCHIV_TEAM_NAME,
-        Team.active_for_coaching.is_(True),
+        or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
     ).all()
     raw = []
     for m in members:
@@ -1789,7 +1790,7 @@ def assigned_coachings():
     all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
         Team.name != ARCHIV_TEAM_NAME,
-        Team.active_for_coaching.is_(True),
+        or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
     ).order_by(Team.name, TeamMember.name).all()
 
     member_performance = _member_performance_for_assigned_page(project_id) if view_type == 'pl' else []
@@ -1853,13 +1854,13 @@ def create_assigned_coaching():
     if form.validate_on_submit():
         coach_u = User.query.get(form.coach_id.data)
         if not coach_u or not user_eligible_assignable_coach(
-            coach_u, project_id, form.team_member_id.data
+            coach_u, project_id, form.team_member_id.data, for_assignment=True
         ):
             flash('Ungültige Coach-Auswahl.', 'danger')
             return redirect(url_for('main.create_assigned_coaching', project=project_id))
         tm_as = TeamMember.query.get(form.team_member_id.data)
-        if not team_member_eligible_for_new_coaching(tm_as):
-            flash('Dieses Teammitglied gehört zu einem Team, das für neue Zuweisungen deaktiviert ist.', 'danger')
+        if not team_member_eligible_for_coaching_assignment(tm_as):
+            flash('Dieses Teammitglied gehört zu einem Team, das für Coaching-Zuweisungen nicht freigegeben ist.', 'danger')
             return redirect(url_for('main.create_assigned_coaching', project=project_id))
         d = form.deadline.data
         dl = datetime(d.year, d.month, d.day, 23, 59, 59)
@@ -2005,8 +2006,8 @@ def accept_assigned_coaching(assignment_id):
         return redirect(url_for('main.assigned_coachings', project=list_pid))
     if assignment.status == 'pending':
         tm_acc = TeamMember.query.get(assignment.team_member_id)
-        if not team_member_eligible_for_new_coaching(tm_acc):
-            flash('Annahme nicht möglich: Das Team ist für neue Coachings deaktiviert.', 'danger')
+        if not team_member_eligible_for_coaching_assignment(tm_acc):
+            flash('Annahme nicht möglich: Diese Zuweisung ist für das Team nicht mehr gültig (Team nicht freigegeben).', 'danger')
         else:
             assignment.status = 'accepted'
             db.session.commit()

@@ -4,8 +4,10 @@
 <div class="container">
     <h1>Teams &amp; aktives Coaching</h1>
     <p class="text-muted">
-        Teams ohne Häkchen sind in der gesamten App für <strong>neue</strong> Coachings, Workshops und Zuweisungen gesperrt.
-        Bestehende Einträge, Diagramme und Filter in den Dashboards bleiben sichtbar. Das System-Team
+        <strong>Neue Coachings / Workshops:</strong> Nur Teams mit Häkchen in der ersten Spalte.
+        <strong>Coaching zuweisen:</strong> Bei <em>deaktivierten</em> Teams kann die mittlere Spalte eingeschaltet werden — dann erscheinen die Teammitglieder nur in der Zuweisungs-Ansicht (nicht für neue Coachings/Workshops).
+        Projektzugriff für Benutzer mit „Coaching zuweisen“ bleibt unverändert (nur sichtbare Projekte).
+        Bestehende Einträge und Dashboards bleiben sichtbar. Das System-Team
         <strong>{{ archiv_name }}</strong> wird hier nicht aufgeführt.
     </p>
     <p>
@@ -23,7 +25,8 @@
             <thead>
                 <tr>
                     <th>Team</th>
-                    <th style="width:14rem;">Neue Coachings / Workshops</th>
+                    <th style="width:11rem;">Neue Coachings / Workshops</th>
+                    <th style="width:14rem;">Coaching zuweisen (trotz deaktiviert)</th>
                 </tr>
             </thead>
             <tbody>
@@ -32,9 +35,18 @@
                     <td>{{ team.name }} <small class="text-muted">(ID {{ team.id }})</small></td>
                     <td>
                         <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="active_team" value="{{ team.id }}"
-                                   id="at_{{ team.id }}" {% if team.active_for_coaching %}checked{% endif %}>
+                            <input class="form-check-input js-coaching-active-team" type="checkbox" name="active_team" value="{{ team.id }}"
+                                   id="at_{{ team.id }}" data-team-id="{{ team.id }}" {% if team.active_for_coaching %}checked{% endif %}>
                             <label class="form-check-label" for="at_{{ team.id }}">aktiv</label>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="form-check">
+                            <input class="form-check-input js-assignment-visible-team" type="checkbox" name="assignment_visible_team" value="{{ team.id }}"
+                                   id="av_{{ team.id }}" data-team-id="{{ team.id }}"
+                                   {% if team.visible_for_coaching_assignment %}checked{% endif %}
+                                   {% if team.active_for_coaching %}disabled{% endif %}>
+                            <label class="form-check-label {% if team.active_for_coaching %}text-muted{% endif %}" for="av_{{ team.id }}">für Zuweisungen</label>
                         </div>
                     </td>
                 </tr>
@@ -49,4 +61,23 @@
         </div>
     </form>
 </div>
+<script>
+(function () {
+    function syncRow(activeCb) {
+        var tid = activeCb.getAttribute('data-team-id');
+        var av = document.querySelector('.js-assignment-visible-team[data-team-id="' + tid + '"]');
+        if (!av) return;
+        if (activeCb.checked) {
+            av.checked = false;
+            av.disabled = true;
+        } else {
+            av.disabled = false;
+        }
+    }
+    document.querySelectorAll('.js-coaching-active-team').forEach(function (cb) {
+        cb.addEventListener('change', function () { syncRow(cb); });
+        syncRow(cb);
+    });
+})();
+</script>
 {% endblock %}

@@ -303,6 +303,34 @@ def create_app(config_class=Config):
                         conn.rollback()
                         print(f"ℹ️ teams.active_for_coaching: {e} / {e2}")
 
+        # 12. teams.visible_for_coaching_assignment (inactive teams whitelisted for Coaching zuweisen only)
+        if 'teams' in inspector.get_table_names():
+            team_cols = [c['name'] for c in inspector.get_columns('teams')]
+            if 'visible_for_coaching_assignment' not in team_cols:
+                try:
+                    conn.execute(text(
+                        'ALTER TABLE teams ADD COLUMN visible_for_coaching_assignment BOOLEAN DEFAULT false'
+                    ))
+                    conn.execute(text(
+                        'UPDATE teams SET visible_for_coaching_assignment = false WHERE visible_for_coaching_assignment IS NULL'
+                    ))
+                    conn.commit()
+                    print("✅ Spalte 'visible_for_coaching_assignment' in teams hinzugefügt.")
+                except Exception as e:
+                    conn.rollback()
+                    try:
+                        conn.execute(text(
+                            'ALTER TABLE teams ADD COLUMN visible_for_coaching_assignment INTEGER DEFAULT 0'
+                        ))
+                        conn.execute(text(
+                            'UPDATE teams SET visible_for_coaching_assignment = 0 WHERE visible_for_coaching_assignment IS NULL'
+                        ))
+                        conn.commit()
+                        print("✅ Spalte 'visible_for_coaching_assignment' in teams hinzugefügt (Fallback).")
+                    except Exception as e2:
+                        conn.rollback()
+                        print(f"ℹ️ teams.visible_for_coaching_assignment: {e} / {e2}")
+
         print("--- Migration abgeschlossen ---")
 
     # --- Blueprint registration ---

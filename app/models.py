@@ -121,6 +121,8 @@ class Team(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     # False: no new coachings/workshops targeting this team; history & dashboards unchanged
     active_for_coaching = db.Column(db.Boolean, nullable=False, default=True)
+    # If True (and active_for_coaching is False): members still appear in "Coaching zuweisen" / assignment UI only; set in admin.
+    visible_for_coaching_assignment = db.Column(db.Boolean, nullable=False, default=False)
 
     members = db.relationship('TeamMember', foreign_keys='TeamMember.team_id', back_populates='team')
     leaders = db.relationship('User', secondary=team_leaders, back_populates='teams_led')
