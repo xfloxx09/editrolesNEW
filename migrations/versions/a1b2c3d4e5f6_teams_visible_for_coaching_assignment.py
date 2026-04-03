@@ -16,16 +16,25 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        'teams',
-        sa.Column(
-            'visible_for_coaching_assignment',
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.false(),
-        ),
-    )
+    # Idempotent: create_app() may add this column before Alembic runs (startup migration).
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    cols = {c['name'] for c in inspector.get_columns('teams')}
+    if 'visible_for_coaching_assignment' not in cols:
+        op.add_column(
+            'teams',
+            sa.Column(
+                'visible_for_coaching_assignment',
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.false(),
+            ),
+        )
 
 
 def downgrade():
-    op.drop_column('teams', 'visible_for_coaching_assignment')
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    cols = {c['name'] for c in inspector.get_columns('teams')}
+    if 'visible_for_coaching_assignment' in cols:
+        op.drop_column('teams', 'visible_for_coaching_assignment')
