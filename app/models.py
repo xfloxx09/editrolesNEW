@@ -306,3 +306,11 @@ class AssignedCoaching(db.Model):
     coach = db.relationship('User', foreign_keys=[coach_id])
     team_member = db.relationship('TeamMember', back_populates='assigned_coachings')
     coachings = db.relationship('Coaching', back_populates='assigned_coaching')
+
+    @property
+    def progress(self):
+        exp = self.expected_coaching_count or 0
+        if exp <= 0:
+            return 0
+        done = Coaching.query.filter_by(assigned_coaching_id=self.id).count()
+        return min(100, int(round(100.0 * done / exp)))

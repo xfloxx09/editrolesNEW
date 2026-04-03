@@ -146,7 +146,7 @@
 
 {% block content %}
 <div class="container">
-    <h2 class="mb-4"><i class="fas fa-chalkboard-teacher"></i> {{ title }}</h2>
+    <h2 class="mb-4">{{ title }}</h2>
 
     <form method="POST" action="{% if is_edit_mode %}{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.args.get('next')) }}{% else %}{{ url_for('main.add_coaching') }}{% endif %}" novalidate>
         {{ form.hidden_tag() }}
@@ -204,8 +204,8 @@
             </div>
         </div>
 
-        <!-- Abschnitt 2: Zugewiesene Aufgabe (nur für Coaches) -->
-        <div class="form-section">
+        <!-- Abschnitt 2: nur sichtbar, wenn es passende zugewiesene Aufgaben gibt (oder Bearbeitung mit Verknüpfung) -->
+        <div class="form-section" id="assignedCoachingSection" style="display: none;">
             <h4 class="section-title"><i class="fas fa-tasks"></i> Zugewiesene Aufgabe (optional)</h4>
             <div class="form-group">
                 {{ form.assigned_coaching_id.label(class="form-control-label") }}
@@ -294,7 +294,12 @@
 {% block scripts %}
 {{ super() }}
 <script>
+window.__coachingEditAssignedId = {% if is_edit_mode and coaching and coaching.assigned_coaching_id %}{{ coaching.assigned_coaching_id }}{% else %}null{% endif %};
+window.__coachingEditMemberId = {% if is_edit_mode and coaching %}{{ coaching.team_member_id }}{% else %}null{% endif %};
+</script>
+<script>
 document.addEventListener('DOMContentLoaded', function() {
+    const preselectAssignedId = {{ (form.assigned_coaching_id.data or 0)|int }};
     // --- 1. TCAP-Feld umschalten ---
     const styleSelect = document.getElementById('coaching_style');
     const tcapField = document.getElementById('tcap_id_field');
@@ -371,29 +376,53 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 5. Zugewiesene Aufgaben dynamisch laden ---
+    // --- 5. Zugewiesene Aufgaben nur bei Bedarf; Abschnitt sonst ausblenden ---
     const memberSelect = document.getElementById('team_member_id');
     const assignmentSelect = document.getElementById('assigned_coaching_id');
-    if (memberSelect && assignmentSelect) {
+    const assignedSection = document.getElementById('assignedCoachingSection');
+    if (memberSelect && assignmentSelect && assignedSection) {
+        function setAssignedSectionVisible(show) {
+            assignedSection.style.display = show ? '' : 'none';
+        }
         function loadAssignments() {
             const memberId = memberSelect.value;
             if (!memberId) {
                 assignmentSelect.innerHTML = '<option value="0">--- Keine zugewiesene Aufgabe ---</option>';
+                setAssignedSectionVisible(false);
                 return;
             }
-            fetch(`/api/available_assignments?member_id=${memberId}`)
+            const ensureId = (
+                window.__coachingEditAssignedId
+                && window.__coachingEditMemberId
+                && String(memberId) === String(window.__coachingEditMemberId)
+            ) ? window.__coachingEditAssignedId : null;
+            let url = '/api/available_assignments?member_id=' + encodeURIComponent(memberId);
+            if (ensureId) {
+                url += '&ensure_assignment_ids=' + encodeURIComponent(ensureId);
+            }
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
+                    const list = (data && data.assignments) ? data.assignments : [];
                     let options = '<option value="0">--- Keine zugewiesene Aufgabe ---</option>';
-                    data.assignments.forEach(a => {
-                        options += `<option value="${a.id}">Aufgabe #${a.id} (Deadline: ${a.deadline}) – Fortschritt: ${a.progress}%</option>`;
+                    list.forEach(a => {
+                        options += '<option value="' + a.id + '">Aufgabe #' + a.id + ' (Deadline: ' + a.deadline + ') – Fortschritt: ' + a.progress + '%</option>';
                     });
                     assignmentSelect.innerHTML = options;
+                    const pick = preselectAssignedId || 0;
+                    if (pick && assignmentSelect.querySelector('option[value="' + pick + '"]')) {
+                        assignmentSelect.value = String(pick);
+                    }
+                    const hasReal = list.length > 0;
+                    setAssignedSectionVisible(hasReal || !!ensureId);
                 })
-                .catch(error => console.error('Fehler beim Laden der Aufgaben:', error));
+                .catch(function () {
+                    assignmentSelect.innerHTML = '<option value="0">--- Keine zugewiesene Aufgabe ---</option>';
+                    setAssignedSectionVisible(!!ensureId);
+                });
         }
         memberSelect.addEventListener('change', loadAssignments);
-        loadAssignments(); // initial load if member already selected
+        loadAssignments();
     }
 });
 </script>

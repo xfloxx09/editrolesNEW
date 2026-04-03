@@ -1156,6 +1156,57 @@ def pl_qm_dashboard():
                            config=current_app.config)
 
 
+@bp.route('/api/available_assignments')
+@login_required
+@permission_required('add_coaching')
+def available_assignments():
+    """Offene/aktive zugewiesene Aufgaben für Coach + gewähltes Teammitglied (Coaching-Formular)."""
+    member_id = request.args.get('member_id', type=int)
+    if not member_id:
+        return jsonify({'assignments': []})
+
+    ensure_raw = (request.args.get('ensure_assignment_ids') or '').strip()
+    ensure_ids = []
+    for part in ensure_raw.split(','):
+        part = part.strip()
+        if part.isdigit():
+            ensure_ids.append(int(part))
+
+    base = AssignedCoaching.query.filter(
+        AssignedCoaching.team_member_id == member_id,
+        AssignedCoaching.coach_id == current_user.id,
+        AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']),
+    ).order_by(AssignedCoaching.deadline)
+
+    seen = set()
+    out = []
+    for a in base.all():
+        seen.add(a.id)
+        out.append({
+            'id': a.id,
+            'deadline': a.deadline.strftime('%d.%m.%y') if a.deadline else '',
+            'progress': a.progress,
+        })
+
+    for eid in ensure_ids:
+        if eid in seen:
+            continue
+        a = AssignedCoaching.query.get(eid)
+        if (
+            a
+            and a.team_member_id == member_id
+            and a.coach_id == current_user.id
+        ):
+            seen.add(a.id)
+            out.append({
+                'id': a.id,
+                'deadline': a.deadline.strftime('%d.%m.%y') if a.deadline else '',
+                'progress': a.progress,
+            })
+
+    return jsonify({'assignments': out})
+
+
 @bp.route('/api/member-coaching-trend')
 @login_required
 @any_permission_required('view_pl_qm_dashboard', 'view_own_team')
