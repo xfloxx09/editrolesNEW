@@ -58,9 +58,15 @@ class RegistrationForm(FlaskForm):
 
     submit = SubmitField('Benutzer registrieren/aktualisieren')
 
-    def __init__(self, original_username=None, *args, **kwargs):
+    def __init__(self, original_username=None, password_optional=False, *args, **kwargs):
         super(RegistrationForm, self).__init__(*args, **kwargs)
         self.original_username = original_username
+        if password_optional:
+            self.password.validators = [Optional(), Length(min=6, message='Mindestens 6 Zeichen.')]
+            self.password2.validators = [
+                Optional(),
+                EqualTo('password', message='Passwörter müssen übereinstimmen.'),
+            ]
         active_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
         self.team_ids.choices = [(t.id, t.name) for t in active_teams]
         self.team_id_for_member.choices = [(t.id, t.name) for t in active_teams]

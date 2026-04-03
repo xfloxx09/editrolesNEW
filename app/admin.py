@@ -440,11 +440,11 @@ def create_user():
 def edit_user(user_id):
     user_to_edit = User.query.get_or_404(user_id)
     archiv_team = get_or_create_archiv_team()
-    form = RegistrationForm(obj=user_to_edit, original_username=user_to_edit.username)
-
-    if not form.password.data:
-        form.password.validators = []
-        form.password2.validators = []
+    form = RegistrationForm(
+        obj=user_to_edit,
+        original_username=user_to_edit.username,
+        password_optional=True,
+    )
 
     if request.method == 'GET':
         form.username.data = user_to_edit.username
