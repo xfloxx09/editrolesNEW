@@ -1,7 +1,7 @@
 # app/main_routes.py
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify
 from flask_login import login_required, current_user
-from sqlalchemy import desc, or_
+from sqlalchemy import desc, or_, false
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
@@ -253,6 +253,28 @@ def _get_teams_for_team_view():
     return teams
 
 
+def _user_sees_all_teams_coaching_dashboard():
+    if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+        return True
+    return current_user.has_permission('view_coaching_dashboard_all_teams')
+
+
+def _dashboard_my_team_ids():
+    """Team IDs where the user has a TeamMember row (Mein Team basis), excluding ARCHIV."""
+    archiv = get_or_create_archiv_team()
+    archiv_id = archiv.id
+    seen = set()
+    out = []
+    for tm in current_user.team_members:
+        if not tm.team_id or tm.team_id == archiv_id or tm.team_id in seen:
+            continue
+        team = tm.team
+        if team and team.name != ARCHIV_TEAM_NAME:
+            out.append(tm.team_id)
+            seen.add(tm.team_id)
+    return out
+
+
 def _build_team_members_performance(team):
     project_id = team.project_id
     team_members_performance = []
@@ -422,6 +444,8 @@ def coaching_dashboard():
     search_arg = request.args.get('search', default='', type=str).strip()
     project_filter = request.args.get('project', type=int)
     accessible = get_accessible_project_ids()
+    sees_all_teams = _user_sees_all_teams_coaching_dashboard()
+    my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else []
 
     # Build reusable filter conditions (project scope)
     filters = []
@@ -444,6 +468,12 @@ def coaching_dashboard():
             else:
                 filters.append(Coaching.project_id == accessible[0])
 
+    if not sees_all_teams:
+        if my_dash_team_ids:
+            filters.append(TeamMember.team_id.in_(my_dash_team_ids))
+        else:
+            filters.append(false())
+
     # Period filter
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
@@ -451,12 +481,13 @@ def coaching_dashboard():
     if end_date:
         filters.append(Coaching.coaching_date <= end_date)
 
-    # Team filter (ignore teams outside allowed projects)
+    # Team filter (ignore teams outside allowed projects / outside own teams when scoped)
     if team_arg != 'all' and team_arg.isdigit():
         tid = int(team_arg)
         team_row = Team.query.filter_by(id=tid).first()
         if team_row and (accessible is None or team_row.project_id in accessible):
-            filters.append(Team.id == tid)
+            if sees_all_teams or tid in my_dash_team_ids:
+                filters.append(Team.id == tid)
 
     # Search filter
     if search_arg:
@@ -521,16 +552,27 @@ def coaching_dashboard():
     minutes = total_minutes % 60
     global_time_coached_display = f"{hours} Std. {minutes} Min. ({total_minutes} Min. gesamt)"
     
-    # Teams for filter dropdown (only teams in allowed projects)
-    team_scope = (
-        Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name)
-        if accessible is None
-        else Team.query.filter(
-            Team.project_id.in_(accessible),
-            Team.name != ARCHIV_TEAM_NAME,
-        ).order_by(Team.name)
-    )
-    all_teams_for_filter = team_scope.all()
+    # Teams for filter dropdown
+    if not sees_all_teams:
+        if my_dash_team_ids:
+            all_teams_for_filter = (
+                Team.query.filter(
+                    Team.id.in_(my_dash_team_ids),
+                    Team.name != ARCHIV_TEAM_NAME,
+                ).order_by(Team.name).all()
+            )
+        else:
+            all_teams_for_filter = []
+    else:
+        team_scope = (
+            Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name)
+            if accessible is None
+            else Team.query.filter(
+                Team.project_id.in_(accessible),
+                Team.name != ARCHIV_TEAM_NAME,
+            ).order_by(Team.name)
+        )
+        all_teams_for_filter = team_scope.all()
 
     # Month options
     now = datetime.now(timezone.utc)
