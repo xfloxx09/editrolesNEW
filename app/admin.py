@@ -1796,12 +1796,25 @@ def _csv_member_snapshot(team_member, archiv_team, users_by_id=None):
     if not team_member:
         return None
     in_archiv = team_member.team_id == archiv_team.id
-    team_n = ''
     proj_n = ''
-    if team_member.team:
-        team_n = team_member.team.name or ''
+    team_display = ''
+    if in_archiv:
+        # Vergleich mit CSV: inaktive PLs stehen in ARCHIV, die Schichtplan-Team/Projekt-Infos liegen an original_* oder am Platzhalter-Team.
+        if team_member.original_team:
+            ot = team_member.original_team
+            team_display = (ot.name or '').strip()
+            if ot.project:
+                proj_n = (ot.project.name or '').strip()
+        elif team_member.original_project:
+            proj_n = (team_member.original_project.name or '').strip()
+        if not proj_n and team_member.team and team_member.team.project:
+            proj_n = (team_member.team.project.name or '').strip()
+        if not team_display:
+            team_display = ARCHIV_TEAM_NAME
+    elif team_member.team:
+        team_display = (team_member.team.name or '').strip()
         if team_member.team.project:
-            proj_n = team_member.team.project.name or ''
+            proj_n = (team_member.team.project.name or '').strip()
     user = None
     if team_member.user_id:
         if users_by_id is not None:
@@ -1813,7 +1826,7 @@ def _csv_member_snapshot(team_member, archiv_team, users_by_id=None):
     return {
         'in_archiv': in_archiv,
         'project': proj_n,
-        'team': 'ARCHIV' if in_archiv else team_n,
+        'team': team_display,
         'name': team_member.name or '',
         'plt_id': _norm_csv_cmp(team_member.plt_id),
         'ma_kennung': _norm_csv_cmp(team_member.ma_kennung),
@@ -1923,8 +1936,6 @@ def _csv_db_display_for_field(field, team_member, archiv_team, users_by_id=None)
     if field == 'project':
         return _csv_display_cell_csv(snap['project'])
     if field == 'team':
-        if snap['in_archiv']:
-            return 'ARCHIV'
         return _csv_display_cell_csv(snap['team'])
     if field == 'active_status':
         return '1' if not snap['in_archiv'] else '0'
@@ -1995,7 +2006,28 @@ def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, use
                 'old': db_r, 'new': 'Mitarbeiter', 'changed': True,
             })
 
+    _csv_review_suppress_inactive_archiv_org_fields(rows, new_row, mapping, team_member, archiv_team)
     return rows
+
+
+def _csv_review_suppress_inactive_archiv_org_fields(rows, new_row, mapping, team_member, archiv_team):
+    """
+    In CSV und DB ist PLT inaktiv (0): Projekt/Team aus dem Schichtplan weichen oft von ARCHIV/Platzhalter-Teams ab.
+    Solche Differenzen sind für die Vorschau keine echten Import-Änderungen — sonst erscheinen alle Archiv-PLs dauernd.
+    """
+    if not team_member or not archiv_team:
+        return
+    if team_member.team_id != archiv_team.id:
+        return
+    if _csv_row_active_flag(new_row, mapping):
+        return
+    proj_col = mapping.get('project')
+    team_col = mapping.get('team')
+    for row in rows:
+        lbl = row.get('label')
+        if lbl and (lbl == proj_col or lbl == team_col):
+            row['changed'] = False
+            row['old'] = row['new']
 
 
 def _csv_item_search_text(comparison, extra_lines):

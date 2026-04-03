@@ -1,5 +1,28 @@
 {% extends "base.html" %}
 
+{% block head_extra %}
+<style>
+/* Bootstrap scrollable modal: body needs a bounded height + min-height:0 for flex children */
+#csvChangesModal .modal-dialog.modal-dialog-scrollable {
+    max-height: calc(100vh - 1rem);
+    margin: 0.5rem auto;
+}
+#csvChangesModal .modal-content {
+    max-height: calc(100vh - 1rem);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#csvChangesModal .modal-body {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: calc(100vh - 11rem);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mb-3">
     <p class="text-muted small mb-2">
