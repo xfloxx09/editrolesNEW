@@ -28,7 +28,7 @@
                     {% endif %}
                 </div>
             </div>
-            <form method="POST" action="{{ url_for('admin.sync_from_csv') }}" id="csvPreviewForm">
+            <form method="POST" action="{{ url_for('admin.sync_from_csv') }}" id="csvPreviewForm" data-csv-loading="Importing selected rows…">
                 <input type="hidden" name="apply_import" value="1">
                 {% for field in map_fields %}
                     {% if mapping.get(field) %}
@@ -318,4 +318,5 @@
     syncAllGroupHeaders();
 })();
 </script>
+{% include 'admin/_csv_loading_overlay.html' %}
 {% endblock %}

@@ -32,7 +32,7 @@
         </div>
         <div class="col-md-6">
             <h4>Zuordnung</h4>
-            <form method="POST" action="{{ url_for('admin.sync_from_csv') }}">
+            <form method="POST" action="{{ url_for('admin.sync_from_csv') }}" data-csv-loading="Computing diff vs database (can take a few minutes)…">
                 <input type="hidden" name="preview_import" value="1">
                 <div class="form-group">
                     <label>Spalten zum Import auswählen:</label><br>
@@ -162,4 +162,5 @@
         </div>
     </div>
 </div>
+{% include 'admin/_csv_loading_overlay.html' %}
 {% endblock %}

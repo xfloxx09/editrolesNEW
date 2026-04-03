@@ -1,0 +1,37 @@
+<div id="csvLoadingOverlay" class="csv-loading-overlay" style="display: none;" role="status" aria-live="polite">
+    <div class="csv-loading-inner bg-dark text-light p-4 rounded border border-secondary shadow-lg" style="min-width: 300px; max-width: 92vw;">
+        <div class="progress mb-3" style="height: 26px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%;"></div>
+        </div>
+        <p id="csvLoadingMessage" class="mb-1 font-weight-bold small"></p>
+        <p class="mb-0 text-muted small"><span id="csvLoadingElapsed">0</span> s elapsed — no exact % (single server request).</p>
+    </div>
+</div>
+<style>
+.csv-loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10050; align-items: center; justify-content: center; }
+</style>
+<script>
+(function () {
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form[data-csv-loading]').forEach(function (form) {
+      form.addEventListener('submit', function () {
+        var overlay = document.getElementById('csvLoadingOverlay');
+        var msgEl = document.getElementById('csvLoadingMessage');
+        var elapsedEl = document.getElementById('csvLoadingElapsed');
+        if (!overlay) return;
+        if (msgEl) msgEl.textContent = form.getAttribute('data-csv-loading') || 'Working…';
+        overlay.style.display = 'flex';
+        var t0 = Date.now();
+        var prev = form.getAttribute('data-csv-loading-timer');
+        if (prev) clearInterval(Number(prev));
+        var iv = setInterval(function () {
+          if (elapsedEl) elapsedEl.textContent = String(Math.floor((Date.now() - t0) / 1000));
+        }, 400);
+        form.setAttribute('data-csv-loading-timer', String(iv));
+        var btn = form.querySelector('[type="submit"]');
+        if (btn) { btn.disabled = true; }
+      });
+    });
+  });
+})();
+</script>

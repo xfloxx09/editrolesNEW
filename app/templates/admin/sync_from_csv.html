@@ -7,7 +7,7 @@
         <div class="card-body">
             <p>Laden Sie eine CSV-Datei hoch. Das System erkennt automatisch die Spalten und zeigt eine Zuordnungsseite an.</p>
             <p><strong>Wichtige Spalten in Ihrer CSV:</strong> <code>Pylon-Nr</code>, <code>PLT-ID</code>, <code>Vorname</code>, <code>Nachname</code>, <code>Projekt Schichtplan</code>, <code>Team</code>, <code>MA-Kennung</code>, <code>DAG-ID</code>, <code>eMail</code>, <code>PLT aktiv?</code>.</p>
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" data-csv-loading="Uploading and reading CSV…">
                 <div class="form-group">
                     <label for="csv_file">CSV-Datei auswählen</label>
                     <input type="file" name="csv_file" id="csv_file" class="form-control-file" accept=".csv" required>
@@ -26,4 +26,5 @@
         </div>
     </div>
 </div>
+{% include 'admin/_csv_loading_overlay.html' %}
 {% endblock %}

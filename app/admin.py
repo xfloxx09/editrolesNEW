@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm
@@ -1528,6 +1529,69 @@ def _csv_row_pylon_value(row, mapping):
     return s or None
 
 
+class _CsvPreviewCaches:
+    """Einmalige Ladevorgänge für die Änderungsvorschau (vermeidet N+1-Queries)."""
+
+    __slots__ = (
+        'members_by_pylon', 'projects_by_name', 'default_project',
+        'teams_by_proj_name', 'first_team_by_project_id', 'teams_by_id', 'users_by_id',
+    )
+
+    def __init__(self, pylons):
+        pylons = {p for p in pylons if p}
+        self.members_by_pylon = {}
+        if pylons:
+            q = TeamMember.query.options(
+                joinedload(TeamMember.team).joinedload(Team.project),
+                joinedload(TeamMember.original_team),
+            ).filter(TeamMember.pylon.in_(pylons))
+            for m in q:
+                if m.pylon:
+                    self.members_by_pylon[m.pylon] = m
+        projects = Project.query.order_by(Project.id).all()
+        self.projects_by_name = {p.name: p for p in projects}
+        self.default_project = projects[0] if projects else None
+        teams = Team.query.options(joinedload(Team.project)).order_by(Team.id).all()
+        self.teams_by_proj_name = {(t.project_id, t.name): t for t in teams}
+        self.first_team_by_project_id = {}
+        for t in teams:
+            if t.project_id not in self.first_team_by_project_id:
+                self.first_team_by_project_id[t.project_id] = t
+        self.teams_by_id = {t.id: t for t in teams}
+        user_ids = {m.user_id for m in self.members_by_pylon.values() if m.user_id}
+        self.users_by_id = {}
+        if user_ids:
+            for u in User.query.options(joinedload(User.role)).filter(User.id.in_(user_ids)).all():
+                self.users_by_id[u.id] = u
+
+
+class _CsvImportRunCaches:
+    """Lookups für den Schreib-Import; Dicts werden bei neuen Projekt/Team/Rolle erweitert."""
+
+    __slots__ = (
+        'members_by_pylon', 'projects_by_name', 'default_project',
+        'teams_by_proj_name', 'first_team_by_project', 'roles_by_name',
+    )
+
+    def __init__(self, included_pylons):
+        pylons = {p for p in included_pylons if p}
+        self.members_by_pylon = {}
+        if pylons:
+            for m in TeamMember.query.filter(TeamMember.pylon.in_(pylons)).all():
+                if m.pylon:
+                    self.members_by_pylon[m.pylon] = m
+        plist = Project.query.order_by(Project.id).all()
+        self.projects_by_name = {p.name: p for p in plist}
+        self.default_project = min(plist, key=lambda p: p.id) if plist else None
+        self.teams_by_proj_name = {}
+        self.first_team_by_project = {}
+        for t in Team.query.order_by(Team.id).all():
+            self.teams_by_proj_name[(t.project_id, t.name)] = t
+            if t.project_id not in self.first_team_by_project:
+                self.first_team_by_project[t.project_id] = t
+        self.roles_by_name = {r.name: r for r in Role.query.all()}
+
+
 def _csv_mapping_from_request(form):
     mapping = {}
     for field in CSV_IMPORT_MAP_FIELDS:
@@ -1591,7 +1655,7 @@ def _csv_import_row_strings(row, mapping):
     }
 
 
-def _csv_resolve_row_context(row, mapping, archiv_team):
+def _csv_resolve_row_context(row, mapping, archiv_team, caches=None):
     """Liest eine CSV-Zeile wie der Import (ohne Schreiben)."""
     pylon = _csv_row_pylon_value(row, mapping)
     if not pylon:
@@ -1609,14 +1673,20 @@ def _csv_resolve_row_context(row, mapping, archiv_team):
     proj_label = ''
 
     if project_name:
-        project = Project.query.filter_by(name=project_name).first()
+        if caches:
+            project = caches.projects_by_name.get(project_name)
+        else:
+            project = Project.query.filter_by(name=project_name).first()
         if not project:
             will_create_project = True
             proj_label = f'{project_name} (wird neu angelegt)'
         else:
             proj_label = project.name
     else:
-        project = Project.query.first()
+        if caches:
+            project = caches.default_project
+        else:
+            project = Project.query.order_by(Project.id).first()
         if not project:
             return {
                 'error': True,
@@ -1633,14 +1703,20 @@ def _csv_resolve_row_context(row, mapping, archiv_team):
     team_label = ''
     if not will_create_project and project:
         if team_name:
-            team = Team.query.filter_by(name=team_name, project_id=project.id).first()
+            if caches:
+                team = caches.teams_by_proj_name.get((project.id, team_name))
+            else:
+                team = Team.query.filter_by(name=team_name, project_id=project.id).first()
             if not team:
                 will_create_team = True
                 team_label = f'{team_name} (wird neu angelegt)'
             else:
                 team_label = team.name
         else:
-            team = Team.query.filter_by(project_id=project.id).first()
+            if caches:
+                team = caches.first_team_by_project_id.get(project.id)
+            else:
+                team = Team.query.filter_by(project_id=project.id).order_by(Team.id).first()
             if not team:
                 will_create_team = True
                 team_label = 'Default (wird neu angelegt)'
@@ -1650,7 +1726,10 @@ def _csv_resolve_row_context(row, mapping, archiv_team):
         team_label = team_name or '(Team folgt nach Projekt-Anlage)'
 
     is_active = _csv_row_active_flag(row, mapping)
-    team_member = TeamMember.query.filter_by(pylon=pylon).first()
+    if caches:
+        team_member = caches.members_by_pylon.get(pylon)
+    else:
+        team_member = TeamMember.query.filter_by(pylon=pylon).first()
 
     return {
         'pylon': pylon,
@@ -1707,7 +1786,7 @@ def _csv_simulate_target_team_id(ctx):
     return team.id
 
 
-def _csv_member_snapshot(team_member, archiv_team):
+def _csv_member_snapshot(team_member, archiv_team, users_by_id=None):
     if not team_member:
         return None
     in_archiv = team_member.team_id == archiv_team.id
@@ -1717,8 +1796,14 @@ def _csv_member_snapshot(team_member, archiv_team):
         team_n = team_member.team.name or ''
         if team_member.team.project:
             proj_n = team_member.team.project.name or ''
-    user = User.query.get(team_member.user_id) if team_member.user_id else None
+    user = None
+    if team_member.user_id:
+        if users_by_id is not None:
+            user = users_by_id.get(team_member.user_id)
+        if user is None:
+            user = User.query.get(team_member.user_id)
     role_n = user.role.name if user and user.role else None
+    email_disp = _csv_display_cell_csv(user.email if user else None)
     return {
         'in_archiv': in_archiv,
         'project': proj_n,
@@ -1728,14 +1813,16 @@ def _csv_member_snapshot(team_member, archiv_team):
         'ma_kennung': _norm_csv_cmp(team_member.ma_kennung),
         'dag_id': _norm_csv_cmp(team_member.dag_id),
         'role': role_n,
+        'email': email_disp,
     }
 
 
-def _csv_target_snapshot(ctx):
+def _csv_target_snapshot(ctx, preview_caches=None):
     archiv_team = ctx['archiv_team']
     tid = _csv_simulate_target_team_id(ctx)
     fs_name = ctx['full_name']
     role_name = ctx['role_name']
+    teams_by_id = preview_caches.teams_by_id if preview_caches else None
 
     if tid == archiv_team.id:
         loc = f'Herkunft für ARCHIV: „{ctx["team_label"]}“ ({ctx["proj_label"]})'
@@ -1768,7 +1855,9 @@ def _csv_target_snapshot(ctx):
         }
 
     if tid is not None:
-        t = Team.query.get(tid)
+        t = teams_by_id.get(tid) if teams_by_id else None
+        if t is None:
+            t = Team.query.get(tid)
         if t:
             p = t.project.name if t.project else ''
             return {
@@ -1824,12 +1913,11 @@ def _csv_name_split_parts(display_name):
     return parts[0], ' '.join(parts[1:])
 
 
-def _csv_db_display_for_field(field, team_member, archiv_team):
+def _csv_db_display_for_field(field, team_member, archiv_team, users_by_id=None):
     """Ist-Wert aus der DB, vergleichbar mit CSV-Zelle."""
     if not team_member:
         return '(leer)'
-    snap = _csv_member_snapshot(team_member, archiv_team)
-    user = User.query.get(team_member.user_id) if team_member.user_id else None
+    snap = _csv_member_snapshot(team_member, archiv_team, users_by_id)
     if field == 'pylon':
         return _csv_display_cell_csv(team_member.pylon)
     if field == 'project':
@@ -1857,11 +1945,11 @@ def _csv_db_display_for_field(field, team_member, archiv_team):
     if field == 'dag_id':
         return _csv_display_cell_csv(team_member.dag_id)
     if field == 'email':
-        return _csv_display_cell_csv(user.email if user else None)
+        return snap['email']
     return '(leer)'
 
 
-def _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, is_new):
+def _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, is_new, users_by_id=None):
     """
     Pro geänderter Spalte genau: „<CSV-Spaltenname>: <vorher> → <nachher>“ (Zellinhalte wie in der CSV).
     Neu: „<Spaltenname>: <Wert>“ nur für nicht-leere Zellen oder Stammdaten-Spalten (Pylon, Projekt, Team, aktiv, Rolle).
@@ -1884,27 +1972,27 @@ def _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, is_new):
                 lines.append(f'{col}: {after}')
             continue
 
-        before = _csv_db_display_for_field(field, team_member, archiv_team)
+        before = _csv_db_display_for_field(field, team_member, archiv_team, users_by_id)
         if before != after:
             lines.append(f'{col}: from {before} to {after}')
 
     if not is_new and team_member:
         if not mapping.get('active_status'):
-            db_a = _csv_db_display_for_field('active_status', team_member, archiv_team)
+            db_a = _csv_db_display_for_field('active_status', team_member, archiv_team, users_by_id)
             csv_a = '1' if _csv_row_active_flag(row, mapping) else '0'
             if db_a != csv_a:
                 lines.append(f'PLT aktiv (no column mapped): from {db_a} to {csv_a}')
         if not mapping.get('role') and not mapping.get('agent_status'):
-            db_r = _csv_db_display_for_field('role', team_member, archiv_team)
+            db_r = _csv_db_display_for_field('role', team_member, archiv_team, users_by_id)
             if db_r != 'Mitarbeiter':
                 lines.append(f'Role (no column mapped): from {db_r} to Mitarbeiter')
 
     return lines
 
 
-def _csv_build_change_item(row, mapping, archiv_team):
+def _csv_build_change_item(row, mapping, archiv_team, preview_caches=None):
     """Nur echte Abweichungen zur DB (oder Blocker-Fehler)."""
-    ctx = _csv_resolve_row_context(row, mapping, archiv_team)
+    ctx = _csv_resolve_row_context(row, mapping, archiv_team, preview_caches)
     if ctx is None:
         return None
     if ctx.get('error'):
@@ -1918,10 +2006,11 @@ def _csv_build_change_item(row, mapping, archiv_team):
         }
 
     team_member = ctx['team_member']
-    after_snap = _csv_target_snapshot(ctx)
+    users_by_id = preview_caches.users_by_id if preview_caches else None
+    after_snap = _csv_target_snapshot(ctx, preview_caches)
 
     if team_member is None:
-        lines = _csv_diff_concrete_lines(row, mapping, None, archiv_team, True)
+        lines = _csv_diff_concrete_lines(row, mapping, None, archiv_team, True, users_by_id)
         if not lines and mapping.get('pylon'):
             pyl_col = mapping['pylon']
             lines = [f'{pyl_col}: {_csv_cell_display(row, pyl_col)}']
@@ -1934,8 +2023,8 @@ def _csv_build_change_item(row, mapping, archiv_team):
             'checkbox_disabled': False,
         }
 
-    before = _csv_member_snapshot(team_member, archiv_team)
-    lines = _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, False)
+    before = _csv_member_snapshot(team_member, archiv_team, users_by_id)
+    lines = _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, False, users_by_id)
     if not lines:
         return None
 
@@ -1981,8 +2070,9 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
         'errors': 0, 'skipped': 0,
     }
     batch = []
-    BATCH_SIZE = 100
+    BATCH_SIZE = 400
     processed = 0
+    ic = _CsvImportRunCaches(included_pylons)
 
     with open(temp_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f, delimiter=delimiter)
@@ -2009,22 +2099,24 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
 
                 role_name = _csv_row_role_name(row, mapping)
 
-                role = Role.query.filter_by(name=role_name).first()
+                role = ic.roles_by_name.get(role_name)
                 if not role:
                     role = get_or_create_role(role_name)
+                    ic.roles_by_name[role.name] = role
                     stats['created_roles'] += 1
 
                 project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
                 project = None
                 if project_name:
-                    project = Project.query.filter_by(name=project_name).first()
+                    project = ic.projects_by_name.get(project_name)
                     if not project:
                         project = Project(name=project_name)
                         db.session.add(project)
                         db.session.flush()
+                        ic.projects_by_name[project.name] = project
                         stats['created_projects'] += 1
                 else:
-                    project = Project.query.first()
+                    project = ic.default_project
                     if not project:
                         stats['errors'] += 1
                         continue
@@ -2032,22 +2124,27 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
                 team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
                 team = None
                 if team_name:
-                    team = Team.query.filter_by(name=team_name, project_id=project.id).first()
+                    team = ic.teams_by_proj_name.get((project.id, team_name))
                     if not team:
                         team = Team(name=team_name, project_id=project.id)
                         db.session.add(team)
                         db.session.flush()
+                        ic.teams_by_proj_name[(project.id, team.name)] = team
+                        if project.id not in ic.first_team_by_project:
+                            ic.first_team_by_project[project.id] = team
                         stats['created_teams'] += 1
                 else:
-                    team = Team.query.filter_by(project_id=project.id).first()
+                    team = ic.first_team_by_project.get(project.id)
                     if not team:
                         team = Team(name="Default", project_id=project.id)
                         db.session.add(team)
                         db.session.flush()
+                        ic.teams_by_proj_name[(project.id, team.name)] = team
+                        ic.first_team_by_project[project.id] = team
                         stats['created_teams'] += 1
 
                 is_active = _csv_row_active_flag(row, mapping)
-                team_member = TeamMember.query.filter_by(pylon=pylon).first()
+                team_member = ic.members_by_pylon.get(pylon)
 
                 if team_member:
                     if not is_active:
@@ -2103,6 +2200,7 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
                     )
                     db.session.add(team_member)
                     db.session.flush()
+                    ic.members_by_pylon[pylon] = team_member
                     stats['created_members'] += 1
 
                     if not team_member.user_id:
@@ -2246,9 +2344,10 @@ def sync_from_csv():
             flash('Keine Zeilen mit Pylon-Nr in der CSV.', 'warning')
             return redirect(url_for('admin.sync_from_csv'))
 
+        preview_caches = _CsvPreviewCaches(last_rows.keys())
         change_items = []
         for row in last_rows.values():
-            item = _csv_build_change_item(row, mapping, archiv_team)
+            item = _csv_build_change_item(row, mapping, archiv_team, preview_caches)
             if item:
                 change_items.append(item)
 
