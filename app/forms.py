@@ -278,20 +278,33 @@ class WorkshopForm(FlaskForm):
         self.current_user_role = current_user_role
         self.current_user_team_ids = current_user_team_ids if current_user_team_ids is not None else []
 
-    def update_participant_choices(self, project_id=None):
+    def update_participant_choices(self, project_id=None, include_member_ids=None):
+        """Same scoping rules as CoachingForm.update_team_member_choices (coach_own_team_only, Teamleiter teams, Admin/BL)."""
         generated_choices = []
         query = TeamMember.query.join(Team, TeamMember.team_id == Team.id)
 
         if project_id:
             query = query.filter(Team.project_id == project_id)
 
-        if self.current_user_role == ROLE_TEAMLEITER and self.current_user_team_ids:
-            query = query.filter(TeamMember.team_id.in_(self.current_user_team_ids))
+        if current_user.is_authenticated and current_user.has_permission('coach_own_team_only'):
+            coach_team_member = current_user.team_members[0] if current_user.team_members else None
+            if coach_team_member:
+                query = query.filter(TeamMember.team_id == coach_team_member.team_id)
+            else:
+                query = query.filter(false())
+        else:
+            if self.current_user_role == ROLE_TEAMLEITER and self.current_user_team_ids:
+                query = query.filter(TeamMember.team_id.in_(self.current_user_team_ids))
+            elif self.current_user_role not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+                pass
 
-        query = query.filter(
-            Team.name != ARCHIV_TEAM_NAME,
-            Team.active_for_coaching.is_(True),
-        )
+        query = query.filter(Team.name != ARCHIV_TEAM_NAME)
+
+        include_ids = include_member_ids or []
+        coaching_ok = Team.active_for_coaching.is_(True)
+        if include_ids:
+            coaching_ok = or_(coaching_ok, TeamMember.id.in_(include_ids))
+        query = query.filter(coaching_ok)
 
         members = query.order_by(TeamMember.name).all()
         for m in members:

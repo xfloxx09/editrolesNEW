@@ -1125,10 +1125,12 @@ def manage_workshops():
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_workshop_entry(workshop_id):
     workshop_to_edit = Workshop.query.get_or_404(workshop_id)
-    form = WorkshopForm(obj=workshop_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
-    form.update_participant_choices(project_id=workshop_to_edit.project_id)
-
     existing_participant_ids = [p.id for p in workshop_to_edit.participants]
+    form = WorkshopForm(obj=workshop_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
+    form.update_participant_choices(
+        project_id=workshop_to_edit.project_id,
+        include_member_ids=existing_participant_ids,
+    )
     form.team_member_ids.data = existing_participant_ids
 
     if form.validate_on_submit():

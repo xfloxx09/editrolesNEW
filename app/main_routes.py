@@ -1278,7 +1278,11 @@ def add_workshop():
 
     show_workshop_project_picker = len(workshop_projects) > 1
 
-    form = WorkshopForm(current_user_role=current_user.role_name, current_user_team_ids=[])
+    current_user_team_ids = (
+        sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
+        if current_user.role_name == ROLE_TEAMLEITER else []
+    )
+    form = WorkshopForm(current_user_role=current_user.role_name, current_user_team_ids=current_user_team_ids)
     form.update_participant_choices(project_id=project_id)
     if form.validate_on_submit():
         for member_id in form.team_member_ids.data:
