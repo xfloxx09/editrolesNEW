@@ -505,6 +505,9 @@ def coaching_dashboard():
         ):
             chart_filters.append(Team.id == tid)
 
+    archiv_team = get_or_create_archiv_team()
+    chart_filters.append(TeamMember.team_id != archiv_team.id)
+
     list_filters = list(chart_filters)
 
     if search_arg:
