@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container">
     <h2>Benutzer bearbeiten</h2>
-    <form method="POST">
+    <form method="POST" novalidate>
         {{ form.hidden_tag() }}
 
         <h4>Benutzerkonto</h4>
@@ -14,11 +14,11 @@
             {{ form.email.label }} {{ form.email(class="form-control") }}
         </div>
         <div class="form-group">
-            {{ form.password.label }} {{ form.password(class="form-control") }}
+            {{ form.password.label }} {{ form.password(class="form-control", autocomplete="new-password") }}
             <small class="form-text text-muted">Leer lassen, um das Passwort nicht zu ändern.</small>
         </div>
         <div class="form-group">
-            {{ form.password2.label }} {{ form.password2(class="form-control") }}
+            {{ form.password2.label }} {{ form.password2(class="form-control", autocomplete="new-password") }}
         </div>
         <div class="form-group">
             {{ form.role_id.label }} {{ form.role_id(class="form-control") }}

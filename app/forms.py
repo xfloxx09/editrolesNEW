@@ -5,6 +5,7 @@ from wtforms.widgets import HiddenInput
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from flask_login import current_user
 from sqlalchemy import false, or_
+from sqlalchemy.orm import joinedload
 from app import db
 from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
 from app.utils import (
@@ -67,10 +68,24 @@ class RegistrationForm(FlaskForm):
                 Optional(),
                 EqualTo('password', message='Passwörter müssen übereinstimmen.'),
             ]
-        active_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
-        self.team_ids.choices = [(t.id, t.name) for t in active_teams]
-        self.team_id_for_member.choices = [(t.id, t.name) for t in active_teams]
-        self.team_ids_for_member.choices = [(t.id, t.name) for t in active_teams]
+            self.password.flags.required = False
+            self.password2.flags.required = False
+        active_teams = (
+            Team.query.options(joinedload(Team.project))
+            .filter(Team.name != ARCHIV_TEAM_NAME)
+            .order_by(Team.name)
+            .all()
+        )
+
+        def _team_label(t):
+            if t.project:
+                return f'{t.name} ({t.project.name})'
+            return t.name
+
+        lbls = [(t.id, _team_label(t)) for t in active_teams]
+        self.team_ids.choices = lbls
+        self.team_id_for_member.choices = lbls
+        self.team_ids_for_member.choices = lbls
         all_projects = Project.query.order_by(Project.name).all()
         self.project_id.choices = [(p.id, p.name) for p in all_projects]
         self.project_ids.choices = [(p.id, p.name) for p in all_projects]
