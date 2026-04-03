@@ -72,6 +72,17 @@ body {
     color: #fff;
 }
 
+/* Alle Bewertungen: Coachee hat nur Führung freigegeben (lesbar im dunklen Theme) */
+.table-striped tbody tr.review-row-managers-only td:first-child {
+    border-left: 3px solid #7eb8ff;
+}
+.badge.badge-managers-only {
+    background-color: rgba(126, 184, 255, 0.18);
+    color: #e3eefc;
+    border: 1px solid rgba(126, 184, 255, 0.45);
+    font-weight: 500;
+}
+
 .form-control {
     background-color: #333;
     color: #f0f0f0;

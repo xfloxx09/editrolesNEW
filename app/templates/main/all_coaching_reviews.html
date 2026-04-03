@@ -84,13 +84,6 @@
         </div>
     </form>
 
-    {% if show_manager_only_feedback_notice %}
-    <div class="alert alert-warning small mb-3" role="alert">
-        <strong>Hinweis:</strong> Mindestens eine Bewertung wurde vom Coachee nur für <strong>Projektleitung / Manager / Abteilungsleiter</strong> freigegeben
-        (nicht für den Coach sichtbar). Diese Zeilen sind mit einem Warnhinweis gekennzeichnet.
-    </div>
-    {% endif %}
-
     {% if reviews.items %}
         <div class="table-responsive">
             <table class="table table-striped table-sm">
@@ -109,7 +102,7 @@
                 <tbody>
                     {% for rev in reviews.items %}
                         {% set c = rev.coaching %}
-                        <tr class="{% if not rev.visible_to_coach %}table-warning border-warning{% endif %}">
+                        <tr class="{% if not rev.visible_to_coach %}review-row-managers-only{% endif %}">
                             <td>{% if c %}{{ c.coaching_date|athens_time }}{% else %}-{% endif %}</td>
                             <td>{% if c and c.project %}{{ c.project.name }}{% else %}—{% endif %}</td>
                             <td>{% if c and c.team_member and c.team_member.team %}{{ c.team_member.team.name }}{% else %}—{% endif %}</td>
@@ -118,7 +111,7 @@
                             <td>{{ rev.rating }}/5</td>
                             <td class="text-center small">
                                 {% if not rev.visible_to_coach %}
-                                <span class="badge badge-warning text-dark" title="Vom Coachee nur für Führungsrollen freigegeben; der Coach sieht diese Bewertung nicht.">
+                                <span class="badge badge-managers-only" title="Vom Coachee nur für Führungsrollen freigegeben; der Coach sieht diese Bewertung nicht.">
                                     <i class="fas fa-user-shield"></i> Nur Führung
                                 </span>
                                 {% else %}

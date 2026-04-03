@@ -593,14 +593,10 @@ def all_coaching_reviews():
     if coach_filter:
         extra_filters['coach'] = coach_filter
     filter_args = build_filter_args(period_arg, year, month, day, extra=extra_filters)
-    show_manager_only_feedback_notice = any(
-        not rev.visible_to_coach for rev in reviews.items
-    )
     return render_template(
         'main/all_coaching_reviews.html',
         title='Alle Bewertungen',
         reviews=reviews,
-        show_manager_only_feedback_notice=show_manager_only_feedback_notice,
         current_period=period_arg,
         filter_year=year,
         filter_month=month,
