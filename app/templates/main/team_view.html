@@ -181,8 +181,8 @@
                         <p class="stat-value mb-0">{{ team.name }}</p>
                     </div>
                     <div class="col-md-4 mb-2 mb-md-0">
-    <strong class="stat-label">Team &amp; Coaching:</strong>
-    <p class="stat-value mb-0" title="Mit view_own_team auf diesem Team; projektweite Coaches (nicht nur eigenes Team); Nutzer mit mehreren Projekten oder Mehrere Teams, sofern im Projekt verknüpft. Archivierte Mitglieder (ARCHIV-Team) erscheinen nicht.">
+    <strong class="stat-label">Teamleiter:</strong>
+    <p class="stat-value mb-0" title="Mitglied dieses Teams mit Berechtigung „Mein Team“ (view_own_team)">
         {{ team_leaders_display|map(attribute='coach_display_name')|join(', ') or '—' }}
     </p>
 </div>
