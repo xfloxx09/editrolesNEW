@@ -1499,6 +1499,12 @@ CSV_IMPORT_MAP_FIELDS = [
     'team', 'project', 'active_status', 'agent_status', 'role',
 ]
 
+# Reihenfolge der Vergleichstabelle Vorschau (Alt vs Neu)
+CSV_REVIEW_DISPLAY_KEYS = [
+    'pylon', 'plt_id', 'first_name', 'last_name', 'email', 'project', 'team',
+    'role', 'agent_status', 'active_status', 'ma_kennung', 'dag_id',
+]
+
 # Vorschau begrenzen (HTML/ORM); nicht sichtbare Zeilen gelten beim Import als „angehakt“
 CSV_PREVIEW_MAX_ROWS = 6000
 # Ab diese Größe: UI standardmäßig zugeklappt + Suchleiste
@@ -1883,12 +1889,6 @@ def _csv_target_snapshot(ctx, preview_caches=None):
     }
 
 
-_CSV_DIFF_FIELD_ORDER = [
-    'project', 'team', 'active_status', 'role', 'agent_status',
-    'first_name', 'last_name', 'plt_id', 'ma_kennung', 'dag_id', 'email', 'pylon',
-]
-
-
 def _csv_cell_display(row, column_header):
     if not column_header:
         return ''
@@ -1949,96 +1949,130 @@ def _csv_db_display_for_field(field, team_member, archiv_team, users_by_id=None)
     return '(leer)'
 
 
-def _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, is_new, users_by_id=None):
+def _csv_review_cell_value(row, mapping, field_key):
+    """Wert aus CSV-Zeile für Review; None wenn Spalte nicht zugeordnet."""
+    if row is None:
+        return '(leer)'
+    col = mapping.get(field_key)
+    if not col:
+        return None
+    return _csv_display_cell_csv(_csv_cell_display(row, col))
+
+
+def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, users_by_id, baseline_row=None):
     """
-    Pro geänderter Spalte genau: „<CSV-Spaltenname>: <vorher> → <nachher>“ (Zellinhalte wie in der CSV).
-    Neu: „<Spaltenname>: <Wert>“ nur für nicht-leere Zellen oder Stammdaten-Spalten (Pylon, Projekt, Team, aktiv, Rolle).
+    Zeilen für Alt/Neu-Tabelle. Alt = Baseline-CSV (falls gesetzt) sonst DB-Ist.
     """
-    lines = []
+    rows = []
     seen_cols = set()
-    new_always_show_fields = frozenset({
-        'pylon', 'project', 'team', 'active_status', 'role', 'agent_status',
-    })
-    for field in _CSV_DIFF_FIELD_ORDER:
-        col = mapping.get(field)
+    baseline_mode = baseline_row is not None
+    for field_key in CSV_REVIEW_DISPLAY_KEYS:
+        col = mapping.get(field_key)
         if not col or col in seen_cols:
             continue
         seen_cols.add(col)
-        csv_raw = _csv_cell_display(row, col)
-        after = _csv_display_cell_csv(csv_raw)
-
-        if is_new:
-            if csv_raw != '' or field in new_always_show_fields:
-                lines.append(f'{col}: {after}')
+        new_val = _csv_review_cell_value(new_row, mapping, field_key)
+        if new_val is None:
             continue
+        if baseline_mode:
+            old_val = _csv_review_cell_value(baseline_row, mapping, field_key)
+            if old_val is None:
+                old_val = '(leer)'
+        elif team_member:
+            old_val = _csv_db_display_for_field(field_key, team_member, archiv_team, users_by_id)
+        else:
+            old_val = '—'
+        changed = old_val != new_val
+        rows.append({'label': col, 'old': old_val, 'new': new_val, 'changed': changed})
 
-        before = _csv_db_display_for_field(field, team_member, archiv_team, users_by_id)
-        if before != after:
-            lines.append(f'{col}: from {before} to {after}')
+    if not baseline_mode and team_member and not mapping.get('active_status'):
+        db_a = _csv_db_display_for_field('active_status', team_member, archiv_team, users_by_id)
+        csv_a = '1' if _csv_row_active_flag(new_row, mapping) else '0'
+        if db_a != csv_a:
+            rows.append({
+                'label': 'PLT aktiv (no column mapped)',
+                'old': db_a, 'new': csv_a, 'changed': True,
+            })
 
-    if not is_new and team_member:
-        if not mapping.get('active_status'):
-            db_a = _csv_db_display_for_field('active_status', team_member, archiv_team, users_by_id)
-            csv_a = '1' if _csv_row_active_flag(row, mapping) else '0'
-            if db_a != csv_a:
-                lines.append(f'PLT aktiv (no column mapped): from {db_a} to {csv_a}')
-        if not mapping.get('role') and not mapping.get('agent_status'):
-            db_r = _csv_db_display_for_field('role', team_member, archiv_team, users_by_id)
-            if db_r != 'Mitarbeiter':
-                lines.append(f'Role (no column mapped): from {db_r} to Mitarbeiter')
+    if not baseline_mode and team_member and not mapping.get('role') and not mapping.get('agent_status'):
+        db_r = _csv_db_display_for_field('role', team_member, archiv_team, users_by_id)
+        if db_r != 'Mitarbeiter':
+            rows.append({
+                'label': 'Role (no column mapped)',
+                'old': db_r, 'new': 'Mitarbeiter', 'changed': True,
+            })
 
-    return lines
+    return rows
 
 
-def _csv_build_change_item(row, mapping, archiv_team, preview_caches=None):
-    """Nur echte Abweichungen zur DB (oder Blocker-Fehler)."""
-    ctx = _csv_resolve_row_context(row, mapping, archiv_team, preview_caches)
-    if ctx is None:
-        return None
-    if ctx.get('error'):
-        return {
-            'pylon': ctx['pylon'],
-            'full_name': ctx['full_name'],
-            'change_lines': ctx['messages'],
-            'group_key': ctx['group_key'],
-            'change_kind': 'error',
-            'checkbox_disabled': True,
-        }
+def _csv_item_search_text(comparison, extra_lines):
+    parts = []
+    for c in comparison:
+        parts.extend([c.get('label', ''), str(c.get('old', '')), str(c.get('new', ''))])
+    if extra_lines:
+        parts.extend(str(x) for x in extra_lines)
+    return ' '.join(parts).lower()
 
-    team_member = ctx['team_member']
-    users_by_id = preview_caches.users_by_id if preview_caches else None
-    after_snap = _csv_target_snapshot(ctx, preview_caches)
 
-    if team_member is None:
-        lines = _csv_diff_concrete_lines(row, mapping, None, archiv_team, True, users_by_id)
-        if not lines and mapping.get('pylon'):
-            pyl_col = mapping['pylon']
-            lines = [f'{pyl_col}: {_csv_cell_display(row, pyl_col)}']
-        return {
-            'pylon': ctx['pylon'],
-            'full_name': ctx['full_name'],
-            'change_lines': lines,
-            'group_key': ctx['group_key'],
-            'change_kind': 'create',
-            'checkbox_disabled': False,
-        }
-
-    before = _csv_member_snapshot(team_member, archiv_team, users_by_id)
-    lines = _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, False, users_by_id)
-    if not lines:
-        return None
-
-    kind = 'archive' if after_snap['in_archiv'] and not before['in_archiv'] else (
-        'restore' if before['in_archiv'] and not after_snap['in_archiv'] else 'update'
-    )
+def _csv_change_item_payload(ctx, comparison, change_kind, checkbox_disabled, error_messages=None):
+    if error_messages is not None:
+        lines = list(error_messages)
+    else:
+        lines = [f"{c['label']}: from {c['old']} to {c['new']}" for c in comparison if c['changed']]
     return {
         'pylon': ctx['pylon'],
         'full_name': ctx['full_name'],
+        'comparison': comparison,
         'change_lines': lines,
         'group_key': ctx['group_key'],
-        'change_kind': kind,
-        'checkbox_disabled': False,
+        'change_kind': change_kind,
+        'checkbox_disabled': checkbox_disabled,
+        'search_text': _csv_item_search_text(comparison, lines),
     }
+
+
+def _csv_build_change_item(row, mapping, archiv_team, preview_caches=None, baseline_rows=None):
+    """Vorschau: Alt (Baseline-CSV oder DB) vs Neu (Import-CSV)."""
+    ctx = _csv_resolve_row_context(row, mapping, archiv_team, preview_caches)
+    if ctx is None:
+        return None
+
+    users_by_id = preview_caches.users_by_id if preview_caches else None
+    pylon = ctx['pylon']
+    baseline_row = baseline_rows.get(pylon) if baseline_rows else None
+
+    if ctx.get('error'):
+        tm = None
+        if preview_caches:
+            tm = preview_caches.members_by_pylon.get(pylon)
+        comparison = _csv_build_review_comparison(row, mapping, tm, archiv_team, users_by_id, baseline_row)
+        return _csv_change_item_payload(ctx, comparison, 'error', True, error_messages=ctx['messages'])
+
+    team_member = ctx['team_member']
+    after_snap = _csv_target_snapshot(ctx, preview_caches)
+    comparison = _csv_build_review_comparison(row, mapping, team_member, archiv_team, users_by_id, baseline_row)
+
+    if not any(c['changed'] for c in comparison):
+        return None
+
+    if team_member is None:
+        return _csv_change_item_payload(ctx, comparison, 'create', False)
+
+    before = _csv_member_snapshot(team_member, archiv_team, users_by_id)
+    kind = 'archive' if after_snap['in_archiv'] and not before['in_archiv'] else (
+        'restore' if before['in_archiv'] and not after_snap['in_archiv'] else 'update'
+    )
+    return _csv_change_item_payload(ctx, comparison, kind, False)
+
+
+def _remove_baseline_csv_session(session):
+    bpath = session.pop('csv_baseline_temp_file', None)
+    if bpath and os.path.isfile(bpath):
+        try:
+            os.unlink(bpath)
+        except OSError:
+            pass
+    session.pop('csv_baseline_delimiter', None)
 
 
 def _csv_collect_last_row_by_pylon(temp_path, delimiter, mapping):
@@ -2274,6 +2308,20 @@ def sync_from_csv():
             _remove_csv_preview_sidecar(prev_path)
         session.pop('csv_preview_truncated', None)
 
+        # Optional: zweite CSV als „Stand vorher“ (z. B. ALL.csv vs ALL NEW.csv)
+        baseline_file = request.files.get('baseline_csv')
+        _remove_baseline_csv_session(session)
+        if baseline_file and baseline_file.filename and baseline_file.filename.lower().endswith('.csv'):
+            b_fd, b_temp = tempfile.mkstemp(suffix='.csv')
+            os.close(b_fd)
+            baseline_file.save(b_temp)
+            with open(b_temp, 'r', encoding='utf-8-sig') as bf:
+                b_sample = bf.read(1024)
+                bf.seek(0)
+                b_delim = ';' if ';' in b_sample else ','
+            session['csv_baseline_temp_file'] = b_temp
+            session['csv_baseline_delimiter'] = b_delim
+            flash('Vergleichs-CSV (alt) gespeichert — die Vorschau zeigt Alt vs Neu aus den Dateien.', 'info')
         # Save uploaded file to a temporary file
         temp_fd, temp_path = tempfile.mkstemp(suffix='.csv')
         os.close(temp_fd)
@@ -2318,12 +2366,15 @@ def sync_from_csv():
             'role': 'Agent-Status'
         }
 
-        return render_template('admin/csv_mapping.html',
-                               headers=headers,
-                               preview_rows=preview_rows,
-                               mapping=mapping,
-                               delimiter=delimiter,
-                               config=current_app.config)
+        return render_template(
+            'admin/csv_mapping.html',
+            headers=headers,
+            preview_rows=preview_rows,
+            mapping=mapping,
+            delimiter=delimiter,
+            has_baseline_csv=bool(session.get('csv_baseline_temp_file')),
+            config=current_app.config,
+        )
 
     # Schritt 2a: Vorschau bauen (keine Änderungen an der DB)
     if request.method == 'POST' and 'preview_import' in request.form:
@@ -2344,15 +2395,24 @@ def sync_from_csv():
             flash('Keine Zeilen mit Pylon-Nr in der CSV.', 'warning')
             return redirect(url_for('admin.sync_from_csv'))
 
+        baseline_rows = None
+        bpath = session.get('csv_baseline_temp_file')
+        bdelim = session.get('csv_baseline_delimiter', delimiter)
+        if bpath and os.path.isfile(bpath):
+            baseline_rows = _csv_collect_last_row_by_pylon(bpath, bdelim, mapping)
+
         preview_caches = _CsvPreviewCaches(last_rows.keys())
         change_items = []
         for row in last_rows.values():
-            item = _csv_build_change_item(row, mapping, archiv_team, preview_caches)
+            item = _csv_build_change_item(row, mapping, archiv_team, preview_caches, baseline_rows)
             if item:
                 change_items.append(item)
 
         if not change_items:
-            flash('Keine Abweichungen zur aktuellen Datenbank — der Import würde nichts ändern.', 'info')
+            if baseline_rows is not None:
+                flash('Keine Unterschiede zwischen alter und neuer CSV für die zugeordneten Spalten.', 'info')
+            else:
+                flash('Keine Abweichungen zur aktuellen Datenbank — der Import würde nichts ändern.', 'info')
             return redirect(url_for('admin.sync_from_csv'))
 
         preview_truncated = len(change_items) > CSV_PREVIEW_MAX_ROWS
@@ -2386,6 +2446,7 @@ def sync_from_csv():
             preview_truncated=preview_truncated,
             large_ui=large_ui,
             preview_max_rows=CSV_PREVIEW_MAX_ROWS,
+            preview_compare_baseline=baseline_rows is not None,
             config=current_app.config,
         )
 
@@ -2437,6 +2498,7 @@ def sync_from_csv():
         except OSError:
             pass
         session.pop('csv_temp_file', None)
+        _remove_baseline_csv_session(session)
 
         msg = (
             f'Import abgeschlossen: {stats["created_members"]} neu, {stats["updated_members"]} aktualisiert, '

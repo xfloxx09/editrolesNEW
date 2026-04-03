@@ -5,6 +5,9 @@
     <h2>CSV-Spalten zuordnen</h2>
     <p>Die CSV-Datei wurde hochgeladen. Bitte ordnen Sie die Spalten den Systemfeldern zu und wählen Sie aus, welche Spalten importiert werden sollen.</p>
     <p><strong>Erkanntes Trennzeichen:</strong> {% if delimiter == ';' %}Semikolon (;){% else %}Komma (,){% endif %}</p>
+    {% if has_baseline_csv %}
+    <div class="alert alert-info py-2 small">Vergleichs-CSV (alt) ist aktiv — die nächste Vorschau vergleicht <strong>alte Datei → neue Datei</strong> (nicht nur die Datenbank).</div>
+    {% endif %}
 
     <div class="row">
         <div class="col-md-6">

@@ -3,22 +3,31 @@
 {% block content %}
 <div class="container-fluid mb-3">
     <p class="text-muted small mb-0">
-        Für diese CSV wurden <strong>{{ total_changes|int }}</strong> Abweichung(en) zur Datenbank gefunden
-        ({{ total_csv_rows_with_pylon|int }} Pylon-Zeilen, bei Duplikaten zählt die letzte Zeile).
-        Der Prüfdialog sollte sich automatisch öffnen.
+        {% if preview_compare_baseline %}
+        <strong>{{ total_changes|int }}</strong> Zeilen unterscheiden sich zwischen <strong>alter</strong> und <strong>neuer</strong> CSV
+        ({{ total_csv_rows_with_pylon|int }} Pylone in der neuen Datei; gelbe Zeilen = geänderte Felder).
+        {% else %}
+        <strong>{{ total_changes|int }}</strong> Abweichung(en) zum <strong>aktuellen Datenbank-Stand</strong>
+        ({{ total_csv_rows_with_pylon|int }} Pylon-Zeilen).
+        {% endif %}
+        Der Prüfdialog öffnet sich automatisch.
     </p>
     <p class="mb-0"><a href="{{ url_for('admin.sync_from_csv') }}" class="btn btn-sm btn-secondary mt-2">CSV neu hochladen / Abbrechen</a></p>
 </div>
 
 <div class="modal fade" id="csvChangesModal" tabindex="-1" role="dialog" aria-labelledby="csvChangesModalTitle" data-backdrop="static" data-keyboard="false" aria-hidden="false">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document" style="max-width: min(96vw, 1400px);">
         <div class="modal-content bg-dark text-light border-secondary">
             <div class="modal-header border-secondary">
                 <div class="w-100">
                     <h4 class="modal-title" id="csvChangesModalTitle">Änderungen vor dem Import prüfen</h4>
                     <p class="small text-muted mb-0 mt-1">
-                        Jede Zeile: CSV-Spaltenkopf und <code>from &lt;DB/Ist&gt; to &lt;CSV&gt;</code>, z.&nbsp;B. <code>PLT aktiv?: from 1 to 0</code>.
-                        Deaktivieren, was nicht importiert werden soll. Unveränderte Pylone fehlen in der Liste.
+                        {% if preview_compare_baseline %}
+                        Spalte <strong>Alt</strong> = vorherige CSV, <strong>Neu</strong> = diese Import-Datei. Hervorgehobene Zeilen = konkrete Änderung.
+                        {% else %}
+                        Spalte <strong>Alt</strong> = Ist aus der Datenbank, <strong>Neu</strong> = Wert aus der CSV.
+                        {% endif %}
+                        Deaktivieren Sie Zeilen, die nicht importiert werden sollen.
                     </p>
                     {% if preview_truncated %}
                     <div class="alert alert-warning py-2 small mt-2 mb-0">
@@ -111,12 +120,12 @@
                                                                 <th>Pylon</th>
                                                                 <th>Name</th>
                                                                 <th>Art</th>
-                                                                <th>Geplante Änderungen</th>
+                                                                <th style="min-width: 320px;">Alt → Neu (alle relevanten Felder)</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {% for it in items %}
-                                                            {% set search_blob = (project_label ~ ' ' ~ team_label ~ ' ' ~ role_label ~ ' ' ~ it.pylon ~ ' ' ~ it.full_name ~ ' ' ~ (it.change_lines|join(' ')))|lower %}
+                                                            {% set search_blob = (project_label ~ ' ' ~ team_label ~ ' ' ~ role_label ~ ' ' ~ it.pylon ~ ' ' ~ it.full_name ~ ' ' ~ it.search_text)|lower %}
                                                             <tr class="csv-preview-row {% if it.change_kind == 'error' %}table-danger{% endif %}"
                                                                 data-csv-search="{{ search_blob|e }}"
                                                                 {% if it.change_kind == 'error' %}data-csv-error="1"{% endif %}>
@@ -140,10 +149,24 @@
                                                                     <span class="badge badge-info">Aktualisierung</span>
                                                                     {% endif %}
                                                                 </td>
-                                                                <td class="small align-middle">
-                                                                    <ul class="mb-0 pl-3">
-                                                                        {% for line in it.change_lines %}<li>{{ line }}</li>{% endfor %}
-                                                                    </ul>
+                                                                <td class="small align-top p-1">
+                                                                    <table class="table table-sm table-borderless mb-0 text-light csv-compare-inner">
+                                                                        <thead>
+                                                                            <tr class="border-bottom border-secondary"><th class="py-1" style="width:32%;">Feld</th><th class="py-1" style="width:34%;">Alt</th><th class="py-1" style="width:34%;">Neu</th></tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {% for c in it.comparison %}
+                                                                            <tr class="{% if c.changed %}bg-warning text-dark font-weight-bold{% else %}text-muted{% endif %}">
+                                                                                <td class="py-1 align-top">{{ c.label }}</td>
+                                                                                <td class="py-1 align-top text-break">{{ c.old }}</td>
+                                                                                <td class="py-1 align-top text-break">{{ c.new }}</td>
+                                                                            </tr>
+                                                                            {% endfor %}
+                                                                        </tbody>
+                                                                    </table>
+                                                                    {% if it.change_kind == 'error' %}
+                                                                    <div class="alert alert-danger py-1 px-2 small mb-0 mt-1">{% for line in it.change_lines %}{{ line }}{% if not loop.last %} — {% endif %}{% endfor %}</div>
+                                                                    {% endif %}
                                                                 </td>
                                                             </tr>
                                                             {% endfor %}
