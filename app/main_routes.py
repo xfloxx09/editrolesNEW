@@ -275,6 +275,17 @@ def _dashboard_my_team_ids():
     return out
 
 
+def _coaching_dashboard_query_joined(base_query):
+    """Join path required whenever filters reference TeamMember, Team, or coach User."""
+    return base_query.join(
+        TeamMember, Coaching.team_member_id == TeamMember.id
+    ).join(
+        Team, TeamMember.team_id == Team.id
+    ).outerjoin(
+        User, Coaching.coach_id == User.id
+    )
+
+
 def _build_team_members_performance(team):
     project_id = team.project_id
     team_members_performance = []
@@ -432,12 +443,6 @@ def profile():
 @login_required
 @permission_required('view_coaching_dashboard')
 def coaching_dashboard():
-    # Your original code (as you had it) – I'm restoring it from your template's expectations.
-    # I'll use the logic that you originally had, which your `index.html` template relies on.
-    # Since I don't have your exact original code, I will write a version that matches the variables your template uses.
-    # Your template uses: coachings_paginated, total_coachings, chart_labels, etc.
-    # I'll reconstruct the essential parts.
-    
     page = request.args.get('page', 1, type=int)
     period_arg = request.args.get('period', 'all')
     team_arg = request.args.get('team', 'all')
@@ -447,73 +452,68 @@ def coaching_dashboard():
     sees_all_teams = _user_sees_all_teams_coaching_dashboard()
     my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else []
 
-    # Build reusable filter conditions (project scope)
-    filters = []
+    # Chart/KPI filters: project scope only (no „my teams“ restriction). Liste unten ist stärker gefiltert.
+    chart_filters = []
     if accessible is None:
         if project_filter:
-            filters.append(Coaching.project_id == project_filter)
+            chart_filters.append(Coaching.project_id == project_filter)
     elif not accessible:
-        filters.append(Coaching.project_id == -1)
+        chart_filters.append(Coaching.project_id == -1)
     else:
         if project_filter is not None and project_filter not in accessible:
             project_filter = None
         if project_filter is not None:
-            filters.append(Coaching.project_id == project_filter)
+            chart_filters.append(Coaching.project_id == project_filter)
         elif len(accessible) == 1:
-            filters.append(Coaching.project_id == accessible[0])
+            chart_filters.append(Coaching.project_id == accessible[0])
         else:
             vid = get_visible_project_id()
             if vid and vid in accessible:
-                filters.append(Coaching.project_id == vid)
+                chart_filters.append(Coaching.project_id == vid)
             else:
-                filters.append(Coaching.project_id == accessible[0])
+                chart_filters.append(Coaching.project_id == accessible[0])
 
-    if not sees_all_teams:
-        if my_dash_team_ids:
-            filters.append(TeamMember.team_id.in_(my_dash_team_ids))
-        else:
-            filters.append(false())
-
-    # Period filter
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
-        filters.append(Coaching.coaching_date >= start_date)
+        chart_filters.append(Coaching.coaching_date >= start_date)
     if end_date:
-        filters.append(Coaching.coaching_date <= end_date)
+        chart_filters.append(Coaching.coaching_date <= end_date)
 
-    # Team filter (ignore teams outside allowed projects / outside own teams when scoped)
     if team_arg != 'all' and team_arg.isdigit():
         tid = int(team_arg)
         team_row = Team.query.filter_by(id=tid).first()
         if team_row and (accessible is None or team_row.project_id in accessible):
             if sees_all_teams or tid in my_dash_team_ids:
-                filters.append(Team.id == tid)
+                chart_filters.append(Team.id == tid)
 
-    # Search filter
+    list_filters = list(chart_filters)
+
     if search_arg:
         pattern = f"%{search_arg}%"
-        filters.append(
+        list_filters.append(
             or_(
                 TeamMember.name.ilike(pattern),
                 User.username.ilike(pattern),
                 Coaching.coaching_subject.ilike(pattern),
                 Coaching.coach_notes.ilike(pattern),
-                Coaching.project_leader_notes.ilike(pattern)
+                Coaching.project_leader_notes.ilike(pattern),
             )
         )
 
-    # Build query (eager employee_review + coach names from linked TeamMember)
-    query = Coaching.query.options(
-        joinedload(Coaching.employee_review),
-        selectinload(Coaching.coach).selectinload(User.team_members),
-    ).join(
-        TeamMember, Coaching.team_member_id == TeamMember.id
-    ).join(Team, TeamMember.team_id == Team.id).join(
-        User, Coaching.coach_id == User.id, isouter=True
-    ).filter(*filters)
+    if not sees_all_teams:
+        if my_dash_team_ids:
+            list_filters.append(TeamMember.team_id.in_(my_dash_team_ids))
+        else:
+            list_filters.append(false())
 
-    # Pagination
-    coachings_paginated = query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
+    list_query = _coaching_dashboard_query_joined(
+        Coaching.query.options(
+            joinedload(Coaching.employee_review),
+            selectinload(Coaching.coach).selectinload(User.team_members),
+        )
+    ).filter(*list_filters)
+
+    coachings_paginated = list_query.order_by(desc(Coaching.coaching_date)).paginate(page=page, per_page=15, error_out=False)
 
     can_leave_review = current_user.has_permission('leave_coaching_review')
     review_form_dashboard = None
@@ -524,28 +524,62 @@ def coaching_dashboard():
         review_form_dashboard = CoachingReviewForm()
         review_form_dashboard.next.data = review_redirect_next
 
-    # Compute total coachings count for the filter set
-    total_coachings = query.count()
+    total_coachings = list_query.count()
 
-    # Prepare data for charts
-    teams_for_charts = db.session.query(Team.id, Team.name).join(TeamMember, Team.id == TeamMember.team_id).join(Coaching, TeamMember.id == Coaching.team_member_id).filter(*filters).distinct().all()
+    teams_for_charts = (
+        db.session.query(Team.id, Team.name)
+        .join(TeamMember, Team.id == TeamMember.team_id)
+        .join(Coaching, TeamMember.id == Coaching.team_member_id)
+        .outerjoin(User, Coaching.coach_id == User.id)
+        .filter(*chart_filters)
+        .distinct()
+        .all()
+    )
     chart_labels = [t.name for t in teams_for_charts]
     chart_avg_performance = []
     chart_total_time = []
     chart_coachings_count = []
     for team in teams_for_charts:
-        team_filters = [TeamMember.team_id == team.id] + filters
-        stats = db.session.query(db.func.avg(Coaching.performance_mark), db.func.sum(Coaching.time_spent), db.func.count(Coaching.id)).join(TeamMember, Coaching.team_member_id == TeamMember.id).filter(*team_filters).first()
-        chart_avg_performance.append(round((stats[0] or 0) * 10, 1))  # percentage
+        team_filters = [TeamMember.team_id == team.id] + chart_filters
+        stats = (
+            db.session.query(
+                db.func.avg(Coaching.performance_mark),
+                db.func.sum(Coaching.time_spent),
+                db.func.count(Coaching.id),
+            )
+            .select_from(Coaching)
+            .join(TeamMember, Coaching.team_member_id == TeamMember.id)
+            .join(Team, TeamMember.team_id == Team.id)
+            .outerjoin(User, Coaching.coach_id == User.id)
+            .filter(*team_filters)
+            .first()
+        )
+        chart_avg_performance.append(round((stats[0] or 0) * 10, 1))
         chart_total_time.append(stats[1] or 0)
         chart_coachings_count.append(stats[2] or 0)
 
-    subject_counts = db.session.query(Coaching.coaching_subject, db.func.count(Coaching.id)).filter(*filters).group_by(Coaching.coaching_subject).all()
+    subject_counts = (
+        db.session.query(Coaching.coaching_subject, db.func.count(Coaching.id))
+        .select_from(Coaching)
+        .join(TeamMember, Coaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+        .outerjoin(User, Coaching.coach_id == User.id)
+        .filter(*chart_filters)
+        .group_by(Coaching.coaching_subject)
+        .all()
+    )
     subject_chart_labels = [s[0] or 'Unbekannt' for s in subject_counts]
     subject_chart_values = [s[1] for s in subject_counts]
 
-    # Global totals
-    global_stats = db.session.query(db.func.count(Coaching.id), db.func.sum(Coaching.time_spent)).filter(*filters).first()
+    global_stats = (
+        db.session.query(db.func.count(Coaching.id), db.func.sum(Coaching.time_spent))
+        .select_from(Coaching)
+        .join(TeamMember, Coaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+        .outerjoin(User, Coaching.coach_id == User.id)
+        .filter(*chart_filters)
+        .first()
+    )
     global_total_coachings_count = global_stats[0] or 0
     total_minutes = global_stats[1] or 0
     hours = total_minutes // 60
