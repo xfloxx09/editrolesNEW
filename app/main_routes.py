@@ -1,7 +1,7 @@
 # app/main_routes.py
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify
 from flask_login import login_required, current_user
-from sqlalchemy import desc, or_, false
+from sqlalchemy import desc, or_, false, exists
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
@@ -605,10 +605,11 @@ def coaching_dashboard():
     minutes = total_minutes % 60
     global_time_coached_display = f"{hours} Std. {minutes} Min. ({total_minutes} Min. gesamt)"
     
-    # Team-Dropdown: immer alle „sichtbaren“ Projektteams (nicht ARCHIV, aktiv für Coaching) — auch wenn die Liste unten nur eigene Teams zeigt.
+    # Team-Dropdown: „sichtbare“ Projektteams (nicht ARCHIV, aktiv, mindestens ein TeamMember — leere Teams ausblenden).
     team_dropdown_q = Team.query.filter(
         Team.name != ARCHIV_TEAM_NAME,
         Team.active_for_coaching.is_(True),
+        exists().where(TeamMember.team_id == Team.id),
     )
     if dashboard_project_id is not None and dashboard_project_id != -1:
         all_teams_for_filter = team_dropdown_q.filter(Team.project_id == dashboard_project_id).order_by(Team.name).all()
