@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
-from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm
+from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
@@ -246,6 +246,41 @@ def panel():
 def manage_projects():
     projects = Project.query.order_by(Project.name).all()
     return render_template('admin/manage_projects.html', projects=projects)
+
+
+@bp.route('/projects/teams-coaching', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def manage_teams_coaching():
+    """Bulk toggle: teams excluded here cannot be used for new coachings or workshops."""
+    form = TeamsCoachingBulkForm()
+    if form.validate_on_submit():
+        active_ids = {int(x) for x in request.form.getlist('active_team') if str(x).isdigit()}
+        teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).all()
+        for team in teams:
+            team.active_for_coaching = team.id in active_ids
+        db.session.commit()
+        flash('Team-Sichtbarkeit für aktives Coaching gespeichert.', 'success')
+        return redirect(url_for('admin.manage_teams_coaching'))
+
+    projects = Project.query.order_by(Project.name).all()
+    teams_by_project = {}
+    for p in projects:
+        teams_by_project[p.id] = (
+            Team.query.filter_by(project_id=p.id)
+            .filter(Team.name != ARCHIV_TEAM_NAME)
+            .order_by(Team.name)
+            .all()
+        )
+    return render_template(
+        'admin/manage_teams_coaching.html',
+        title='Teams & aktives Coaching',
+        form=form,
+        projects=projects,
+        teams_by_project=teams_by_project,
+        archiv_name=ARCHIV_TEAM_NAME,
+        config=current_app.config,
+    )
 
 
 @bp.route('/projects/create', methods=['GET', 'POST'])
@@ -567,7 +602,8 @@ def create_team():
         try:
             team = Team(
                 name=form.name.data,
-                project_id=form.project_id.data
+                project_id=form.project_id.data,
+                active_for_coaching=form.active_for_coaching.data,
             )
             db.session.add(team)
             db.session.flush()
@@ -609,6 +645,8 @@ def edit_team(team_id):
         try:
             team_to_edit.name = form.name.data
             team_to_edit.project_id = form.project_id.data
+            if team_to_edit.name != ARCHIV_TEAM_NAME:
+                team_to_edit.active_for_coaching = form.active_for_coaching.data
 
             if form.team_leaders.data:
                 leaders = User.query.filter(User.id.in_(form.team_leaders.data), User.role.has(name=ROLE_TEAMLEITER)).all()
@@ -628,6 +666,7 @@ def edit_team(team_id):
         form.name.data = team_to_edit.name
         form.team_leaders.data = [leader.id for leader in team_to_edit.leaders.all()]
         form.project_id.data = team_to_edit.project_id
+        form.active_for_coaching.data = team_to_edit.active_for_coaching
 
     return render_template('admin/edit_team.html', title='Team bearbeiten', form=form, team=team_to_edit, config=current_app.config)
 

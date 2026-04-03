@@ -49,6 +49,12 @@
                         {% endif %}
                     </div>
 
+                    <div class="form-group form-check">
+                        {{ form.active_for_coaching(class="form-check-input", id="active_for_coaching") }}
+                        {{ form.active_for_coaching.label(class="form-check-label", for="active_for_coaching") }}
+                        <small class="form-text text-muted d-block">Deaktiviert: kein neues Coaching/Workshop mit Mitgliedern dieses Teams.</small>
+                    </div>
+
                     <div class="form-group">
                         {{ form.submit(class="btn telekom-button") }}
                         <a href="{{ url_for('admin.panel') }}" class="btn btn-secondary">Abbrechen</a>

@@ -119,6 +119,8 @@ class Team(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    # False: no new coachings/workshops targeting this team; history & dashboards unchanged
+    active_for_coaching = db.Column(db.Boolean, nullable=False, default=True)
 
     members = db.relationship('TeamMember', foreign_keys='TeamMember.team_id', back_populates='team')
     leaders = db.relationship('User', secondary=team_leaders, back_populates='teams_led')

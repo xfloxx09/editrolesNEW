@@ -17,6 +17,15 @@ ROLE_MITARBEITER = 'Mitarbeiter'
 
 ARCHIV_TEAM_NAME = "ARCHIV"
 
+
+def team_member_eligible_for_new_coaching(team_member):
+    """True if this member may be selected for a new coaching, workshop, or assignment."""
+    if not team_member or not team_member.team:
+        return False
+    if team_member.team.name == ARCHIV_TEAM_NAME:
+        return False
+    return bool(team_member.team.active_for_coaching)
+
 def role_required(allowed_roles):
     def decorator(f):
         @wraps(f)
@@ -70,8 +79,15 @@ def get_or_create_archiv_team():
             default_project = Project(name="Default Project")
             db.session.add(default_project)
             db.session.commit()
-        archiv_team = Team(name=ARCHIV_TEAM_NAME, project_id=default_project.id)
+        archiv_team = Team(
+            name=ARCHIV_TEAM_NAME,
+            project_id=default_project.id,
+            active_for_coaching=False,
+        )
         db.session.add(archiv_team)
+        db.session.commit()
+    elif archiv_team.active_for_coaching:
+        archiv_team.active_for_coaching = False
         db.session.commit()
     return archiv_team
 

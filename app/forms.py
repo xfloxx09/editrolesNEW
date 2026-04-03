@@ -4,7 +4,7 @@ from wtforms import StringField, PasswordField, BooleanField, SubmitField, Selec
 from wtforms.widgets import HiddenInput
 from wtforms.validators import DataRequired, EqualTo, ValidationError, Length, NumberRange, Optional
 from flask_login import current_user
-from sqlalchemy import false
+from sqlalchemy import false, or_
 from app import db
 from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
 from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
@@ -106,6 +106,10 @@ class TeamForm(FlaskForm):
     name = StringField('Team Name', validators=[DataRequired(), Length(min=3, max=100)])
     team_leaders = SelectMultipleField('Teamleiter', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
+    active_for_coaching = BooleanField(
+        'Für neue Coachings & Workshops verfügbar',
+        default=True,
+    )
     submit = SubmitField('Team erstellen/aktualisieren')
 
     def __init__(self, original_name=None, *args, **kwargs):
@@ -181,7 +185,7 @@ class CoachingForm(FlaskForm):
         self.current_user_role = current_user_role
         self.current_user_team_ids = current_user_team_ids if current_user_team_ids is not None else []
 
-    def update_team_member_choices(self, exclude_archiv=False, project_id=None):
+    def update_team_member_choices(self, exclude_archiv=False, project_id=None, include_member_ids=None):
         generated_choices = []
         query = TeamMember.query.join(Team, TeamMember.team_id == Team.id)
 
@@ -204,6 +208,12 @@ class CoachingForm(FlaskForm):
 
         if exclude_archiv:
             query = query.filter(Team.name != ARCHIV_TEAM_NAME)
+
+        include_ids = include_member_ids or []
+        coaching_ok = Team.active_for_coaching.is_(True)
+        if include_ids:
+            coaching_ok = or_(coaching_ok, TeamMember.id.in_(include_ids))
+        query = query.filter(coaching_ok)
 
         members = query.order_by(TeamMember.name).all()
         for m in members:
@@ -250,7 +260,10 @@ class WorkshopForm(FlaskForm):
         if self.current_user_role == ROLE_TEAMLEITER and self.current_user_team_ids:
             query = query.filter(TeamMember.team_id.in_(self.current_user_team_ids))
 
-        query = query.filter(Team.name != ARCHIV_TEAM_NAME)
+        query = query.filter(
+            Team.name != ARCHIV_TEAM_NAME,
+            Team.active_for_coaching.is_(True),
+        )
 
         members = query.order_by(TeamMember.name).all()
         for m in members:
@@ -266,6 +279,11 @@ class ProjectLeaderNoteForm(FlaskForm):
     notes = TextAreaField('PL/QM Notiz',
                           validators=[DataRequired("Die Notiz darf nicht leer sein."),
                                       Length(max=2000)])
+
+
+class TeamsCoachingBulkForm(FlaskForm):
+    """CSRF + submit for bulk toggle of team active_for_coaching."""
+    submit = SubmitField('Änderungen speichern')
 
 
 class ProjectForm(FlaskForm):
@@ -305,7 +323,8 @@ class AssignedCoachingForm(FlaskForm):
 
             members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
                 Team.project_id.in_(allowed_project_ids),
-                Team.name != ARCHIV_TEAM_NAME
+                Team.name != ARCHIV_TEAM_NAME,
+                Team.active_for_coaching.is_(True),
             ).order_by(Team.name, TeamMember.name).all()
             self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in members]
 

@@ -2,7 +2,10 @@
 
 {% block content %}
 <h1>Projekte verwalten</h1>
-<a href="{{ url_for('admin.create_project') }}" class="btn telekom-button mb-3">Neues Projekt</a>
+<div class="mb-3">
+    <a href="{{ url_for('admin.create_project') }}" class="btn telekom-button">Neues Projekt</a>
+    <a href="{{ url_for('admin.manage_teams_coaching') }}" class="btn btn-outline-secondary">Teams &amp; aktives Coaching</a>
+</div>
 
 <table class="table table-sm">
     <thead>

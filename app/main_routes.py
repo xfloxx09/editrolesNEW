@@ -22,6 +22,7 @@ from app.utils import (
     get_or_create_archiv_team,
     ARCHIV_TEAM_NAME,
     get_accessible_project_ids,
+    team_member_eligible_for_new_coaching,
 )
 from datetime import datetime, timezone, timedelta, date
 import calendar
@@ -97,6 +98,7 @@ def _member_performance_for_assigned_page(project_id):
     members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
         Team.name != ARCHIV_TEAM_NAME,
+        Team.active_for_coaching.is_(True),
     ).all()
     raw = []
     for m in members:
@@ -848,6 +850,9 @@ def add_coaching():
         if not team_member:
             flash('Teammitglied nicht gefunden.', 'danger')
             return redirect(url_for('main.add_coaching'))
+        if not team_member_eligible_for_new_coaching(team_member):
+            flash('Dieses Team ist für neue Coachings deaktiviert. Wählen Sie ein anderes Teammitglied.', 'danger')
+            return redirect(url_for('main.add_coaching'))
 
         coaching = Coaching(
             team_member_id=form.team_member_id.data,
@@ -893,13 +898,17 @@ def add_coaching():
     if assigned_id:
         assignment = AssignedCoaching.query.get(assigned_id)
         if assignment and assignment.coach_id == current_user.id and assignment.status == 'pending':
-            form.assigned_coaching_id.data = assigned_id
-            form.team_member_id.data = assignment.team_member_id
-            if assignment.desired_performance_note:
-                form.performance_mark.data = assignment.desired_performance_note
-            assignment.status = 'accepted'
-            db.session.commit()
-            flash('Coaching-Aufgabe angenommen.', 'success')
+            tm_a = TeamMember.query.get(assignment.team_member_id)
+            if not team_member_eligible_for_new_coaching(tm_a):
+                flash('Diese Aufgabe kann nicht angenommen werden: Das Team ist für neue Coachings deaktiviert.', 'danger')
+            else:
+                form.assigned_coaching_id.data = assigned_id
+                form.team_member_id.data = assignment.team_member_id
+                if assignment.desired_performance_note:
+                    form.performance_mark.data = assignment.desired_performance_note
+                assignment.status = 'accepted'
+                db.session.commit()
+                flash('Coaching-Aufgabe angenommen.', 'success')
         else:
             flash('Ungültige oder nicht verfügbare Aufgabe.', 'danger')
 
@@ -927,7 +936,11 @@ def edit_coaching(coaching_id):
         if current_user.role_name == ROLE_TEAMLEITER else []
     )
     form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=cut)
-    form.update_team_member_choices(exclude_archiv=True, project_id=coaching.project_id)
+    form.update_team_member_choices(
+        exclude_archiv=True,
+        project_id=coaching.project_id,
+        include_member_ids=[coaching.team_member_id],
+    )
     leitfaden_items = get_active_leitfaden_items_safe()
     selected_leitfaden_values = {}
     if leitfaden_items:
@@ -938,6 +951,10 @@ def edit_coaching(coaching_id):
             selected_leitfaden_values = {}
 
     if form.validate_on_submit():
+        tm_new = TeamMember.query.get(form.team_member_id.data)
+        if not tm_new or not team_member_eligible_for_new_coaching(tm_new):
+            flash('Ungültiges Teammitglied oder Team für neue Coachings deaktiviert.', 'danger')
+            return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
         form.populate_obj(coaching)
         if form.coaching_style.data != 'TCAP':
             coaching.tcap_id = None
@@ -993,6 +1010,11 @@ def add_workshop():
     form = WorkshopForm(current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_participant_choices(project_id=project_id)
     if form.validate_on_submit():
+        for member_id in form.team_member_ids.data:
+            wm = TeamMember.query.get(member_id)
+            if not team_member_eligible_for_new_coaching(wm):
+                flash('Mindestens ein Teilnehmer gehört zu einem Team, das für neue Workshops deaktiviert ist.', 'danger')
+                return redirect(url_for('main.add_workshop'))
         workshop = Workshop(
             title=form.title.data,
             coach_id=current_user.id,
@@ -1478,7 +1500,8 @@ def assigned_coachings():
 
     all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.project_id == project_id,
-        Team.name != ARCHIV_TEAM_NAME
+        Team.name != ARCHIV_TEAM_NAME,
+        Team.active_for_coaching.is_(True),
     ).order_by(Team.name, TeamMember.name).all()
 
     member_performance = _member_performance_for_assigned_page(project_id) if view_type == 'pl' else []
@@ -1526,6 +1549,10 @@ def create_assigned_coaching():
         form.team_member_id.data = pre_member
 
     if form.validate_on_submit():
+        tm_as = TeamMember.query.get(form.team_member_id.data)
+        if not team_member_eligible_for_new_coaching(tm_as):
+            flash('Dieses Teammitglied gehört zu einem Team, das für neue Zuweisungen deaktiviert ist.', 'danger')
+            return redirect(url_for('main.create_assigned_coaching'))
         d = form.deadline.data
         dl = datetime(d.year, d.month, d.day, 23, 59, 59)
         note_raw = request.form.get('current_note')
@@ -1640,9 +1667,13 @@ def accept_assigned_coaching(assignment_id):
         flash('Nicht autorisiert.', 'danger')
         return redirect(url_for('main.assigned_coachings'))
     if assignment.status == 'pending':
-        assignment.status = 'accepted'
-        db.session.commit()
-        flash('Aufgabe angenommen.', 'success')
+        tm_acc = TeamMember.query.get(assignment.team_member_id)
+        if not team_member_eligible_for_new_coaching(tm_acc):
+            flash('Annahme nicht möglich: Das Team ist für neue Coachings deaktiviert.', 'danger')
+        else:
+            assignment.status = 'accepted'
+            db.session.commit()
+            flash('Aufgabe angenommen.', 'success')
     else:
         flash('Aufgabe kann nicht angenommen werden.', 'warning')
     return redirect(url_for('main.assigned_coachings'))

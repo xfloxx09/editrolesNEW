@@ -273,6 +273,34 @@ def create_app(config_class=Config):
                 conn.rollback()
                 print(f"ℹ️ Note on team constraint: {e}")
 
+        # 11. teams.active_for_coaching (hide teams from new coaching/workshops)
+        if 'teams' in inspector.get_table_names():
+            team_cols = [c['name'] for c in inspector.get_columns('teams')]
+            if 'active_for_coaching' not in team_cols:
+                try:
+                    conn.execute(text(
+                        'ALTER TABLE teams ADD COLUMN active_for_coaching BOOLEAN DEFAULT true'
+                    ))
+                    conn.execute(text(
+                        'UPDATE teams SET active_for_coaching = true WHERE active_for_coaching IS NULL'
+                    ))
+                    conn.commit()
+                    print("✅ Spalte 'active_for_coaching' in teams hinzugefügt.")
+                except Exception as e:
+                    conn.rollback()
+                    try:
+                        conn.execute(text(
+                            'ALTER TABLE teams ADD COLUMN active_for_coaching INTEGER DEFAULT 1'
+                        ))
+                        conn.execute(text(
+                            'UPDATE teams SET active_for_coaching = 1 WHERE active_for_coaching IS NULL'
+                        ))
+                        conn.commit()
+                        print("✅ Spalte 'active_for_coaching' in teams hinzugefügt (Fallback).")
+                    except Exception as e2:
+                        conn.rollback()
+                        print(f"ℹ️ teams.active_for_coaching: {e} / {e2}")
+
         print("--- Migration abgeschlossen ---")
 
     # --- Blueprint registration ---

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Teams &amp; aktives Coaching</h1>
+    <p class="text-muted">
+        Teams ohne Häkchen sind in der gesamten App für <strong>neue</strong> Coachings, Workshops und Zuweisungen gesperrt.
+        Bestehende Einträge, Diagramme und Filter in den Dashboards bleiben sichtbar. Das System-Team
+        <strong>{{ archiv_name }}</strong> wird hier nicht aufgeführt.
+    </p>
+    <p>
+        <a href="{{ url_for('admin.manage_projects') }}" class="btn btn-secondary btn-sm">← Zurück zu Projekte verwalten</a>
+    </p>
+
+    <form method="POST">
+        {{ form.hidden_tag() }}
+
+        {% for project in projects %}
+        {% set p_teams = teams_by_project[project.id] %}
+        {% if p_teams %}
+        <h4 class="mt-4">{{ project.name }}</h4>
+        <table class="table table-sm table-bordered">
+            <thead>
+                <tr>
+                    <th>Team</th>
+                    <th style="width:14rem;">Neue Coachings / Workshops</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for team in p_teams %}
+                <tr>
+                    <td>{{ team.name }} <small class="text-muted">(ID {{ team.id }})</small></td>
+                    <td>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="active_team" value="{{ team.id }}"
+                                   id="at_{{ team.id }}" {% if team.active_for_coaching %}checked{% endif %}>
+                            <label class="form-check-label" for="at_{{ team.id }}">aktiv</label>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        {% endfor %}
+
+        <div class="mt-3">
+            {{ form.submit(class="btn telekom-button") }}
+        </div>
+    </form>
+</div>
+{% endblock %}
