@@ -141,6 +141,24 @@ def _resolve_coaching_workshop_project_id():
     return get_visible_project_id()
 
 
+def _sync_assigned_coaching_status_from_progress(assignment):
+    """Mark assignment completed when expected_coaching_count is reached; reopen if count drops below (e.g. delete)."""
+    if not assignment:
+        return
+    exp = assignment.expected_coaching_count or 0
+    if exp <= 0:
+        return
+    st = assignment.status
+    if st in ('cancelled', 'rejected', 'expired'):
+        return
+    done = Coaching.query.filter_by(assigned_coaching_id=assignment.id).count()
+    if done >= exp:
+        if st in ('pending', 'accepted', 'in_progress'):
+            assignment.status = 'completed'
+    elif st == 'completed':
+        assignment.status = 'in_progress' if done > 0 else 'accepted'
+
+
 def _user_can_assign_coachings():
     return (
         current_user.has_permission('assign_coachings')
@@ -1060,11 +1078,12 @@ def add_coaching():
             project_id=project_id,
             team_id=team_member.team_id
         )
+        linked_assignment = None
         if form.assigned_coaching_id.data and form.assigned_coaching_id.data != 0:
             coaching.assigned_coaching_id = form.assigned_coaching_id.data
-            assignment = AssignedCoaching.query.get(form.assigned_coaching_id.data)
-            if assignment:
-                assignment.status = 'in_progress'
+            linked_assignment = AssignedCoaching.query.get(form.assigned_coaching_id.data)
+            if linked_assignment:
+                linked_assignment.status = 'in_progress'
 
         db.session.add(coaching)
         db.session.flush()
@@ -1077,6 +1096,8 @@ def add_coaching():
                 item_id=item.id,
                 value=value
             ))
+        if linked_assignment:
+            _sync_assigned_coaching_status_from_progress(linked_assignment)
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
         return redirect(url_for('main.coaching_dashboard'))
@@ -1145,6 +1166,7 @@ def edit_coaching(coaching_id):
         if not tm_new or not team_member_eligible_for_new_coaching(tm_new):
             flash('Ungültiges Teammitglied oder Team für neue Coachings deaktiviert.', 'danger')
             return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
+        prev_assigned_id = coaching.assigned_coaching_id
         form.populate_obj(coaching)
         if form.coaching_style.data != 'TCAP':
             coaching.tcap_id = None
@@ -1158,6 +1180,9 @@ def edit_coaching(coaching_id):
                     item_id=item.id,
                     value=value
                 ))
+        db.session.flush()
+        for aid in {a for a in (prev_assigned_id, coaching.assigned_coaching_id) if a}:
+            _sync_assigned_coaching_status_from_progress(AssignedCoaching.query.get(aid))
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
         return redirect(url_for('main.coaching_dashboard'))
@@ -1182,7 +1207,11 @@ def delete_coaching(coaching_id):
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Keine Berechtigung.', 'danger')
         return redirect(url_for('main.coaching_dashboard'))
+    assigned_ref = coaching.assigned_coaching_id
     db.session.delete(coaching)
+    db.session.flush()
+    if assigned_ref:
+        _sync_assigned_coaching_status_from_progress(AssignedCoaching.query.get(assigned_ref))
     db.session.commit()
     flash('Coaching gelöscht.', 'success')
     return redirect(url_for('main.coaching_dashboard'))
