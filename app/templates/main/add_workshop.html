@@ -224,8 +224,25 @@
 <div class="container">
     <h2 class="mb-4">{{ title }}</h2>
 
+    {% if not is_edit_mode|default(false) and show_workshop_project_picker|default(false) %}
+    <form method="get" action="{{ url_for('main.add_workshop') }}" class="form-section form-inline align-items-end mb-3 flex-wrap">
+        <div class="form-group mr-3 mb-2 mb-md-0">
+            <label for="pick_workshop_project" class="mr-2 font-weight-bold">Projekt</label>
+            <select name="project" id="pick_workshop_project" class="form-control" onchange="this.form.submit()">
+                {% for p in workshop_projects %}
+                <option value="{{ p.id }}" {% if p.id == selected_workshop_project_id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <small class="text-muted">Teilnehmerliste folgt dem Projekt.</small>
+    </form>
+    {% endif %}
+
     <form method="POST" action="{% if is_edit_mode %}{{ url_for('main.edit_workshop', workshop_id=workshop.id) }}{% else %}{{ url_for('main.add_workshop') }}{% endif %}" novalidate>
         {{ form.hidden_tag() }}
+        {% if not is_edit_mode|default(false) and selected_workshop_project_id is defined %}
+        <input type="hidden" name="project_id" value="{{ selected_workshop_project_id }}">
+        {% endif %}
 
         <!-- Abschnitt 1: Workshop-Thema -->
         <div class="form-section">

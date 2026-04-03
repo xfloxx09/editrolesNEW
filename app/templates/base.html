@@ -19,6 +19,18 @@
             <ul class="navbar-nav mr-auto">
                 {% if current_user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('main.index') }}">Dashboard</a></li>
+                    {% if show_project_switcher %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="projectSwitchNav" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            Projekt: {{ active_project_name or '—' }}
+                        </a>
+                        <div class="dropdown-menu" aria-labelledby="projectSwitchNav">
+                            {% for p in user_allowed_projects %}
+                            <a class="dropdown-item {% if p.id == active_project_id %}active font-weight-bold{% endif %}" href="{{ url_for('main.set_project', project_id=p.id) }}">{{ p.name }}</a>
+                            {% endfor %}
+                        </div>
+                    </li>
+                    {% endif %}
                     {% if show_mein_team_nav %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('main.team_view') }}">Mein Team</a></li>
                     {% endif %}

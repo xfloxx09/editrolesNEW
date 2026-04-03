@@ -89,6 +89,36 @@ def get_visible_project_id():
     return None
 
 
+def _projects_for_coaching_workshop_picker():
+    """Projects the user may target when adding a coaching or workshop."""
+    accessible = get_accessible_project_ids()
+    if accessible is None:
+        return Project.query.order_by(Project.name).all()
+    if not accessible:
+        return []
+    return Project.query.filter(Project.id.in_(accessible)).order_by(Project.name).all()
+
+
+def _resolve_coaching_workshop_project_id():
+    """
+    Active project for add-coaching / add-workshop.
+    Uses ?project= on GET, project_id on POST; must fall within get_accessible_project_ids() for non-admin.
+    """
+    accessible = get_accessible_project_ids()
+    chosen = request.args.get('project', type=int)
+    if request.method == 'POST':
+        chosen = request.form.get('project_id', type=int) or chosen
+    if accessible is None:
+        if chosen and Project.query.get(chosen):
+            return chosen
+        return get_visible_project_id()
+    if not accessible:
+        return None
+    if chosen and chosen in accessible:
+        return chosen
+    return get_visible_project_id()
+
+
 def _user_can_assign_coachings():
     return (
         current_user.has_permission('assign_coachings')
@@ -949,10 +979,20 @@ def all_coaching_reviews():
 @login_required
 @permission_required('add_coaching')
 def add_coaching():
-    project_id = get_visible_project_id()
+    coaching_projects = _projects_for_coaching_workshop_picker()
+    project_id = _resolve_coaching_workshop_project_id()
     if not project_id:
         flash('Kein Projekt ausgewählt oder zugeordnet.', 'danger')
         return redirect(url_for('main.index'))
+    accessible = get_accessible_project_ids()
+    if accessible is not None and project_id not in accessible:
+        flash('Ungültiges oder nicht freigegebenes Projekt.', 'danger')
+        return redirect(url_for('main.add_coaching'))
+    if accessible is None and not Project.query.get(project_id):
+        flash('Ungültiges Projekt.', 'danger')
+        return redirect(url_for('main.add_coaching'))
+
+    show_coaching_project_picker = len(coaching_projects) > 1
 
     current_user_role = current_user.role_name
     current_user_team_ids = (
@@ -967,10 +1007,13 @@ def add_coaching():
         team_member = TeamMember.query.get(form.team_member_id.data)
         if not team_member:
             flash('Teammitglied nicht gefunden.', 'danger')
-            return redirect(url_for('main.add_coaching'))
+            return redirect(url_for('main.add_coaching', project=project_id))
+        if not team_member.team or team_member.team.project_id != project_id:
+            flash('Teammitglied passt nicht zum gewählten Projekt.', 'danger')
+            return redirect(url_for('main.add_coaching', project=project_id))
         if not team_member_eligible_for_new_coaching(team_member):
             flash('Dieses Team ist für neue Coachings deaktiviert. Wählen Sie ein anderes Teammitglied.', 'danger')
-            return redirect(url_for('main.add_coaching'))
+            return redirect(url_for('main.add_coaching', project=project_id))
 
         coaching = Coaching(
             team_member_id=form.team_member_id.data,
@@ -1035,6 +1078,9 @@ def add_coaching():
         form=form,
         leitfaden_items=leitfaden_items,
         selected_leitfaden_values={},
+        coaching_projects=coaching_projects,
+        selected_coaching_project_id=project_id,
+        show_coaching_project_picker=show_coaching_project_picker,
         config=current_app.config
     )
 
@@ -1121,15 +1167,29 @@ def delete_coaching(coaching_id):
 @login_required
 @permission_required('add_workshop')
 def add_workshop():
-    project_id = get_visible_project_id()
+    workshop_projects = _projects_for_coaching_workshop_picker()
+    project_id = _resolve_coaching_workshop_project_id()
     if not project_id:
         flash('Kein Projekt ausgewählt.', 'danger')
         return redirect(url_for('main.index'))
+    accessible = get_accessible_project_ids()
+    if accessible is not None and project_id not in accessible:
+        flash('Ungültiges oder nicht freigegebenes Projekt.', 'danger')
+        return redirect(url_for('main.add_workshop'))
+    if accessible is None and not Project.query.get(project_id):
+        flash('Ungültiges Projekt.', 'danger')
+        return redirect(url_for('main.add_workshop'))
+
+    show_workshop_project_picker = len(workshop_projects) > 1
+
     form = WorkshopForm(current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_participant_choices(project_id=project_id)
     if form.validate_on_submit():
         for member_id in form.team_member_ids.data:
             wm = TeamMember.query.get(member_id)
+            if not wm or not wm.team or wm.team.project_id != project_id:
+                flash('Mindestens ein Teilnehmer gehört nicht zum gewählten Projekt.', 'danger')
+                return redirect(url_for('main.add_workshop', project=project_id))
             if not team_member_eligible_for_new_coaching(wm):
                 flash('Mindestens ein Teilnehmer gehört zu einem Team, das für neue Workshops deaktiviert ist.', 'danger')
                 return redirect(url_for('main.add_workshop'))
@@ -1155,7 +1215,14 @@ def add_workshop():
         db.session.commit()
         flash('Workshop erfolgreich gespeichert.', 'success')
         return redirect(url_for('main.workshop_dashboard'))
-    return render_template('main/add_workshop.html', form=form, config=current_app.config)
+    return render_template(
+        'main/add_workshop.html',
+        form=form,
+        workshop_projects=workshop_projects,
+        selected_workshop_project_id=project_id,
+        show_workshop_project_picker=show_workshop_project_picker,
+        config=current_app.config,
+    )
 
 
 @bp.route('/workshop-dashboard')
