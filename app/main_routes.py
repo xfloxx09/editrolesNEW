@@ -209,25 +209,19 @@ def _build_team_members_performance(team):
 
 
 def _team_leaders_for_team_card(team):
-    """Teamleiter für die Infokarte: offizielle Zuordnung am Team + TL-Rolle mit Mitgliedschaft in diesem Team."""
-    seen = {}
-    try:
-        for u in team.leaders:
-            if u is not None and u.id:
-                seen[u.id] = u
-    except (TypeError, AttributeError):
-        pass
-    tl_here = (
-        User.query.options(selectinload(User.team_members))
+    """Auf der Karte als Teamleiter: im Team als Mitglied zugeordnet (TeamMember.user_id) und Berechtigung view_own_team."""
+    users = (
+        User.query.options(
+            joinedload(User.role).joinedload(Role.permissions),
+            selectinload(User.team_members),
+        )
         .join(TeamMember, TeamMember.user_id == User.id)
-        .join(Role, User.role_id == Role.id)
-        .filter(TeamMember.team_id == team.id, Role.name == ROLE_TEAMLEITER)
+        .filter(TeamMember.team_id == team.id, TeamMember.user_id.isnot(None))
         .distinct()
         .all()
     )
-    for u in tl_here:
-        seen[u.id] = u
-    return sorted(seen.values(), key=lambda u: (u.coach_display_name or u.username or '').lower())
+    eligible = [u for u in users if u.has_permission('view_own_team')]
+    return sorted(eligible, key=lambda u: (u.coach_display_name or u.username or '').lower())
 
 
 def filter_reviews_by_coaching_date(query, period_arg, year, month, day):
