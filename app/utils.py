@@ -27,6 +27,18 @@ def team_member_eligible_for_new_coaching(team_member):
     return bool(team_member.team.active_for_coaching)
 
 
+def _iter_relationship(coll):
+    """Iterate SQLAlchemy relation: dynamic (``.all()``) or static list / InstrumentedList."""
+    if coll is None:
+        return
+    try:
+        seq = coll.all()
+    except AttributeError:
+        seq = coll
+    for item in seq:
+        yield item
+
+
 def user_eligible_assignable_coach(user, project_id, team_member_id=None):
     """
     Users who may be chosen as coach when creating an AssignedCoaching in project_id.
@@ -45,10 +57,10 @@ def user_eligible_assignable_coach(user, project_id, team_member_id=None):
     pids = {project_id}
     if user.project_id in pids:
         return True
-    for p in user.projects.all():
+    for p in _iter_relationship(user.projects):
         if p.id in pids:
             return True
-    for team in user.teams_led.all():
+    for team in _iter_relationship(user.teams_led):
         if team.project_id in pids:
             return True
     if user.has_permission('multiple_teams'):
@@ -63,7 +75,7 @@ def user_eligible_assignable_coach(user, project_id, team_member_id=None):
     if team_member_id:
         tm = db.session.get(TeamMember, team_member_id)
         if tm and tm.team and tm.team.project_id == project_id:
-            leader_ids = {l.id for l in tm.team.leaders.all()}
+            leader_ids = {l.id for l in _iter_relationship(tm.team.leaders)}
             if user.id in leader_ids:
                 return True
     return False

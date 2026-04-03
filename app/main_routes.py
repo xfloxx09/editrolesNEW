@@ -236,6 +236,7 @@ def _get_teams_for_team_view():
         return Team.query.filter(
             Team.project_id == project_id,
             Team.id != archiv_id,
+            Team.active_for_coaching.is_(True),
         ).order_by(Team.name).all()
     if not current_user.has_permission('view_own_team'):
         return []
@@ -1182,7 +1183,12 @@ def pl_qm_dashboard():
     selected_team_id_filter = request.args.get('team_id_filter', default='', type=str)
 
     project = Project.query.get(project_id)
-    all_teams = Team.query.filter_by(project_id=project_id).filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
+    all_teams = (
+        Team.query.filter_by(project_id=project_id)
+        .filter(Team.name != ARCHIV_TEAM_NAME, Team.active_for_coaching.is_(True))
+        .order_by(Team.name)
+        .all()
+    )
 
     # Compute per-team stats
     teams_stats = []
@@ -1237,6 +1243,15 @@ def pl_qm_dashboard():
     members_data_for_cards = []
     if selected_team_id_filter and selected_team_id_filter.isdigit():
         selected_team_object_for_cards = Team.query.get(int(selected_team_id_filter))
+        if (
+            selected_team_object_for_cards
+            and (
+                not selected_team_object_for_cards.active_for_coaching
+                or selected_team_object_for_cards.project_id != project_id
+                or selected_team_object_for_cards.name == ARCHIV_TEAM_NAME
+            )
+        ):
+            selected_team_object_for_cards = None
         if selected_team_object_for_cards:
             team_members = TeamMember.query.filter_by(team_id=selected_team_object_for_cards.id).order_by(TeamMember.name).all()
             for member in team_members:
