@@ -23,6 +23,8 @@ from app.utils import (
     ARCHIV_TEAM_NAME,
     get_accessible_project_ids,
     team_member_eligible_for_new_coaching,
+    user_eligible_assignable_coach,
+    users_for_assignment_coach_dropdown,
 )
 from datetime import datetime, timezone, timedelta, date
 import calendar
@@ -1543,12 +1545,23 @@ def create_assigned_coaching():
         flash('Kein Projekt ausgewählt.', 'danger')
         return redirect(url_for('main.index'))
 
-    form = AssignedCoachingForm(allowed_project_ids=[project_id])
-    pre_member = request.args.get('member_id', type=int)
-    if pre_member and request.method == 'GET':
-        form.team_member_id.data = pre_member
+    tm_for_coaches = request.args.get('member_id', type=int)
+    if request.method == 'POST':
+        posted_m = request.form.get('team_member_id', type=int)
+        if posted_m:
+            tm_for_coaches = posted_m
+
+    form = AssignedCoachingForm(allowed_project_ids=[project_id], team_member_id=tm_for_coaches)
+    if request.method == 'GET' and tm_for_coaches:
+        form.team_member_id.data = tm_for_coaches
 
     if form.validate_on_submit():
+        coach_u = User.query.get(form.coach_id.data)
+        if not coach_u or not user_eligible_assignable_coach(
+            coach_u, project_id, form.team_member_id.data
+        ):
+            flash('Ungültige Coach-Auswahl.', 'danger')
+            return redirect(url_for('main.create_assigned_coaching'))
         tm_as = TeamMember.query.get(form.team_member_id.data)
         if not team_member_eligible_for_new_coaching(tm_as):
             flash('Dieses Teammitglied gehört zu einem Team, das für neue Zuweisungen deaktiviert ist.', 'danger')
@@ -1576,6 +1589,26 @@ def create_assigned_coaching():
         return redirect(url_for('main.assigned_coachings'))
 
     return render_template('main/create_assigned_coaching.html', form=form, config=current_app.config)
+
+
+@bp.route('/api/assignment-coaches')
+@login_required
+@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+def api_assignment_coaches():
+    """Coach dropdown options for the current project; refined by selected team member (optional)."""
+    project_id = get_visible_project_id()
+    if not project_id:
+        return jsonify([])
+    mid = request.args.get('team_member_id', type=int)
+    if mid:
+        m = TeamMember.query.get(mid)
+        if not m or not m.team or m.team.project_id != project_id:
+            mid = None
+    coaches = users_for_assignment_coach_dropdown(project_id, mid)
+    return jsonify([
+        {'id': u.id, 'label': f"{u.username} ({u.role_name})"}
+        for u in coaches
+    ])
 
 
 @bp.route('/api/member-current-score')

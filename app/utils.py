@@ -2,7 +2,7 @@ from functools import wraps
 from flask_login import current_user
 from flask import flash, redirect, url_for
 from app import db
-from app.models import Team, Project, Role
+from app.models import Team, Project, Role, TeamMember, User
 
 ROLE_ADMIN = 'Admin'
 ROLE_BETRIEBSLEITER = 'Betriebsleiter'
@@ -25,6 +25,56 @@ def team_member_eligible_for_new_coaching(team_member):
     if team_member.team.name == ARCHIV_TEAM_NAME:
         return False
     return bool(team_member.team.active_for_coaching)
+
+
+def user_eligible_assignable_coach(user, project_id, team_member_id=None):
+    """
+    Users who may be chosen as coach when creating an AssignedCoaching in project_id.
+
+    Includes: ``coach`` permission, primary project match, extra user projects,
+    leads any team in the project, ``multiple_teams`` with a TeamMember row in the project,
+    optional legacy ``team_id_if_leader``, or (if team_member_id given) is a leader of
+    that member's team.
+    """
+    if not user or not user.role:
+        return False
+    if not user.has_permission('coach') and not user.has_permission('accept_assigned_coaching'):
+        return False
+    if user.role_name == ROLE_ADMIN:
+        return False
+    pids = {project_id}
+    if user.project_id in pids:
+        return True
+    for p in user.projects.all():
+        if p.id in pids:
+            return True
+    for team in user.teams_led.all():
+        if team.project_id in pids:
+            return True
+    if user.has_permission('multiple_teams'):
+        for tm in user.team_members:
+            if tm.team and tm.team.project_id in pids:
+                return True
+    tid = getattr(user, 'team_id_if_leader', None)
+    if tid:
+        t = db.session.get(Team, tid)
+        if t and t.project_id in pids:
+            return True
+    if team_member_id:
+        tm = db.session.get(TeamMember, team_member_id)
+        if tm and tm.team and tm.team.project_id == project_id:
+            leader_ids = {l.id for l in tm.team.leaders.all()}
+            if user.id in leader_ids:
+                return True
+    return False
+
+
+def users_for_assignment_coach_dropdown(project_id, team_member_id=None):
+    """Sorted users who may receive a coaching assignment in this project."""
+    eligible = [u for u in User.query.order_by(User.username).all()
+                if user_eligible_assignable_coach(u, project_id, team_member_id)]
+    return eligible
+
 
 def role_required(allowed_roles):
     def decorator(f):

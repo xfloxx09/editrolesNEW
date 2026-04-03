@@ -7,7 +7,14 @@ from flask_login import current_user
 from sqlalchemy import false, or_
 from app import db
 from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
-from app.utils import ARCHIV_TEAM_NAME, ROLE_TEAMLEITER, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
+from app.utils import (
+    ARCHIV_TEAM_NAME,
+    ROLE_TEAMLEITER,
+    ROLE_ADMIN,
+    ROLE_BETRIEBSLEITER,
+    ROLE_ABTEILUNGSLEITER,
+    users_for_assignment_coach_dropdown,
+)
 
 
 class LoginForm(FlaskForm):
@@ -300,26 +307,12 @@ class AssignedCoachingForm(FlaskForm):
     desired_performance_note = IntegerField('Gewünschte Performance Note (0-10)', validators=[Optional(), NumberRange(min=0, max=10)], default=None)
     submit = SubmitField('Coaching zuweisen')
 
-    def __init__(self, allowed_project_ids=None, *args, **kwargs):
+    def __init__(self, allowed_project_ids=None, team_member_id=None, *args, **kwargs):
         super(AssignedCoachingForm, self).__init__(*args, **kwargs)
         if allowed_project_ids:
-            coach_roles = ['Teamleiter', 'Qualitätsmanager', 'SalesCoach', 'Trainer', 'Betriebsleiter']
-            coaches = User.query.filter(User.role.has(Role.name.in_(coach_roles))).all()
-            filtered_coaches = []
-            for coach in coaches:
-                if coach.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
-                    if coach.role_name == ROLE_ADMIN:
-                        continue
-                    filtered_coaches.append(coach)
-                elif coach.role_name == ROLE_TEAMLEITER:
-                    led_teams = coach.teams_led.all()
-                    if any(team.project_id in allowed_project_ids for team in led_teams):
-                        filtered_coaches.append(coach)
-                else:
-                    if coach.project_id in allowed_project_ids:
-                        filtered_coaches.append(coach)
-            filtered_coaches.sort(key=lambda u: u.username)
-            self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in filtered_coaches]
+            project_id = allowed_project_ids[0]
+            coaches = users_for_assignment_coach_dropdown(project_id, team_member_id)
+            self.coach_id.choices = [(u.id, f"{u.username} ({u.role_name})") for u in coaches]
 
             members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
                 Team.project_id.in_(allowed_project_ids),

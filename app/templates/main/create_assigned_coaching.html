@@ -4,9 +4,26 @@
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script>
 $(document).ready(function() {
-    // When team member changes, load current performance note
+    function reloadAssignmentCoaches(memberId) {
+        $.getJSON("{{ url_for('main.api_assignment_coaches') }}", {
+            team_member_id: memberId || ''
+        }).done(function(rows) {
+            var $c = $('#coach_id');
+            var prev = $c.val();
+            $c.empty();
+            rows.forEach(function(r) {
+                $c.append($('<option/>', { value: r.id, text: r.label }));
+            });
+            if (prev && $c.find('option[value="' + prev + '"]').length) {
+                $c.val(prev);
+            }
+        });
+    }
+
+    // When team member changes: coach list + current performance note
     $('#team_member_id').change(function() {
         var memberId = $(this).val();
+        reloadAssignmentCoaches(memberId);
         if (memberId) {
             $.getJSON("{{ url_for('main.get_member_current_score') }}", { member_id: memberId })
                 .done(function(data) {
@@ -44,7 +61,7 @@ $(document).ready(function() {
 
                     <div class="form-group">
                         {{ form.coach_id.label(class="form-control-label") }}
-                        {{ form.coach_id(class="form-control custom-select " + ("is-invalid" if form.coach_id.errors else "")) }}
+                        {{ form.coach_id(class="form-control custom-select " + ("is-invalid" if form.coach_id.errors else ""), id="coach_id") }}
                         {% if form.coach_id.errors %}
                             <div class="invalid-feedback">{% for error in form.coach_id.errors %}{{ error }}{% endfor %}</div>
                         {% endif %}
