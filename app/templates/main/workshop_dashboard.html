@@ -89,7 +89,7 @@
                         <td>{{ workshop.workshop_date|athens_time('%d.%m.%y %H:%M') }}</td>
                         <td>{{ workshop.title }}</td>
                         <td>{{ workshop.coach.username if workshop.coach else 'N/A' }}</td>
-                        <td>{{ workshop.participants.count() }}</td>
+                        <td>{{ workshop.participants|length }}</td>
                         <td>{{ workshop.overall_rating }}/10</td>
                         <td>{{ workshop.time_spent }}</td>
                         <td>
@@ -107,7 +107,7 @@
                                         <li>
                                             {{ participant.name }}:
                                             {% set rating = db.session.query(workshop_participants.c.individual_rating).filter_by(workshop_id=workshop.id, team_member_id=participant.id).scalar() %}
-                                            <strong>{{ rating }}/10</strong>
+                                            <strong>{% if rating is not none %}{{ rating }}/10{% else %}—{% endif %}</strong>
                                         </li>
                                     {% endfor %}
                                 </ul>

@@ -77,7 +77,7 @@
                         <td>{{ workshop.coach.username if workshop.coach else 'N/A' }}</td>
                         <td>
                             <button class="btn btn-sm btn-info" type="button" data-toggle="collapse" data-target="#participants{{ workshop.id }}" aria-expanded="false">
-                                {{ workshop.participants.count() }} Teilnehmer
+                                {{ workshop.participants|length }} Teilnehmer
                             </button>
                         </td>
                         <td>{{ workshop.overall_rating }}/10</td>
@@ -96,7 +96,7 @@
                                         <li>
                                             {{ participant.name }}: 
                                             {% set rating = db.session.query(workshop_participants.c.individual_rating).filter_by(workshop_id=workshop.id, team_member_id=participant.id).scalar() %}
-                                            <strong>{{ rating }}/10</strong>
+                                            <strong>{% if rating is not none %}{{ rating }}/10{% else %}—{% endif %}</strong>
                                         </li>
                                     {% endfor %}
                                 </ul>

@@ -1389,7 +1389,9 @@ def workshop_dashboard():
                            current_search=search_arg,
                            current_period_filter=period_arg,
                            month_options=month_options,
-                           config=current_app.config)
+                           config=current_app.config,
+                           db=db,
+                           workshop_participants=workshop_participants)
 
 
 # --- Team View (team leaders + members with view_own_team; PL/QM via view_pl_qm_dashboard) ---
