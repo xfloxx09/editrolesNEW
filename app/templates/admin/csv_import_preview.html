@@ -196,7 +196,7 @@
 {% block scripts %}
 <script>
 (function () {
-    // Muss nach jQuery + bootstrap.js laufen (siehe base.html — {% block scripts %} liegt unten).
+    // Läuft nach jQuery/Bootstrap (Scripts-Block am Ende von base.html).
     function openCsvPreviewModal() {
         var $m = window.jQuery && window.jQuery('#csvChangesModal');
         if ($m && $m.length && typeof $m.modal === 'function') {
