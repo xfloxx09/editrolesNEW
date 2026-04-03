@@ -131,7 +131,8 @@ class TeamMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True)
+    # Mehrere Zeilen pro User möglich (Permission multiple_teams); „Mein Team“ leitet sich daraus ab
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     pylon = db.Column(db.String(50))
     plt_id = db.Column(db.String(50))
     ma_kennung = db.Column(db.String(50))

@@ -27,7 +27,7 @@
         </div>
         <div class="form-group" id="team_leader_teams">
             {{ form.team_ids.label }} {{ form.team_ids(class="form-control") }}
-            <small class="form-text text-muted">Nur für Rollen mit der Berechtigung "assign_teams".</small>
+            <small class="form-text text-muted">Nur bei Berechtigung „assign_teams“ (welche Teams der Benutzer als Teamleiter führt; getrennt von Mitgliedschaft).</small>
         </div>
         <div class="form-group" id="abteilungsleiter_projects">
             {{ form.project_ids.label }} {{ form.project_ids(class="form-control") }}
@@ -53,8 +53,13 @@
         <div class="form-group">
             {{ form.dag_id.label }} {{ form.dag_id(class="form-control") }}
         </div>
-        <div class="form-group">
+        <div class="form-group" id="member_team_single">
             {{ form.team_id_for_member.label }} {{ form.team_id_for_member(class="form-control") }}
+            <small class="form-text text-muted">Eine Mitgliedschaft (Standard).</small>
+        </div>
+        <div class="form-group" id="member_team_multi" style="display:none;">
+            {{ form.team_ids_for_member.label }} {{ form.team_ids_for_member(class="form-control", size="6") }}
+            <small class="form-text text-muted">Nur wenn die Rolle die Berechtigung „Mehrere Teams“ (<code>multiple_teams</code>) hat.</small>
         </div>
         <div class="form-check">
             {{ form.active(class="form-check-input") }}
@@ -72,6 +77,16 @@
     const projectField = document.getElementById('project_id').parentElement;
     const teamLeaderField = document.getElementById('team_leader_teams');
     const abteilungsleiterField = document.getElementById('abteilungsleiter_projects');
+    const memberTeamSingle = document.getElementById('member_team_single');
+    const memberTeamMulti = document.getElementById('member_team_multi');
+    const roleIdsMultipleTeams = new Set({{ role_ids_multiple_teams|default([])|tojson }});
+
+    function toggleMemberTeamMode() {
+        const rid = parseInt(roleSelect.value, 10);
+        const multi = roleIdsMultipleTeams.has(rid);
+        memberTeamSingle.style.display = multi ? 'none' : 'block';
+        memberTeamMulti.style.display = multi ? 'block' : 'none';
+    }
 
     function toggleRoleFields() {
         const role = roleSelect.options[roleSelect.selectedIndex]?.text;
@@ -84,10 +99,11 @@
             abteilungsleiterField.style.display = 'block';
             projectField.style.display = 'none';
         } else {
-            teamLeaderField.style.display = 'block';  // always show, server will validate
+            teamLeaderField.style.display = 'block';
             abteilungsleiterField.style.display = 'none';
             projectField.style.display = 'block';
         }
+        toggleMemberTeamMode();
     }
     roleSelect.addEventListener('change', toggleRoleFields);
     toggleRoleFields();

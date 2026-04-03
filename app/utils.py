@@ -80,6 +80,20 @@ def has_permission(user, permission_name):
         return False
     return user.role.has_permission(permission_name)
 
+
+def user_has_mein_team_nav(user):
+    """Show 'Mein Team' if view_own_team and user is member of at least one non-ARCHIV team."""
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+    if not user.has_permission('view_own_team'):
+        return False
+    archiv = get_or_create_archiv_team()
+    aid = archiv.id
+    for tm in user.team_members:
+        if tm.team_id and tm.team_id != aid:
+            return True
+    return False
+
 def get_or_create_role(role_name):
     role = Role.query.filter_by(name=role_name).first()
     if not role:

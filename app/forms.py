@@ -26,7 +26,7 @@ class RegistrationForm(FlaskForm):
         validators=[DataRequired("Passwortwiederholung ist erforderlich."), EqualTo('password', message='Passwörter müssen übereinstimmen.')]
     )
     role_id = SelectField('Rolle', coerce=int, validators=[DataRequired("Rolle ist erforderlich.")], choices=[])
-    team_ids = SelectMultipleField('Zugeordnete Teams (nur für Rollen mit "assign_teams"-Berechtigung)', coerce=int, choices=[])
+    team_ids = SelectMultipleField('Geführte Teams (nur Rollen mit „assign_teams“ / team_leaders)', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
 
@@ -37,7 +37,10 @@ class RegistrationForm(FlaskForm):
     plt_id = StringField('PLT-ID', validators=[Length(max=50)])
     ma_kennung = StringField('MA-Kennung', validators=[Length(max=50)])
     dag_id = StringField('DAG-ID', validators=[Length(max=50)])
-    team_id_for_member = SelectField('Team des Mitglieds', coerce=int, validators=[DataRequired("Team ist erforderlich.")], choices=[])
+    team_id_for_member = SelectField('Team des Mitglieds (eine Zuordnung)', coerce=int, validators=[Optional()], choices=[])
+    team_ids_for_member = SelectMultipleField(
+        'Teams des Mitglieds (mehrere nur mit Berechtigung „Mehrere Teams“)', coerce=int, validators=[Optional()], choices=[]
+    )
     active = BooleanField('Aktiv (nicht im Archiv)', default=True)
 
     submit = SubmitField('Benutzer registrieren/aktualisieren')
@@ -48,6 +51,7 @@ class RegistrationForm(FlaskForm):
         active_teams = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
         self.team_ids.choices = [(t.id, t.name) for t in active_teams]
         self.team_id_for_member.choices = [(t.id, t.name) for t in active_teams]
+        self.team_ids_for_member.choices = [(t.id, t.name) for t in active_teams]
         all_projects = Project.query.order_by(Project.name).all()
         self.project_id.choices = [(p.id, p.name) for p in all_projects]
         self.project_ids.choices = [(p.id, p.name) for p in all_projects]
@@ -73,6 +77,22 @@ class RegistrationForm(FlaskForm):
         role = Role.query.get(self.role_id.data)
         if role and role.name == ROLE_ABTEILUNGSLEITER and not field.data:
             raise ValidationError('Mindestens ein Projekt muss ausgewählt werden.')
+
+    def validate(self, extra_validators=None):
+        if not super(RegistrationForm, self).validate(extra_validators):
+            return False
+        role = Role.query.get(self.role_id.data)
+        if not role:
+            return True
+        if role.has_permission('multiple_teams'):
+            if not self.team_ids_for_member.data:
+                self.team_ids_for_member.errors.append('Mindestens ein Team ist erforderlich.')
+                return False
+        else:
+            if not self.team_id_for_member.data:
+                self.team_id_for_member.errors.append('Team ist erforderlich.')
+                return False
+        return True
 
 
 class TeamForm(FlaskForm):

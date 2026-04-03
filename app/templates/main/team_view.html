@@ -156,7 +156,7 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
         <h2 class="mb-2 mb-md-0">{{ title }}</h2>
-        {% if all_teams_list and all_teams_list|length > 1 and current_user.role in [config.ROLE_ADMIN, config.ROLE_PROJEKTLEITER, config.ROLE_ABTEILUNGSLEITER, config.ROLE_QM, config.ROLE_SALESCOACH, config.ROLE_TRAINER] %}
+        {% if all_teams_list and all_teams_list|length > 1 and (has_perm('view_pl_qm_dashboard') or has_perm('view_own_team')) %}
         <div class="form-group mb-0">
             <form method="GET" action="{{ url_for('main.team_view') }}" id="selectTeamForm" class="form-inline">
                 <label for="team_id_select" class="mr-2 sr-only">Team wechseln:</label>
@@ -331,7 +331,7 @@
 
     {% if not team and all_teams_list %}
         <h3 class="mt-5 text-center text-muted">Bitte wählen Sie oben ein Team aus der Liste aus.</h3>
-    {% elif not team and not all_teams_list and current_user.role not in [config.ROLE_TEAMLEITER] %}
+    {% elif not team and not all_teams_list and current_user.role_name != 'Teamleiter' %}
         <p class="mt-5 text-center text-muted">Es sind keine Teams im System vorhanden, die angezeigt werden könnten.</p>
     {% endif %}
 

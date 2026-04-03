@@ -17,6 +17,99 @@ bp = Blueprint('admin', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
 
 
+def _role_ids_with_multiple_teams():
+    return [r.id for r in Role.query.order_by(Role.name).all() if r.has_permission('multiple_teams')]
+
+
+def _sync_user_team_members_from_form(user, role, form):
+    """TeamMember-Zeilen aus Benutzerformular; „Mein Team“ basiert nur darauf (nicht teams_led)."""
+    archiv = get_or_create_archiv_team()
+    full_name = f"{form.first_name.data} {form.last_name.data}".strip()
+    if role.has_permission('multiple_teams'):
+        want = list(dict.fromkeys(int(x) for x in (form.team_ids_for_member.data or []) if x))
+    else:
+        want = [int(form.team_id_for_member.data)] if form.team_id_for_member.data else []
+    members = TeamMember.query.filter_by(user_id=user.id).all()
+    for m in members:
+        m.name = full_name
+        m.pylon = form.pylon.data
+        m.plt_id = form.plt_id.data
+        m.ma_kennung = form.ma_kennung.data
+        m.dag_id = form.dag_id.data
+    if not form.active.data:
+        for m in members:
+            if m.team_id != archiv.id:
+                m.original_team_id = m.team_id
+                m.original_project_id = m.team.project_id if m.team else None
+                m.team_id = archiv.id
+        if not members and want:
+            for tid in want:
+                tm_team = Team.query.get(tid)
+                if not tm_team:
+                    continue
+                nm = TeamMember(
+                    user_id=user.id,
+                    team_id=archiv.id,
+                    name=full_name,
+                    pylon=form.pylon.data,
+                    plt_id=form.plt_id.data,
+                    ma_kennung=form.ma_kennung.data,
+                    dag_id=form.dag_id.data,
+                    original_team_id=tid,
+                    original_project_id=tm_team.project_id,
+                )
+                db.session.add(nm)
+        return True
+    if not want:
+        return False
+    want_set = set(want)
+    all_rows = lambda: TeamMember.query.filter_by(user_id=user.id).all()
+    for tid in want:
+        found = False
+        for m in all_rows():
+            if m.team_id == tid:
+                found = True
+                break
+            if m.team_id == archiv.id and m.original_team_id == tid:
+                m.team_id = tid
+                m.original_team_id = None
+                m.original_project_id = None
+                found = True
+                break
+        if not found:
+            db.session.add(TeamMember(
+                user_id=user.id,
+                team_id=tid,
+                name=full_name,
+                pylon=form.pylon.data,
+                plt_id=form.plt_id.data,
+                ma_kennung=form.ma_kennung.data,
+                dag_id=form.dag_id.data,
+            ))
+    db.session.flush()
+    for m in list(all_rows()):
+        if m.team_id == archiv.id:
+            continue
+        if m.team_id not in want_set:
+            n = Coaching.query.filter_by(team_member_id=m.id).count()
+            if n == 0:
+                db.session.delete(m)
+            else:
+                flash(
+                    f'Team „{m.team.name if m.team else "?"}“: Mitglied bleibt (Coachings vorhanden).',
+                    'warning',
+                )
+    if not role.has_permission('multiple_teams'):
+        keep = want[0] if want else None
+        if keep:
+            for m in list(all_rows()):
+                if m.team_id == archiv.id:
+                    continue
+                if m.team_id != keep and Coaching.query.filter_by(team_member_id=m.id).count() == 0:
+                    db.session.delete(m)
+    return True
+
+
 def get_active_leitfaden_items_safe():
     try:
         return LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
@@ -206,13 +299,25 @@ def create_user():
             role = Role.query.get(form.role_id.data)
             if not role:
                 flash('Ungültige Rolle.', 'danger')
-                return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
+                return render_template(
+                    'admin/create_user.html',
+                    title='Benutzer erstellen',
+                    form=form,
+                    role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                    config=current_app.config,
+                )
 
             if role.name == ROLE_ABTEILUNGSLEITER:
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
                     flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
-                    return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
+                    return render_template(
+                        'admin/create_user.html',
+                        title='Benutzer erstellen',
+                        form=form,
+                        role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                        config=current_app.config,
+                    )
                 user = User(
                     username=form.username.data,
                     email=form.email.data if form.email.data else None,
@@ -230,10 +335,8 @@ def create_user():
             db.session.add(user)
             db.session.flush()
 
-            # Assign teams_led only if the role has the 'assign_teams' permission
             if role.has_permission('assign_teams') and form.team_ids.data:
-                selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
-                user.teams_led = selected_teams
+                user.teams_led = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
             else:
                 user.teams_led = []
 
@@ -243,31 +346,32 @@ def create_user():
             else:
                 user.projects = []
 
-            # Create linked team member
-            team = Team.query.get(form.team_id_for_member.data)
-            if not team:
-                flash('Team für das Mitglied nicht gefunden.', 'danger')
-                db.session.rollback()
-                return redirect(url_for('admin.create_user'))
-
+            archiv_team = get_or_create_archiv_team()
             full_name = f"{form.first_name.data} {form.last_name.data}".strip()
-            member = TeamMember(
-                name=full_name,
-                team_id=team.id,
-                pylon=form.pylon.data,
-                plt_id=form.plt_id.data,
-                ma_kennung=form.ma_kennung.data,
-                dag_id=form.dag_id.data,
-                user_id=user.id
-            )
-            db.session.add(member)
-            db.session.flush()
-
-            if not form.active.data:
-                archiv_team = get_or_create_archiv_team()
-                member.original_team_id = member.team_id
-                member.original_project_id = member.team.project_id
-                member.team_id = archiv_team.id
+            if role.has_permission('multiple_teams'):
+                team_id_list = form.team_ids_for_member.data or []
+            else:
+                team_id_list = [form.team_id_for_member.data]
+            for tid in team_id_list:
+                tm_team = Team.query.get(tid)
+                if not tm_team:
+                    db.session.rollback()
+                    flash('Team für das Mitglied nicht gefunden.', 'danger')
+                    return redirect(url_for('admin.create_user'))
+                member = TeamMember(
+                    name=full_name,
+                    team_id=tm_team.id,
+                    pylon=form.pylon.data,
+                    plt_id=form.plt_id.data,
+                    ma_kennung=form.ma_kennung.data,
+                    dag_id=form.dag_id.data,
+                    user_id=user.id,
+                )
+                if not form.active.data:
+                    member.original_team_id = tm_team.id
+                    member.original_project_id = tm_team.project_id
+                    member.team_id = archiv_team.id
+                db.session.add(member)
 
             db.session.commit()
             flash('Benutzer und Teammitglied erfolgreich erstellt!', 'success')
@@ -280,7 +384,13 @@ def create_user():
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f"Fehler im Feld '{form[field].label.text if hasattr(form[field], 'label') else field}': {error}", 'danger')
-    return render_template('admin/create_user.html', title='Benutzer erstellen', form=form, config=current_app.config)
+    return render_template(
+        'admin/create_user.html',
+        title='Benutzer erstellen',
+        form=form,
+        role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+        config=current_app.config,
+    )
 
 
 @bp.route('/users/edit/<int:user_id>', methods=['GET', 'POST'])
@@ -288,38 +398,68 @@ def create_user():
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def edit_user(user_id):
     user_to_edit = User.query.get_or_404(user_id)
-    team_member = TeamMember.query.filter_by(user_id=user_to_edit.id).first()
-
+    archiv_team = get_or_create_archiv_team()
     form = RegistrationForm(obj=user_to_edit, original_username=user_to_edit.username)
 
     if not form.password.data:
         form.password.validators = []
         form.password2.validators = []
 
-    if request.method == 'GET' and team_member:
-        parts = team_member.name.split(' ', 1)
-        form.first_name.data = parts[0] if parts else ''
-        form.last_name.data = parts[1] if len(parts) > 1 else ''
-        form.pylon.data = team_member.pylon
-        form.plt_id.data = team_member.plt_id
-        form.ma_kennung.data = team_member.ma_kennung
-        form.dag_id.data = team_member.dag_id
-        form.team_id_for_member.data = team_member.team_id
-        archiv_team = get_or_create_archiv_team()
-        form.active.data = team_member.team_id != archiv_team.id
-    elif request.method == 'GET':
-        form.first_name.data = ''
-        form.last_name.data = ''
-        form.active.data = True
-        if form.team_id_for_member.choices:
-            form.team_id_for_member.data = form.team_id_for_member.choices[0][0]
+    if request.method == 'GET':
+        form.username.data = user_to_edit.username
+        form.email.data = user_to_edit.email
+        form.role_id.data = user_to_edit.role_id
+        form.team_ids.data = [team.id for team in user_to_edit.teams_led]
+        role_g = user_to_edit.role
+        if not role_g or role_g.name != ROLE_ABTEILUNGSLEITER:
+            form.project_id.data = user_to_edit.project_id
+        else:
+            form.project_ids.data = [p.id for p in user_to_edit.projects]
+        members = TeamMember.query.filter_by(user_id=user_to_edit.id).order_by(TeamMember.id).all()
+        if members:
+            m0 = members[0]
+            parts = m0.name.split(' ', 1)
+            form.first_name.data = parts[0] if parts else ''
+            form.last_name.data = parts[1] if len(parts) > 1 else ''
+            form.pylon.data = m0.pylon
+            form.plt_id.data = m0.plt_id
+            form.ma_kennung.data = m0.ma_kennung
+            form.dag_id.data = m0.dag_id
+            if role_g and role_g.has_permission('multiple_teams'):
+                tids = []
+                for m in members:
+                    if m.team_id == archiv_team.id and m.original_team_id:
+                        tids.append(m.original_team_id)
+                    elif m.team_id != archiv_team.id:
+                        tids.append(m.team_id)
+                form.team_ids_for_member.data = list(dict.fromkeys(tids))
+            else:
+                m_use = next((m for m in members if m.team_id != archiv_team.id), m0)
+                if m_use.team_id == archiv_team.id and m_use.original_team_id:
+                    form.team_id_for_member.data = m_use.original_team_id
+                else:
+                    form.team_id_for_member.data = m_use.team_id
+            form.active.data = any(m.team_id != archiv_team.id for m in members)
+        else:
+            form.first_name.data = ''
+            form.last_name.data = ''
+            form.active.data = True
+            if form.team_id_for_member.choices:
+                form.team_id_for_member.data = form.team_id_for_member.choices[0][0]
 
     if form.validate_on_submit():
         try:
             role = Role.query.get(form.role_id.data)
             if not role:
                 flash('Ungültige Rolle.', 'danger')
-                return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
+                return render_template(
+                    'admin/edit_user.html',
+                    title='Benutzer bearbeiten',
+                    form=form,
+                    user=user_to_edit,
+                    role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                    config=current_app.config,
+                )
 
             user_to_edit.username = form.username.data
             user_to_edit.email = form.email.data if form.email.data else None
@@ -329,10 +469,16 @@ def edit_user(user_id):
                 primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
                 if primary_project_id is None:
                     flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
-                    return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
+                    return render_template(
+                        'admin/edit_user.html',
+                        title='Benutzer bearbeiten',
+                        form=form,
+                        user=user_to_edit,
+                        role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                        config=current_app.config,
+                    )
                 user_to_edit.project_id = primary_project_id
-                selected_projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
-                user_to_edit.projects = selected_projects
+                user_to_edit.projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
             else:
                 user_to_edit.project_id = form.project_id.data
                 user_to_edit.projects = []
@@ -340,66 +486,38 @@ def edit_user(user_id):
             if form.password.data:
                 user_to_edit.set_password(form.password.data)
 
-            # Assign teams_led only if the role has the 'assign_teams' permission
             if role.has_permission('assign_teams') and form.team_ids.data:
-                selected_teams = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
-                user_to_edit.teams_led = selected_teams
+                user_to_edit.teams_led = Team.query.filter(Team.id.in_(form.team_ids.data)).all()
             else:
                 user_to_edit.teams_led = []
 
-            if team_member is None:
-                team_member = TeamMember(user_id=user_to_edit.id)
+            if not _sync_user_team_members_from_form(user_to_edit, role, form):
+                flash('Teamzuordnung prüfen (mindestens ein Team, wenn aktiv).', 'danger')
+                return render_template(
+                    'admin/edit_user.html',
+                    title='Benutzer bearbeiten',
+                    form=form,
+                    user=user_to_edit,
+                    role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                    config=current_app.config,
+                )
 
-            full_name = f"{form.first_name.data} {form.last_name.data}".strip()
-            team_member.name = full_name
-            team_member.pylon = form.pylon.data
-            team_member.plt_id = form.plt_id.data
-            team_member.ma_kennung = form.ma_kennung.data
-            team_member.dag_id = form.dag_id.data
-
-            new_team = Team.query.get(form.team_id_for_member.data)
-            if not new_team:
-                flash('Team nicht gefunden.', 'danger')
-                return redirect(url_for('admin.edit_user', user_id=user_id))
-
-            archiv_team = get_or_create_archiv_team()
-            is_active = form.active.data
-
-            if is_active:
-                if team_member.team_id == archiv_team.id and team_member.original_team_id:
-                    team_member.team_id = team_member.original_team_id
-                    team_member.original_team_id = None
-                    team_member.original_project_id = None
-                else:
-                    team_member.team_id = new_team.id
-            else:
-                if team_member.team_id != archiv_team.id:
-                    team_member.original_team_id = team_member.team_id
-                    team_member.original_project_id = team_member.team.project_id
-                    team_member.team_id = archiv_team.id
-
-            if team_member.id is None:
-                db.session.add(team_member)
             db.session.commit()
-
             flash('Benutzer und Teammitglied erfolgreich aktualisiert!', 'success')
             return redirect(url_for('admin.panel'))
         except Exception as e:
             db.session.rollback()
             current_app.logger.error(f"FEHLER beim Aktualisieren des Benutzers: {str(e)}")
             flash(f'Fehler beim Aktualisieren: {str(e)}', 'danger')
-    elif request.method == 'GET':
-        form.username.data = user_to_edit.username
-        form.email.data = user_to_edit.email
-        form.role_id.data = user_to_edit.role_id
-        form.team_ids.data = [team.id for team in user_to_edit.teams_led]
-        role = user_to_edit.role
-        if role.name != ROLE_ABTEILUNGSLEITER:
-            form.project_id.data = user_to_edit.project_id
-        else:
-            form.project_ids.data = [p.id for p in user_to_edit.projects]
 
-    return render_template('admin/edit_user.html', title='Benutzer bearbeiten', form=form, user=user_to_edit, config=current_app.config)
+    return render_template(
+        'admin/edit_user.html',
+        title='Benutzer bearbeiten',
+        form=form,
+        user=user_to_edit,
+        role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+        config=current_app.config,
+    )
 
 
 @bp.route('/users/delete/<int:user_id>', methods=['POST'])

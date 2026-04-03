@@ -28,10 +28,12 @@ def create_app(config_class=Config):
     # Flask-Login user loader (eager role + permissions so checks match DB after role edits)
     @login_manager.user_loader
     def load_user(user_id):
-        from sqlalchemy.orm import joinedload
+        from sqlalchemy.orm import joinedload, selectinload
         from app.models import User, Role
         return User.query.options(
-            joinedload(User.role).joinedload(Role.permissions)
+            joinedload(User.role).joinedload(Role.permissions),
+            selectinload(User.teams_led),
+            selectinload(User.team_members),
         ).get(int(user_id))
 
     # --- Migration: ensure necessary columns and tables exist ---
@@ -116,6 +118,8 @@ def create_app(config_class=Config):
             ('leave_coaching_review', 'Leave a review for the coach after being coached'),
             ('view_review', 'View reviews received as a coach'),
             ('view_all_reviews', 'View all coaching reviews in allowed projects'),
+            ('view_own_team', 'View own team dashboard (teams where user is a member)'),
+            ('multiple_teams', 'User may belong to multiple teams (TeamMember rows)'),
             ('coach', 'Can perform coaching'),
             ('assign_teams', 'Can be assigned as team leader (has teams_led)'),
             ('coach_own_team_only', 'Coach can only coach members of their own team'),
@@ -175,16 +179,16 @@ def create_app(config_class=Config):
                 )
             print("✅ Betriebsleiter hat alle Berechtigungen.")
 
-        # Teamleiter gets assign_teams, coach, and coach_own_team_only
+        # Teamleiter: u. a. view_own_team, multiple_teams (mehrere TeamMember-Zeilen)
         teamleiter_role = conn.execute(text("SELECT id FROM roles WHERE name = 'Teamleiter'")).fetchone()
         if teamleiter_role:
-            for perm_name in ['assign_teams', 'coach', 'coach_own_team_only']:
+            for perm_name in ['assign_teams', 'coach', 'coach_own_team_only', 'view_own_team', 'multiple_teams']:
                 if perm_name in perm_map:
                     conn.execute(
                         text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
                         {"role_id": teamleiter_role[0], "perm_id": perm_map[perm_name]}
                     )
-            print("✅ Teamleiter hat 'assign_teams', 'coach', 'coach_own_team_only' Berechtigungen.")
+            print("✅ Teamleiter hat u. a. 'assign_teams', 'coach', 'coach_own_team_only', 'view_own_team'.")
 
         # Agent / Mitarbeiter: eigene Coachings + Coach bewerten (rein über Berechtigungen; Rollenname ist egal)
         for employee_role_name in ('Mitarbeiter', 'Agent'):
@@ -202,9 +206,16 @@ def create_app(config_class=Config):
         if 'team_members' in inspector.get_table_names():
             columns_team_members = [col['name'] for col in inspector.get_columns('team_members')]
             if 'user_id' not in columns_team_members:
-                conn.execute(text('ALTER TABLE team_members ADD COLUMN user_id INTEGER UNIQUE REFERENCES users(id)'))
+                conn.execute(text('ALTER TABLE team_members ADD COLUMN user_id INTEGER REFERENCES users(id)'))
                 conn.commit()
                 print("✅ Spalte 'user_id' in team_members hinzugefügt.")
+            try:
+                conn.execute(text('ALTER TABLE team_members DROP CONSTRAINT IF EXISTS team_members_user_id_key'))
+                conn.commit()
+                print("✅ team_members: UNIQUE auf user_id entfernt (Postgres, falls vorhanden).")
+            except Exception as e:
+                conn.rollback()
+                print(f"ℹ️ team_members user_id UNIQUE drop: {e}")
             for field in ['pylon', 'plt_id', 'ma_kennung', 'dag_id']:
                 if field not in columns_team_members:
                     conn.execute(text(f'ALTER TABLE team_members ADD COLUMN {field} VARCHAR(50)'))
@@ -269,6 +280,13 @@ def create_app(config_class=Config):
                 return current_user.has_permission(permission_name)
             return False
         return {'has_perm': has_perm}
+
+    @app.context_processor
+    def inject_mein_team_nav():
+        from app.utils import user_has_mein_team_nav
+        if current_user.is_authenticated:
+            return {'show_mein_team_nav': user_has_mein_team_nav(current_user)}
+        return {'show_mein_team_nav': False}
 
     @app.template_filter('athens_time')
     def format_athens_time(utc_dt, fmt='%d.%m.%Y %H:%M'):
