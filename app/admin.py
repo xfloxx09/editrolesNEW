@@ -900,7 +900,6 @@ def manage_coachings():
                 Coaching.coaching_style.ilike(search_pattern),
                 Coaching.tcap_id.ilike(search_pattern),
                 Coaching.coach_notes.ilike(search_pattern),
-                Coaching.project_leader_notes.ilike(search_pattern)
             )
         )
 

@@ -276,7 +276,6 @@
                 <th>Note</th>
                 <th>Min.</th>
                 <th>Score (%)</th>
-                <th>Notiz</th>
                 {% if can_leave_review %}<th>Ihre Bewertung</th><th>Coach</th>{% endif %}
                 <th>Details</th>
                 <th>Bearbeiten</th>
@@ -300,13 +299,6 @@
                             {{ coaching.overall_score }}%
                         </div>
                     </div>
-                </td>
-                <td>
-                    {% if coaching.project_leader_notes %}
-                        {{ coaching.project_leader_notes[:30] }}{% if coaching.project_leader_notes|length > 30 %}...{% endif %}
-                    {% else %}
-                        -
-                    {% endif %}
                 </td>
                 {% if can_leave_review %}
                 <td>
@@ -351,7 +343,7 @@
             </tr>
             {% if coached_self and coaching.employee_review and coaching.employee_review.comment %}
             <tr>
-                <td colspan="{{ 14 if can_leave_review else 12 }}" class="p-0 border-0">
+                <td colspan="{{ 13 if can_leave_review else 11 }}" class="p-0 border-0">
                     <div class="collapse" id="dashCoachingNote{{ coaching.id }}">
                         <div class="review-comment-panel small text-muted m-2">{{ coaching.employee_review.comment }}</div>
                     </div>
@@ -359,7 +351,7 @@
             </tr>
             {% endif %}
             <tr class="collapse" id="coachingDetails{{ coaching.id }}">
-                <td colspan="{{ 14 if can_leave_review else 12 }}">
+                <td colspan="{{ 13 if can_leave_review else 11 }}">
                     <div class="detail-card">
                         <div class="detail-section">
                             <div class="detail-section-title">Basis-Informationen</div>
@@ -392,12 +384,6 @@
                         <div class="detail-section">
                             <div class="detail-section-title">Notizen des Coaches</div>
                             <div class="notes-box">{{ coaching.coach_notes }}</div>
-                        </div>
-                        {% endif %}
-                        {% if coaching.project_leader_notes %}
-                        <div class="detail-section">
-                            <div class="detail-section-title">PL/QM Notiz</div>
-                            <div class="notes-box">{{ coaching.project_leader_notes }}</div>
                         </div>
                         {% endif %}
                     </div>

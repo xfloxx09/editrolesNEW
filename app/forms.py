@@ -282,12 +282,6 @@ class WorkshopForm(FlaskForm):
             raise ValidationError('Es müssen mindestens zwei Teilnehmer ausgewählt werden.')
 
 
-class ProjectLeaderNoteForm(FlaskForm):
-    notes = TextAreaField('PL/QM Notiz',
-                          validators=[DataRequired("Die Notiz darf nicht leer sein."),
-                                      Length(max=2000)])
-
-
 class TeamsCoachingBulkForm(FlaskForm):
     """CSRF + submit for bulk toggle of team active_for_coaching."""
     submit = SubmitField('Änderungen speichern')

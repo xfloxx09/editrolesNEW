@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
-from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
+from app.forms import CoachingForm, WorkshopForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
 from app.utils import (
     role_required,
     permission_required,
@@ -517,7 +517,6 @@ def coaching_dashboard():
                 User.username.ilike(pattern),
                 Coaching.coaching_subject.ilike(pattern),
                 Coaching.coach_notes.ilike(pattern),
-                Coaching.project_leader_notes.ilike(pattern),
             )
         )
 
@@ -1244,7 +1243,7 @@ def team_view():
 
 
 # --- PL/QM Dashboard ---
-@bp.route('/pl-qm-dashboard', methods=['GET', 'POST'])
+@bp.route('/pl-qm-dashboard')
 @login_required
 @permission_required('view_pl_qm_dashboard')
 def pl_qm_dashboard():
@@ -1252,20 +1251,6 @@ def pl_qm_dashboard():
     if not project_id:
         flash('Kein Projekt ausgewählt.', 'danger')
         return redirect(url_for('main.index'))
-
-    # Handle POST for saving project leader notes
-    note_form = ProjectLeaderNoteForm()
-    if request.method == 'POST' and note_form.validate_on_submit():
-        coaching_id = request.form.get('coaching_id', type=int)
-        if coaching_id:
-            coaching = Coaching.query.get(coaching_id)
-            if coaching and coaching.project_id == project_id:
-                coaching.project_leader_notes = note_form.notes.data
-                db.session.commit()
-                flash('Notiz gespeichert.', 'success')
-            else:
-                flash('Coaching nicht gefunden.', 'danger')
-        return redirect(request.url)
 
     page = request.args.get('page', 1, type=int)
     selected_team_id_filter = request.args.get('team_id_filter', default='', type=str)
@@ -1377,7 +1362,6 @@ def pl_qm_dashboard():
                     'avg_leitfaden_adherence': avg_leitfaden
                 })
 
-    # Paginated coachings for notes table
     coachings_paginated = Coaching.query.filter_by(project_id=project_id).order_by(
         desc(Coaching.coaching_date)
     ).paginate(page=page, per_page=15, error_out=False)
@@ -1399,7 +1383,6 @@ def pl_qm_dashboard():
                            selected_team_object_for_cards=selected_team_object_for_cards,
                            members_data_for_cards=members_data_for_cards,
                            coachings_paginated=coachings_paginated,
-                           note_form=note_form,
                            top_3_teams=top_3_teams,
                            flop_3_teams=flop_3_teams,
                            config=current_app.config)

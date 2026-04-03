@@ -354,11 +354,8 @@
         <hr class="my-4" style="border-color: #444;">
     {% endif %}
 
-    <!-- Coaching List with Notes (existing) -->
-    <p class="mt-3">Hier können Sie Notizen zu bestehenden Coachings hinzufügen (unabhängig vom Teamfilter oben).</p>
-
     {% if coachings_paginated and coachings_paginated.items %}
-        <div class="table-responsive">
+        <div class="table-responsive mt-3">
             <table class="table table-striped table-hover table-dark">
                 <thead class="telekom-bg-magenta text-white">
                     <tr>
@@ -368,9 +365,8 @@
                         <th>Coach</th>
                         <th>Betreff</th>
                         <th>Score (%)</th>
-                        <th>PL/QM Notiz</th>
-                        <th>Aktion</th>
-                    </thead>
+                    </tr>
+                </thead>
                 <tbody>
                     {% for coaching in coachings_paginated.items %}
                     <tr>
@@ -380,56 +376,7 @@
                         <td>{{ coaching.coach.username if coaching.coach else 'N/A' }}</td>
                         <td>{{ coaching.coaching_subject if coaching.coaching_subject else '-' }}</td>
                         <td>{{ coaching.overall_score }}%</td>
-                        <td id="notes-display-{{ coaching.id }}">
-                            {{ coaching.project_leader_notes[:50] + '...' if coaching.project_leader_notes and coaching.project_leader_notes|length > 50 else coaching.project_leader_notes if coaching.project_leader_notes else 'Keine Notiz' }}
-                        </td>
-                        <td>
-                            <button class="btn btn-sm telekom-button-outline" type="button" data-toggle="modal" data-target="#noteModal-{{ coaching.id }}">
-                                Notiz {{ 'bearbeiten' if coaching.project_leader_notes else 'hinzufügen' }}
-                            </button>
-                        </td>
                     </tr>
-                    <!-- Modal for Notes (existing) -->
-                    <div class="modal fade" id="noteModal-{{ coaching.id }}" tabindex="-1" role="dialog" aria-labelledby="noteModalLabel-{{ coaching.id }}" aria-hidden="true">
-                        <div class="modal-dialog" role="document">
-                            <div class="modal-content bg-dark text-light">
-                                <form method="POST" action="{{ url_for('main.pl_qm_dashboard', page=(coachings_paginated.page if coachings_paginated and coachings_paginated.page else 1), team_id_filter=selected_team_id_filter) }}">
-                                    {{ note_form.csrf_token }}
-                                    <input type="hidden" name="coaching_id" value="{{ coaching.id }}">
-                                    <div class="modal-header telekom-bg-magenta text-white">
-                                        <h5 class="modal-title" id="noteModalLabel-{{ coaching.id }}">Notiz für Coaching #{{ coaching.id }}</h5>
-                                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                                            <span aria-hidden="true">×</span>
-                                        </button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <p>
-                                            <strong>Teammitglied:</strong> {{ coaching.team_member_coached.name if coaching.team_member_coached else 'N/A' }}<br>
-                                            <strong>Coach:</strong> {{ coaching.coach.username if coaching.coach else 'N/A' }}<br>
-                                            <strong>Datum:</strong> {{ coaching.coaching_date|athens_time }}<br>
-                                            <strong>Betreff:</strong> {{ coaching.coaching_subject if coaching.coaching_subject else '-' }}<br>
-                                            <strong>Stil:</strong> {{ coaching.coaching_style if coaching.coaching_style else '-'}} 
-                                            {% if coaching.coaching_style == 'TCAP' and coaching.tcap_id %}(T-CAP ID: {{ coaching.tcap_id }}){% endif %}
-                                        </p>
-                                        <hr style="border-color: #454d55;">
-                                        <div class="form-group">
-                                            {{ note_form.notes.label(class="form-control-label") }}
-                                            {{ note_form.notes(class="form-control bg-secondary text-light border-secondary" + ( "is-invalid" if note_form.notes.errors else "" ), rows=5, value=(coaching.project_leader_notes if coaching.project_leader_notes else "")) }}
-                                            {% if note_form.notes.errors %} 
-                                                <div class="invalid-feedback d-block">
-                                                    {% for error in note_form.notes.errors %}<span>{{ error }}</span><br>{% endfor %}
-                                                </div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer" style="border-top-color: #454d55;">
-                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
-                                        <input type="submit" name="submit_note" class="btn telekom-button" value="Notiz speichern">
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
                     {% endfor %}
                 </tbody>
             </table>
