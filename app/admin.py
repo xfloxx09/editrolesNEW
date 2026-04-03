@@ -14,6 +14,7 @@ import csv
 import json
 import tempfile
 import os
+import re
 
 bp = Blueprint('admin', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
@@ -1525,13 +1526,44 @@ def _remove_csv_preview_sidecar(temp_path):
             pass
 
 
+def _csv_clean_cell_text(val, collapse_spaces=True):
+    """Excel/Export: NBSP, ZWSP, BOM in Zellen entfernen; Whitespace vereinheitlichen."""
+    if val is None:
+        return ''
+    s = str(val).strip()
+    if not s:
+        return ''
+    s = s.replace('\ufeff', '').replace('\u00a0', ' ').replace('\u202f', ' ')
+    s = re.sub(r'[\u200b-\u200d]', '', s)
+    if collapse_spaces:
+        s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def _csv_normalize_full_name(s):
+    """Vollname für Vergleich CSV vs DB (nur Whitespace/Unicode, keine Groß/Klein-Umsetzung)."""
+    t = _csv_clean_cell_text(s, collapse_spaces=True)
+    return t
+
+
+def _csv_mapped_cell_clean(row, mapping, field_key):
+    col = mapping.get(field_key)
+    if not col:
+        return None
+    t = _csv_clean_cell_text(row.get(col, ''), True)
+    return t or None
+
+
 def _csv_row_pylon_value(row, mapping):
     if not mapping.get('pylon'):
         return None
     raw = row.get(mapping['pylon'], '')
     if raw is None:
         return None
-    s = str(raw).strip()
+    s = _csv_clean_cell_text(raw, collapse_spaces=True)
+    # Excel-Zahl als Pylon: 60860.0
+    if re.fullmatch(r'\d+\.0', s):
+        s = s[:-2]
     return s or None
 
 
@@ -1611,10 +1643,10 @@ def _csv_row_active_flag(row, mapping):
     active_col = mapping.get('active_status')
     if active_col:
         raw_active = row.get(active_col, '')
-        active_str = str(raw_active).strip() if raw_active is not None else ''
+        active_str = _csv_clean_cell_text(raw_active, collapse_spaces=True) if raw_active is not None else ''
     else:
         active_str = ''
-    return active_str == '1' or active_str == '1.0'
+    return active_str in ('1', '1.0', '1,0')
 
 
 def _norm_csv_cmp(val):
@@ -1630,7 +1662,7 @@ def _csv_row_role_name(row, mapping):
     v = row.get(col, '')
     if v is None:
         return 'Mitarbeiter'
-    s = str(v).strip()
+    s = _csv_clean_cell_text(v, collapse_spaces=True)
     return s if s else 'Mitarbeiter'
 
 
@@ -1643,7 +1675,7 @@ def _csv_import_row_strings(row, mapping):
         v = row.get(col, '')
         if v is None:
             return None
-        return str(v).strip()
+        return _csv_clean_cell_text(v, collapse_spaces=True) or None
 
     first_name = pull('first_name') or ''
     last_name = pull('last_name') or ''
@@ -1671,8 +1703,8 @@ def _csv_resolve_row_context(row, mapping, archiv_team, caches=None):
     full_name = fs['full_name'] or pylon
     role_name = fs['role_name']
 
-    project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
-    team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
+    project_name = _csv_mapped_cell_clean(row, mapping, 'project')
+    team_name = _csv_mapped_cell_clean(row, mapping, 'team')
 
     project = None
     will_create_project = False
@@ -1908,7 +1940,7 @@ def _csv_cell_display(row, column_header):
     v = row.get(column_header, '')
     if v is None:
         return ''
-    return str(v).strip()
+    return _csv_clean_cell_text(v, collapse_spaces=True)
 
 
 def _csv_display_cell_csv(s):
@@ -2006,8 +2038,30 @@ def _csv_build_review_comparison(new_row, mapping, team_member, archiv_team, use
                 'old': db_r, 'new': 'Mitarbeiter', 'changed': True,
             })
 
+    _csv_review_drop_name_rows_when_full_name_matches(rows, new_row, mapping, team_member)
     _csv_review_suppress_inactive_archiv_org_fields(rows, new_row, mapping, team_member, archiv_team)
     return rows
+
+
+def _csv_review_drop_name_rows_when_full_name_matches(rows, new_row, mapping, team_member):
+    """
+    DB speichert einen Vollnamen; die Vorschau splittet ihn für „Alt“ nur grob (erstes Wort / Rest).
+    CSV liefert Vorname + Nachname separat — dieselbe Person kann dann künstlich als Änderung erscheinen,
+    obwohl Vorname+Nachname zusammen dem DB-Vollnamen entsprechen.
+    """
+    if not team_member:
+        return
+    fn_col = mapping.get('first_name')
+    ln_col = mapping.get('last_name')
+    if not fn_col and not ln_col:
+        return
+    fs = _csv_import_row_strings(new_row, mapping)
+    csv_full = _csv_normalize_full_name(fs.get('full_name') or '')
+    db_full = _csv_normalize_full_name(team_member.name or '')
+    if not csv_full or csv_full != db_full:
+        return
+    drop = {c for c in (fn_col, ln_col) if c}
+    rows[:] = [r for r in rows if r.get('label') not in drop]
 
 
 def _csv_review_suppress_inactive_archiv_org_fields(rows, new_row, mapping, team_member, archiv_team):
@@ -2144,16 +2198,15 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
                     stats['skipped'] += 1
                     continue
 
-                first_name = row.get(mapping.get('first_name', ''), '').strip() if mapping.get('first_name') else ''
-                last_name = row.get(mapping.get('last_name', ''), '').strip() if mapping.get('last_name') else ''
-                full_name = f"{first_name} {last_name}".strip()
-                if not full_name:
-                    full_name = pylon
+                fs_imp = _csv_import_row_strings(row, mapping)
+                first_name = fs_imp.get('first_name') or ''
+                last_name = fs_imp.get('last_name') or ''
+                full_name = (fs_imp.get('full_name') or '').strip() or pylon
 
-                plt_id = row.get(mapping.get('plt_id', ''), '').strip() if mapping.get('plt_id') else None
-                ma_kennung = row.get(mapping.get('ma_kennung', ''), '').strip() if mapping.get('ma_kennung') else None
-                dag_id = row.get(mapping.get('dag_id', ''), '').strip() if mapping.get('dag_id') else None
-                email = row.get(mapping.get('email', ''), '').strip() if mapping.get('email') else None
+                plt_id = _csv_mapped_cell_clean(row, mapping, 'plt_id')
+                ma_kennung = _csv_mapped_cell_clean(row, mapping, 'ma_kennung')
+                dag_id = _csv_mapped_cell_clean(row, mapping, 'dag_id')
+                email = _csv_mapped_cell_clean(row, mapping, 'email')
 
                 role_name = _csv_row_role_name(row, mapping)
 
@@ -2163,7 +2216,7 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
                     ic.roles_by_name[role.name] = role
                     stats['created_roles'] += 1
 
-                project_name = row.get(mapping.get('project', ''), '').strip() if mapping.get('project') else None
+                project_name = _csv_mapped_cell_clean(row, mapping, 'project')
                 project = None
                 if project_name:
                     project = ic.projects_by_name.get(project_name)
@@ -2179,7 +2232,7 @@ def _run_csv_import_with_row_filter(temp_path, delimiter, mapping, archiv_team, 
                         stats['errors'] += 1
                         continue
 
-                team_name = row.get(mapping.get('team', ''), '').strip() if mapping.get('team') else None
+                team_name = _csv_mapped_cell_clean(row, mapping, 'team')
                 team = None
                 if team_name:
                     team = ic.teams_by_proj_name.get((project.id, team_name))
