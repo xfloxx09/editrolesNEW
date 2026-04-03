@@ -275,6 +275,22 @@ def user_has_mein_team_nav(user):
             return True
     return False
 
+
+def workshop_individual_rating_from_request(member_id):
+    """Parse optional per-participant workshop rating 0–10; empty or invalid → None."""
+    from flask import request
+    raw = (request.form.get(f'individual_rating_{member_id}') or '').strip()
+    if not raw:
+        return None
+    try:
+        v = int(raw)
+        if 0 <= v <= 10:
+            return v
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
 def get_or_create_role(role_name):
     role = Role.query.filter_by(name=role_name).first()
     if not role:

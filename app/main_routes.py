@@ -25,6 +25,7 @@ from app.utils import (
     team_member_eligible_for_new_coaching,
     user_eligible_assignable_coach,
     users_for_assignment_coach_dropdown,
+    workshop_individual_rating_from_request,
 )
 from datetime import datetime, timezone, timedelta, date
 import calendar
@@ -1304,7 +1305,7 @@ def add_workshop():
         db.session.add(workshop)
         db.session.flush()
         for member_id in form.team_member_ids.data:
-            individual_rating = request.form.get(f'individual_rating_{member_id}', type=int)
+            individual_rating = workshop_individual_rating_from_request(member_id)
             stmt = workshop_participants.insert().values(
                 workshop_id=workshop.id,
                 team_member_id=member_id,

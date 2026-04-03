@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm
-from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role
+from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
@@ -1144,23 +1144,17 @@ def edit_workshop_entry(workshop_id):
             db.session.flush()
 
             for member_id in form.team_member_ids.data:
-                individual_rating_key = f'individual_rating_{member_id}'
-                individual_rating = request.form.get(individual_rating_key, type=int)
+                individual_rating = workshop_individual_rating_from_request(member_id)
                 member = TeamMember.query.get(member_id)
                 original_team_id = member.team_id if member else None
 
-                if individual_rating is not None and 0 <= individual_rating <= 10:
-                    stmt = workshop_participants.insert().values(
-                        workshop_id=workshop_to_edit.id,
-                        team_member_id=member_id,
-                        individual_rating=individual_rating,
-                        original_team_id=original_team_id
-                    )
-                    db.session.execute(stmt)
-                else:
-                    flash(f'Ungültige Bewertung für Teilnehmer ID {member_id}', 'danger')
-                    db.session.rollback()
-                    return redirect(url_for('admin.edit_workshop_entry', workshop_id=workshop_id))
+                stmt = workshop_participants.insert().values(
+                    workshop_id=workshop_to_edit.id,
+                    team_member_id=member_id,
+                    individual_rating=individual_rating,
+                    original_team_id=original_team_id
+                )
+                db.session.execute(stmt)
 
             db.session.commit()
             flash(f'Workshop ID {workshop_id} erfolgreich aktualisiert!', 'success')

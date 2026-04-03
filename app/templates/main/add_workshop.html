@@ -287,6 +287,76 @@
         color: #aaa;
     }
 
+    /* Ausgewählte Teilnehmer (Chips zwischen Suche und Teams) */
+    .selected-participants-panel {
+        margin-bottom: 18px;
+        padding: 12px 14px;
+        background-color: #25292e;
+        border: 1px solid #444;
+        border-radius: 8px;
+    }
+    .selected-participants-panel .selected-participants-heading {
+        font-size: 0.85rem;
+        color: #adb5bd;
+        margin-bottom: 8px;
+    }
+    .selected-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        align-items: center;
+        min-height: 32px;
+    }
+    .selected-chips-empty {
+        font-size: 0.9rem;
+        color: #6c757d;
+        font-style: italic;
+    }
+    .participant-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px 6px 12px;
+        background-color: #3a3f46;
+        border: 1px solid #555;
+        border-radius: 20px;
+        color: #f0f0f0;
+        font-size: 0.9rem;
+        max-width: 100%;
+    }
+    .participant-chip-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 220px;
+    }
+    .participant-chip-remove {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        margin: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(226, 0, 116, 0.25);
+        color: #ff6bb3;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s, color 0.15s;
+    }
+    .participant-chip-remove:hover {
+        background: #e20074;
+        color: #fff;
+    }
+    .participant-chip-remove:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(226, 0, 116, 0.45);
+    }
+
     /* Ursprüngliches Select-Feld ausblenden */
     #team_member_ids {
         display: none;
@@ -333,11 +403,19 @@
         <!-- Abschnitt 2: Teilnehmerauswahl mit Bewertung -->
         <div class="form-section">
             <h4 class="section-title"><i class="fas fa-user-friends"></i> Teilnehmer & Bewertung</h4>
-            <p class="text-muted mb-3">Wählen Sie Teilnehmer aus und vergeben Sie eine individuelle Bewertung (0-10).</p>
+            <p class="text-muted mb-3">Wählen Sie Teilnehmer aus. Individuelle Bewertungen (0–10) sind <strong>optional</strong>; die Gesamtbewertung unten ist verpflichtend.</p>
 
             <div class="member-search position-relative">
                 <input type="text" id="member-filter" placeholder="Teilnehmer suchen...">
                 <i class="fas fa-search"></i>
+            </div>
+
+            <div id="selected-participants-panel" class="selected-participants-panel">
+                <div class="selected-participants-heading">
+                    Ausgewählt: <strong id="selected-count">0</strong>
+                    <span class="text-muted font-weight-normal ml-1">(× neben dem Namen entfernt die Person)</span>
+                </div>
+                <div id="selected-chips" class="selected-chips" aria-label="Liste der ausgewählten Teilnehmer"></div>
             </div>
 
             <div id="participant-checkboxes">
@@ -370,6 +448,7 @@
                             <label class="member-name-label" for="member-{{ member_id }}">
                                 <span class="workshop-check">
                                     <input type="checkbox" name="participant_checkbox" value="{{ member_id }}" data-team="{{ team_name }}"
+                                           data-member-name="{{ member_name }}"
                                            id="member-{{ member_id }}"
                                            {% if is_edit_mode and member_id in existing_participant_ids %}checked{% endif %}>
                                     <span class="workshop-check-visual" aria-hidden="true"></span>
@@ -380,9 +459,8 @@
                                 <input type="number" name="individual_rating_{{ member_id }}" 
                                        min="0" max="10" step="1" 
                                        value="{% if is_edit_mode and existing_ratings %}{{ existing_ratings.get(member_id, '') }}{% endif %}"
-                                       placeholder="0-10"
-                                       {% if is_edit_mode and member_id in existing_participant_ids %}required{% endif %}>
-                                <span>/10</span>
+                                       placeholder="optional">
+                                <span>/10 <small class="text-muted">(opt.)</small></span>
                             </div>
                         </div>
                         {% endfor %}
@@ -490,21 +568,71 @@ document.addEventListener('DOMContentLoaded', function() {
     const checkboxes = document.querySelectorAll('input[name="participant_checkbox"]');
     const selectAllCheckboxes = document.querySelectorAll('.select-all-checkbox');
 
-    // Funktion: Ausgewählte IDs in das Select-Feld übertragen
-    function updateSelectedIds() {
-        const selectedIds = [];
-        checkboxes.forEach(cb => {
-            if (cb.checked) {
-                selectedIds.push(cb.value);
+    function syncSelectAllStates() {
+        document.querySelectorAll('.team-accordion').forEach(function (accordion) {
+            const team = accordion.dataset.team;
+            if (!team) return;
+            const teamCheckboxes = accordion.querySelectorAll('input[name="participant_checkbox"]');
+            const teamSelectAll = accordion.querySelector('.select-all-checkbox');
+            if (teamCheckboxes.length > 0 && teamSelectAll) {
+                teamSelectAll.checked = Array.from(teamCheckboxes).every(function (cb) { return cb.checked; });
             }
-        });
-        // Optionen im Select-Feld markieren
-        Array.from(selectMultiple.options).forEach(option => {
-            option.selected = selectedIds.includes(option.value);
         });
     }
 
-    // Checkbox-Änderungen überwachen
+    function renderSelectedChips() {
+        var container = document.getElementById('selected-chips');
+        var countEl = document.getElementById('selected-count');
+        if (!container || !countEl) return;
+        container.innerHTML = '';
+        var checked = Array.prototype.slice.call(document.querySelectorAll('input[name="participant_checkbox"]:checked'));
+        countEl.textContent = String(checked.length);
+        if (checked.length === 0) {
+            var empty = document.createElement('span');
+            empty.className = 'selected-chips-empty';
+            empty.textContent = 'Noch keine Teilnehmer ausgewählt.';
+            container.appendChild(empty);
+            return;
+        }
+        checked.forEach(function (cb) {
+            var id = cb.value;
+            var name = cb.getAttribute('data-member-name') || ('ID ' + id);
+            var chip = document.createElement('span');
+            chip.className = 'participant-chip';
+            var nameSpan = document.createElement('span');
+            nameSpan.className = 'participant-chip-name';
+            nameSpan.textContent = name;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'participant-chip-remove';
+            btn.setAttribute('aria-label', name + ' aus Auswahl entfernen');
+            btn.innerHTML = '\u00d7';
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                var box = document.getElementById('member-' + id);
+                if (box) {
+                    box.checked = false;
+                    box.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+            chip.appendChild(nameSpan);
+            chip.appendChild(btn);
+            container.appendChild(chip);
+        });
+    }
+
+    function updateSelectedIds() {
+        var selectedIds = [];
+        checkboxes.forEach(function (cb) {
+            if (cb.checked) selectedIds.push(cb.value);
+        });
+        Array.from(selectMultiple.options).forEach(function (option) {
+            option.selected = selectedIds.indexOf(option.value) !== -1;
+        });
+        syncSelectAllStates();
+        renderSelectedChips();
+    }
+
     checkboxes.forEach(cb => {
         cb.addEventListener('change', updateSelectedIds);
     });
@@ -516,33 +644,21 @@ document.addEventListener('DOMContentLoaded', function() {
             const teamCheckboxes = document.querySelectorAll(`input[name="participant_checkbox"][data-team="${team}"]`);
             teamCheckboxes.forEach(cb => {
                 cb.checked = this.checked;
-                // Bewertungsfeld required setzen (optional)
-                const memberId = cb.value;
-                const ratingInput = document.querySelector(`input[name="individual_rating_${memberId}"]`);
-                if (ratingInput) {
-                    ratingInput.required = this.checked;
-                }
             });
             updateSelectedIds();
         });
     });
 
-    // Bei manuellem Check/Uncheck: required-Attribut der Bewertung anpassen
     checkboxes.forEach(cb => {
         cb.addEventListener('change', function() {
             const memberId = this.value;
             const ratingInput = document.querySelector(`input[name="individual_rating_${memberId}"]`);
-            if (ratingInput) {
-                ratingInput.required = this.checked;
-                // Optional: Wenn unchecked, Wert löschen
-                if (!this.checked) {
-                    ratingInput.value = '';
-                }
+            if (ratingInput && !this.checked) {
+                ratingInput.value = '';
             }
         });
     });
 
-    // Initial die Select-Feld-Optionen setzen (bei Bearbeitung)
     updateSelectedIds();
 
     document.querySelectorAll('.select-all').forEach(function (el) {
@@ -562,19 +678,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-
-    // "Alle auswählen"-Buttons initial setzen
-    document.querySelectorAll('.team-accordion').forEach(accordion => {
-        const team = accordion.dataset.team;
-        if (team) {
-            const teamCheckboxes = document.querySelectorAll(`input[name="participant_checkbox"][data-team="${team}"]`);
-            const teamSelectAll = accordion.querySelector('.select-all-checkbox');
-            if (teamCheckboxes.length > 0 && teamSelectAll) {
-                const allChecked = Array.from(teamCheckboxes).every(cb => cb.checked);
-                teamSelectAll.checked = allChecked;
-            }
-        }
-    });
 
     // --- 4. Suchfilter für Teilnehmer ---
     const filterInput = document.getElementById('member-filter');
