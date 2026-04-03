@@ -473,6 +473,19 @@ def coaching_dashboard():
             else:
                 chart_filters.append(Coaching.project_id == accessible[0])
 
+    if accessible is None:
+        dashboard_project_id = project_filter
+    elif not accessible:
+        dashboard_project_id = -1
+    else:
+        if project_filter is not None:
+            dashboard_project_id = project_filter
+        elif len(accessible) == 1:
+            dashboard_project_id = accessible[0]
+        else:
+            vid = get_visible_project_id()
+            dashboard_project_id = vid if (vid and vid in accessible) else accessible[0]
+
     start_date, end_date = calculate_date_range(period_arg)
     if start_date:
         chart_filters.append(Coaching.coaching_date >= start_date)
@@ -482,9 +495,15 @@ def coaching_dashboard():
     if team_arg != 'all' and team_arg.isdigit():
         tid = int(team_arg)
         team_row = Team.query.filter_by(id=tid).first()
-        if team_row and (accessible is None or team_row.project_id in accessible):
-            if sees_all_teams or tid in my_dash_team_ids:
-                chart_filters.append(Team.id == tid)
+        if (
+            team_row
+            and team_row.name != ARCHIV_TEAM_NAME
+            and team_row.active_for_coaching
+            and dashboard_project_id != -1
+            and (accessible is None or team_row.project_id in accessible)
+            and (dashboard_project_id is None or team_row.project_id == dashboard_project_id)
+        ):
+            chart_filters.append(Team.id == tid)
 
     list_filters = list(chart_filters)
 
@@ -586,27 +605,17 @@ def coaching_dashboard():
     minutes = total_minutes % 60
     global_time_coached_display = f"{hours} Std. {minutes} Min. ({total_minutes} Min. gesamt)"
     
-    # Teams for filter dropdown
-    if not sees_all_teams:
-        if my_dash_team_ids:
-            all_teams_for_filter = (
-                Team.query.filter(
-                    Team.id.in_(my_dash_team_ids),
-                    Team.name != ARCHIV_TEAM_NAME,
-                ).order_by(Team.name).all()
-            )
-        else:
-            all_teams_for_filter = []
+    # Team-Dropdown: immer alle „sichtbaren“ Projektteams (nicht ARCHIV, aktiv für Coaching) — auch wenn die Liste unten nur eigene Teams zeigt.
+    team_dropdown_q = Team.query.filter(
+        Team.name != ARCHIV_TEAM_NAME,
+        Team.active_for_coaching.is_(True),
+    )
+    if dashboard_project_id is not None and dashboard_project_id != -1:
+        all_teams_for_filter = team_dropdown_q.filter(Team.project_id == dashboard_project_id).order_by(Team.name).all()
+    elif dashboard_project_id == -1:
+        all_teams_for_filter = []
     else:
-        team_scope = (
-            Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name)
-            if accessible is None
-            else Team.query.filter(
-                Team.project_id.in_(accessible),
-                Team.name != ARCHIV_TEAM_NAME,
-            ).order_by(Team.name)
-        )
-        all_teams_for_filter = team_scope.all()
+        all_teams_for_filter = team_dropdown_q.order_by(Team.name).all()
 
     # Month options
     now = datetime.now(timezone.utc)
