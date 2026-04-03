@@ -347,7 +347,10 @@ def create_user():
                 selected_projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
                 user.projects = selected_projects
             else:
-                user.projects = []
+                extra_ids = [i for i in (form.extra_project_ids.data or []) if i and i != user.project_id]
+                user.projects = (
+                    Project.query.filter(Project.id.in_(extra_ids)).all() if extra_ids else []
+                )
 
             archiv_team = get_or_create_archiv_team()
             full_name = f"{form.first_name.data} {form.last_name.data}".strip()
@@ -416,6 +419,7 @@ def edit_user(user_id):
         role_g = user_to_edit.role
         if not role_g or role_g.name != ROLE_ABTEILUNGSLEITER:
             form.project_id.data = user_to_edit.project_id
+            form.extra_project_ids.data = [p.id for p in user_to_edit.projects if p.id != user_to_edit.project_id]
         else:
             form.project_ids.data = [p.id for p in user_to_edit.projects]
         members = TeamMember.query.filter_by(user_id=user_to_edit.id).order_by(TeamMember.id).all()
@@ -484,7 +488,10 @@ def edit_user(user_id):
                 user_to_edit.projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
             else:
                 user_to_edit.project_id = form.project_id.data
-                user_to_edit.projects = []
+                extra_ids = [i for i in (form.extra_project_ids.data or []) if i and i != user_to_edit.project_id]
+                user_to_edit.projects = (
+                    Project.query.filter(Project.id.in_(extra_ids)).all() if extra_ids else []
+                )
 
             if form.password.data:
                 user_to_edit.set_password(form.password.data)

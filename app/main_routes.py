@@ -7,7 +7,22 @@ from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
 from app.forms import CoachingForm, WorkshopForm, ProjectLeaderNoteForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
-from app.utils import role_required, permission_required, any_permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_PROJEKTLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, ROLE_QM, ROLE_SALESCOACH, ROLE_TRAINER, get_or_create_archiv_team, ARCHIV_TEAM_NAME
+from app.utils import (
+    role_required,
+    permission_required,
+    any_permission_required,
+    ROLE_ADMIN,
+    ROLE_BETRIEBSLEITER,
+    ROLE_PROJEKTLEITER,
+    ROLE_TEAMLEITER,
+    ROLE_ABTEILUNGSLEITER,
+    ROLE_QM,
+    ROLE_SALESCOACH,
+    ROLE_TRAINER,
+    get_or_create_archiv_team,
+    ARCHIV_TEAM_NAME,
+    get_accessible_project_ids,
+)
 from datetime import datetime, timezone, timedelta, date
 import calendar
 
@@ -52,12 +67,22 @@ def get_visible_project_id():
             return first.id if first else None
         elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
             project_id = session.get('active_project')
-            if project_id and project_id in [p.id for p in current_user.projects]:
+            allowed = [p.id for p in current_user.projects]
+            if project_id and project_id in allowed:
                 return project_id
             first = current_user.projects.first()
             return first.id if first else None
-        else:
+        allowed = get_accessible_project_ids()
+        if not allowed:
             return current_user.project_id
+        if len(allowed) == 1:
+            return allowed[0]
+        project_id = session.get('active_project')
+        if project_id and project_id in allowed:
+            return project_id
+        if current_user.project_id and current_user.project_id in allowed:
+            return current_user.project_id
+        return allowed[0]
     return None
 
 
@@ -160,16 +185,13 @@ def get_month_name_german(month_num):
 
 def get_allowed_project_ids_for_reviews():
     """Projects a user may see when using view_all_reviews."""
-    if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
+    ids = get_accessible_project_ids()
+    if ids is None:
         ap = session.get('active_project')
         if ap:
             return [ap]
         return [p.id for p in Project.query.order_by(Project.name).all()]
-    if current_user.role_name == ROLE_ABTEILUNGSLEITER:
-        return [p.id for p in current_user.projects]
-    if current_user.project_id:
-        return [current_user.project_id]
-    return []
+    return ids
 
 
 def apply_coaching_date_filters(query, period_arg, year, month, day):
@@ -394,13 +416,28 @@ def coaching_dashboard():
     team_arg = request.args.get('team', 'all')
     search_arg = request.args.get('search', default='', type=str).strip()
     project_filter = request.args.get('project', type=int)
-    
-    # Build reusable filter conditions
+    accessible = get_accessible_project_ids()
+
+    # Build reusable filter conditions (project scope)
     filters = []
-    if project_filter:
-        filters.append(Coaching.project_id == project_filter)
-    elif current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
-        filters.append(Coaching.project_id == current_user.project_id)
+    if accessible is None:
+        if project_filter:
+            filters.append(Coaching.project_id == project_filter)
+    elif not accessible:
+        filters.append(Coaching.project_id == -1)
+    else:
+        if project_filter is not None and project_filter not in accessible:
+            project_filter = None
+        if project_filter is not None:
+            filters.append(Coaching.project_id == project_filter)
+        elif len(accessible) == 1:
+            filters.append(Coaching.project_id == accessible[0])
+        else:
+            vid = get_visible_project_id()
+            if vid and vid in accessible:
+                filters.append(Coaching.project_id == vid)
+            else:
+                filters.append(Coaching.project_id == accessible[0])
 
     # Period filter
     start_date, end_date = calculate_date_range(period_arg)
@@ -409,9 +446,12 @@ def coaching_dashboard():
     if end_date:
         filters.append(Coaching.coaching_date <= end_date)
 
-    # Team filter
+    # Team filter (ignore teams outside allowed projects)
     if team_arg != 'all' and team_arg.isdigit():
-        filters.append(Team.id == int(team_arg))
+        tid = int(team_arg)
+        team_row = Team.query.filter_by(id=tid).first()
+        if team_row and (accessible is None or team_row.project_id in accessible):
+            filters.append(Team.id == tid)
 
     # Search filter
     if search_arg:
@@ -476,9 +516,17 @@ def coaching_dashboard():
     minutes = total_minutes % 60
     global_time_coached_display = f"{hours} Std. {minutes} Min. ({total_minutes} Min. gesamt)"
     
-    # Teams for filter dropdown
-    all_teams_for_filter = Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name).all()
-    
+    # Teams for filter dropdown (only teams in allowed projects)
+    team_scope = (
+        Team.query.filter(Team.name != ARCHIV_TEAM_NAME).order_by(Team.name)
+        if accessible is None
+        else Team.query.filter(
+            Team.project_id.in_(accessible),
+            Team.name != ARCHIV_TEAM_NAME,
+        ).order_by(Team.name)
+    )
+    all_teams_for_filter = team_scope.all()
+
     # Month options
     now = datetime.now(timezone.utc)
     current_year = now.year
@@ -489,9 +537,19 @@ def coaching_dashboard():
     for m in range(now.month, 0, -1):
         month_options.append({'value': f"{current_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {current_year}"})
     
-    # All projects for admin filter
-    all_projects = Project.query.order_by(Project.name).all() if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] else []
-    
+    # Project filter dropdown: all (admin) or only accessible
+    if accessible is None:
+        all_projects = Project.query.order_by(Project.name).all()
+    elif len(accessible) > 1:
+        all_projects = Project.query.filter(Project.id.in_(accessible)).order_by(Project.name).all()
+    else:
+        all_projects = []
+
+    show_global_all_projects_option = accessible is None
+    current_project_filter_display = project_filter
+    if accessible is not None and len(accessible) > 1 and project_filter is None:
+        current_project_filter_display = get_visible_project_id()
+
     return render_template('main/index.html',
                            title='Coaching Dashboard',
                            coachings_paginated=coachings_paginated,
@@ -508,7 +566,8 @@ def coaching_dashboard():
                            all_projects=all_projects,
                            current_period_filter=period_arg,
                            current_team_id_filter=team_arg,
-                           current_project_filter=project_filter,
+                           current_project_filter=current_project_filter_display,
+                           show_global_all_projects_option=show_global_all_projects_option,
                            current_search_term=search_arg,
                            month_options=month_options,
                            can_leave_review=can_leave_review,
@@ -1314,8 +1373,12 @@ def set_project(project_id):
     elif current_user.role_name == ROLE_ABTEILUNGSLEITER and project in current_user.projects:
         session['active_project'] = project_id
     else:
-        flash('Sie haben keine Berechtigung für dieses Projekt.', 'danger')
-        return redirect(url_for('main.index'))
+        allowed = get_accessible_project_ids()
+        if allowed and project_id in allowed:
+            session['active_project'] = project_id
+        else:
+            flash('Sie haben keine Berechtigung für dieses Projekt.', 'danger')
+            return redirect(url_for('main.index'))
     flash(f'Projekt gewechselt zu {project.name}.', 'success')
     return redirect(request.referrer or url_for('main.index'))
 

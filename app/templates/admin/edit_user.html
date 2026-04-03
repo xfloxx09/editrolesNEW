@@ -26,6 +26,10 @@
         <div class="form-group">
             {{ form.project_id.label }} {{ form.project_id(class="form-control") }}
         </div>
+        <div class="form-group" id="extra_projects_block">
+            {{ form.extra_project_ids.label }} {{ form.extra_project_ids(class="form-control", size="5") }}
+            <small class="form-text text-muted">Zusätzliche Projekte für Benutzer, die mehrere Projekte einsehen dürfen (ohne Hauptprojekt oben). Abteilungsleiter nutzen stattdessen die Mehrfachauswahl unten.</small>
+        </div>
         <div class="form-group" id="team_leader_teams">
             {{ form.team_ids.label }} {{ form.team_ids(class="form-control") }}
             <small class="form-text text-muted">Nur bei Berechtigung „assign_teams“ (geführte Teams; unabhängig von Mitgliedschaft).</small>
@@ -76,6 +80,7 @@
 <script>
     const roleSelect = document.getElementById('role_id');
     const projectField = document.getElementById('project_id').parentElement;
+    const extraProjectsField = document.getElementById('extra_projects_block');
     const teamLeaderField = document.getElementById('team_leader_teams');
     const abteilungsleiterField = document.getElementById('abteilungsleiter_projects');
     const memberTeamSingle = document.getElementById('member_team_single');
@@ -95,14 +100,17 @@
             teamLeaderField.style.display = 'block';
             abteilungsleiterField.style.display = 'none';
             projectField.style.display = 'block';
+            extraProjectsField.style.display = 'block';
         } else if (role === 'Abteilungsleiter') {
             teamLeaderField.style.display = 'none';
             abteilungsleiterField.style.display = 'block';
             projectField.style.display = 'none';
+            extraProjectsField.style.display = 'none';
         } else {
             teamLeaderField.style.display = 'block';
             abteilungsleiterField.style.display = 'none';
             projectField.style.display = 'block';
+            extraProjectsField.style.display = 'block';
         }
         toggleMemberTeamMode();
     }

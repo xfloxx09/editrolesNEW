@@ -29,6 +29,12 @@ class RegistrationForm(FlaskForm):
     team_ids = SelectMultipleField('Geführte Teams (nur Rollen mit „assign_teams“ / team_leaders)', coerce=int, choices=[])
     project_id = SelectField('Projekt', coerce=int, choices=[])
     project_ids = SelectMultipleField('Zugeordnete Projekte (nur für Abteilungsleiter)', coerce=int, choices=[])
+    extra_project_ids = SelectMultipleField(
+        'Weitere Projekte (optional)',
+        coerce=int,
+        choices=[],
+        validators=[Optional()],
+    )
 
     # Team member fields
     first_name = StringField('Vorname', validators=[DataRequired(), Length(min=1, max=50)])
@@ -55,6 +61,7 @@ class RegistrationForm(FlaskForm):
         all_projects = Project.query.order_by(Project.name).all()
         self.project_id.choices = [(p.id, p.name) for p in all_projects]
         self.project_ids.choices = [(p.id, p.name) for p in all_projects]
+        self.extra_project_ids.choices = [(p.id, p.name) for p in all_projects]
         self.role_id.choices = [(r.id, r.name) for r in Role.query.order_by(Role.name).all()]
 
     def validate_username(self, username_field):

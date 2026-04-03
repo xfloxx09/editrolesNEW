@@ -291,14 +291,16 @@ def create_app(config_class=Config):
     @app.context_processor
     def inject_user_allowed_projects():
         from app.models import Project
-        from app.utils import ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_ABTEILUNGSLEITER
+        from app.utils import ROLE_ADMIN, ROLE_BETRIEBSLEITER, get_accessible_project_ids
         if current_user.is_authenticated:
             if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
                 projects = Project.query.order_by(Project.name).all()
-            elif current_user.role_name == ROLE_ABTEILUNGSLEITER:
-                projects = current_user.projects.order_by(Project.name).all()
             else:
-                projects = []
+                ids = get_accessible_project_ids()
+                if ids is not None and len(ids) > 1:
+                    projects = Project.query.filter(Project.id.in_(ids)).order_by(Project.name).all()
+                else:
+                    projects = []
         else:
             projects = []
         return {'user_allowed_projects': projects}

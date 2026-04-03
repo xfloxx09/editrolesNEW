@@ -81,6 +81,30 @@ def has_permission(user, permission_name):
     return user.role.has_permission(permission_name)
 
 
+def get_accessible_project_ids():
+    """
+    Projects this user may see in dashboards, filters, and URLs.
+
+    Returns:
+        None — Admin / Betriebsleiter: no restriction (all projects).
+        [] — not authenticated or no projects linked (caller should handle).
+        [id, ...] — explicit allow-list (primary ``User.project_id`` plus optional
+        ``User.projects`` M2M; Abteilungsleiter uses only ``User.projects``).
+    """
+    if not current_user.is_authenticated:
+        return []
+    if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+        return None
+    if current_user.role_name == ROLE_ABTEILUNGSLEITER:
+        return sorted({p.id for p in current_user.projects})
+    ids = set()
+    if current_user.project_id:
+        ids.add(current_user.project_id)
+    for p in current_user.projects:
+        ids.add(p.id)
+    return sorted(ids)
+
+
 def user_has_mein_team_nav(user):
     """Show 'Mein Team' if view_own_team and user is member of at least one non-ARCHIV team."""
     if user is None or not getattr(user, 'is_authenticated', False):

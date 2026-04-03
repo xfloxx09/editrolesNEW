@@ -141,7 +141,9 @@
             <div class="form-group mr-2">
                 <label for="project_filter" class="mr-2">Projekt:</label>
                 <select name="project" id="project_filter" class="form-control custom-select form-control-sm">
+                    {% if show_global_all_projects_option %}
                     <option value="" {% if not current_project_filter %}selected{% endif %}>-- Alle Projekte --</option>
+                    {% endif %}
                     {% for p in all_projects %}
                         <option value="{{ p.id }}" {% if current_project_filter == p.id %}selected{% endif %}>{{ p.name }}</option>
                     {% endfor %}
