@@ -25,6 +25,7 @@ from app.utils import (
     team_member_eligible_for_new_coaching,
     user_eligible_assignable_coach,
     users_for_assignment_coach_dropdown,
+    iter_relationship,
 )
 from datetime import datetime, timezone, timedelta, date
 import calendar
@@ -295,20 +296,90 @@ def _build_team_members_performance(team):
     return team_members_performance
 
 
-def _team_leaders_for_team_card(team):
-    """Auf der Karte als Teamleiter: im Team als Mitglied zugeordnet (TeamMember.user_id) und Berechtigung view_own_team."""
-    users = (
-        User.query.options(
-            joinedload(User.role).joinedload(Role.permissions),
-            selectinload(User.team_members),
+def _user_project_scope_ids(user):
+    """Primary project plus optional M2M projects (e.g. Abteilungsleiter)."""
+    ids = set()
+    if user.project_id:
+        ids.add(user.project_id)
+    for p in iter_relationship(user.projects):
+        ids.add(p.id)
+    return ids
+
+
+def _user_linked_via_membership_or_leadership(user, project_id, archiv_id):
+    """Non-ARCHIV TeamMember in this project, or leads a team in this project."""
+    for tm in user.team_members:
+        if not tm.team or tm.team_id == archiv_id:
+            continue
+        if tm.team.project_id == project_id:
+            return True
+    for t in iter_relationship(user.teams_led):
+        if t.project_id == project_id:
+            return True
+    return False
+
+
+def _team_key_people_for_card(team):
+    """
+    Team card roster: no ARCHIV-only rows; includes
+    - users with view_own_team and a linked account on this team,
+    - project-wide coaches (coach, not coach_own_team_only, assignable in project),
+    - users with multiple project scope or permission multiple_teams who are linked to
+      this project via membership or team leadership.
+    """
+    archiv = get_or_create_archiv_team()
+    archiv_id = archiv.id
+    project_id = team.project_id
+    if team.id == archiv_id:
+        return []
+
+    seen = {}
+
+    def add(u):
+        if u and u.role and u.id not in seen:
+            seen[u.id] = u
+
+    tm_rows = (
+        TeamMember.query.options(
+            selectinload(TeamMember.user).selectinload(User.role).selectinload(Role.permissions),
         )
-        .join(TeamMember, TeamMember.user_id == User.id)
-        .filter(TeamMember.team_id == team.id, TeamMember.user_id.isnot(None))
-        .distinct()
+        .filter_by(team_id=team.id)
+        .filter(TeamMember.user_id.isnot(None))
         .all()
     )
-    eligible = [u for u in users if u.has_permission('view_own_team')]
-    return sorted(eligible, key=lambda u: (u.coach_display_name or u.username or '').lower())
+    for tm in tm_rows:
+        u = tm.user
+        if u and u.has_permission('view_own_team'):
+            add(u)
+
+    users_scan = User.query.options(
+        joinedload(User.role).joinedload(Role.permissions),
+        selectinload(User.team_members).selectinload(TeamMember.team),
+        selectinload(User.teams_led),
+    ).all()
+
+    scope_len_cache = {}
+
+    def project_scope_len(u):
+        if u.id not in scope_len_cache:
+            scope_len_cache[u.id] = len(_user_project_scope_ids(u))
+        return scope_len_cache[u.id]
+
+    for u in users_scan:
+        if not u.role:
+            continue
+        if u.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+            continue
+
+        if u.has_permission('coach') and not u.has_permission('coach_own_team_only'):
+            if user_eligible_assignable_coach(u, project_id, None):
+                add(u)
+
+        if project_scope_len(u) > 1 or u.has_permission('multiple_teams'):
+            if _user_linked_via_membership_or_leadership(u, project_id, archiv_id):
+                add(u)
+
+    return sorted(seen.values(), key=lambda u: (u.coach_display_name or u.username or '').lower())
 
 
 def filter_reviews_by_coaching_date(query, period_arg, year, month, day):
@@ -1141,7 +1212,7 @@ def team_view():
         ).order_by(desc(Coaching.coaching_date)).limit(10).all()
 
     members = TeamMember.query.filter_by(team_id=team.id).order_by(TeamMember.name).all()
-    team_leaders_display = _team_leaders_for_team_card(team)
+    team_leaders_display = _team_key_people_for_card(team)
     return render_template(
         'main/team_view.html',
         title='Mein Team',
