@@ -304,9 +304,10 @@ def apply_coaching_date_filters(query, period_arg, year, month, day):
 
 
 def _get_teams_for_team_view():
-    """Teams for /team-view: PL/QM = alle Projektteams; view_own_team = alle Teams mit TeamMember-Zeile (nicht ARCHIV)."""
+    """Teams for /team-view: PL/QM = aktive Projektteams mit mind. einem Mitglied (ohne ARCHIV); view_own_team = eigene Teams ohne ARCHIV/inaktiv."""
     archiv = get_or_create_archiv_team()
     archiv_id = archiv.id
+    has_members = exists().where(TeamMember.team_id == Team.id)
     if current_user.has_permission('view_pl_qm_dashboard'):
         project_id = get_visible_project_id()
         if not project_id:
@@ -314,7 +315,9 @@ def _get_teams_for_team_view():
         return Team.query.filter(
             Team.project_id == project_id,
             Team.id != archiv_id,
+            Team.name != ARCHIV_TEAM_NAME,
             Team.active_for_coaching.is_(True),
+            has_members,
         ).order_by(Team.name).all()
     if not current_user.has_permission('view_own_team'):
         return []
@@ -324,9 +327,10 @@ def _get_teams_for_team_view():
         if not tm.team_id or tm.team_id == archiv_id or tm.team_id in seen:
             continue
         team = Team.query.get(tm.team_id)
-        if team:
-            teams.append(team)
-            seen.add(team.id)
+        if not team or team.name == ARCHIV_TEAM_NAME or not team.active_for_coaching:
+            continue
+        teams.append(team)
+        seen.add(team.id)
     teams.sort(key=lambda x: x.name)
     return teams
 
