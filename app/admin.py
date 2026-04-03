@@ -1886,18 +1886,18 @@ def _csv_diff_concrete_lines(row, mapping, team_member, archiv_team, is_new):
 
         before = _csv_db_display_for_field(field, team_member, archiv_team)
         if before != after:
-            lines.append(f'{col}: {before} → {after}')
+            lines.append(f'{col}: from {before} to {after}')
 
     if not is_new and team_member:
         if not mapping.get('active_status'):
             db_a = _csv_db_display_for_field('active_status', team_member, archiv_team)
             csv_a = '1' if _csv_row_active_flag(row, mapping) else '0'
             if db_a != csv_a:
-                lines.append(f'PLT aktiv (ohne Zuordnung): {db_a} → {csv_a}')
+                lines.append(f'PLT aktiv (no column mapped): from {db_a} to {csv_a}')
         if not mapping.get('role') and not mapping.get('agent_status'):
             db_r = _csv_db_display_for_field('role', team_member, archiv_team)
             if db_r != 'Mitarbeiter':
-                lines.append(f'Rolle (ohne Zuordnung): {db_r} → Mitarbeiter')
+                lines.append(f'Role (no column mapped): from {db_r} to Mitarbeiter')
 
     return lines
 

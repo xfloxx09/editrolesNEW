@@ -17,7 +17,7 @@
                 <div class="w-100">
                     <h4 class="modal-title" id="csvChangesModalTitle">Änderungen vor dem Import prüfen</h4>
                     <p class="small text-muted mb-0 mt-1">
-                        Jede Zeile ist eine CSV-Spalte mit altem DB-Wert und neuem CSV-Wert (z.&nbsp;B. <code>PLT aktiv?: 1 → 0</code>).
+                        Jede Zeile: CSV-Spaltenkopf und <code>from &lt;DB/Ist&gt; to &lt;CSV&gt;</code>, z.&nbsp;B. <code>PLT aktiv?: from 1 to 0</code>.
                         Deaktivieren, was nicht importiert werden soll. Unveränderte Pylone fehlen in der Liste.
                     </p>
                     {% if preview_truncated %}
