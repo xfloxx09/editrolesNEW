@@ -95,6 +95,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 12px;
         border-bottom: 1px solid #444;
     }
     .team-header:hover {
@@ -107,21 +108,95 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        flex: 1;
+        min-width: 0;
     }
-    .team-header h5 i {
+    .team-header h5 i.fa-users {
+        color: #e20074;
+    }
+    .team-chevron {
+        color: #aaa;
+        font-size: 0.85rem;
+        margin-left: 6px;
+        transition: transform 0.2s ease;
+    }
+    .team-accordion.is-open .team-chevron {
+        transform: rotate(-180deg);
         color: #e20074;
     }
     .team-header .select-all {
         display: flex;
         align-items: center;
-        gap: 8px;
-        color: #aaa;
-        font-size: 0.9rem;
+        gap: 10px;
+        color: #bbb;
+        font-size: 0.95rem;
+        flex-shrink: 0;
     }
-    .team-header .select-all input {
+    .team-header .select-all label {
         margin: 0;
-        accent-color: #e20074;
-        transform: scale(1.1);
+        cursor: pointer;
+        user-select: none;
+    }
+    /* Custom checkbox: focusable input over drawn box */
+    .workshop-check {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+    .workshop-check input {
+        position: absolute;
+        opacity: 0;
+        width: 28px;
+        height: 28px;
+        margin: 0;
+        cursor: pointer;
+        z-index: 2;
+    }
+    .workshop-check .workshop-check-visual {
+        width: 26px;
+        height: 26px;
+        border: 2px solid #6c757d;
+        border-radius: 6px;
+        background: #1e1e1e;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+        pointer-events: none;
+    }
+    .workshop-check input:hover + .workshop-check-visual {
+        border-color: #e20074;
+        box-shadow: 0 0 0 2px rgba(226, 0, 116, 0.2);
+    }
+    .workshop-check input:focus + .workshop-check-visual {
+        border-color: #e20074;
+        box-shadow: 0 0 0 3px rgba(226, 0, 116, 0.35);
+    }
+    .workshop-check input:checked + .workshop-check-visual {
+        background: #e20074;
+        border-color: #e20074;
+    }
+    .workshop-check input:checked + .workshop-check-visual::after {
+        content: '';
+        width: 6px;
+        height: 11px;
+        border: solid #fff;
+        border-width: 0 3px 3px 0;
+        transform: rotate(45deg);
+        margin-bottom: 3px;
+    }
+    .workshop-check-header .workshop-check-visual {
+        width: 24px;
+        height: 24px;
+    }
+    .workshop-check-header input {
+        width: 24px;
+        height: 24px;
     }
     .team-members {
         padding: 10px 15px;
@@ -134,28 +209,27 @@
     .member-item {
         display: flex;
         align-items: center;
-        padding: 8px 10px;
-        margin: 2px 0;
-        border-radius: 4px;
+        padding: 10px 12px;
+        margin: 4px 0;
+        border-radius: 6px;
         background-color: #333;
         transition: background-color 0.2s;
         flex-wrap: wrap;
-        gap: 10px;
+        gap: 12px;
     }
     .member-item:hover {
         background-color: #3d3d3d;
     }
-    .member-item input[type="checkbox"] {
-        margin-right: 12px;
-        accent-color: #e20074;
-        transform: scale(1.2);
-    }
-    .member-item label {
+    .member-item .member-name-label {
         margin: 0;
-        color: #ddd;
+        color: #e9e9e9;
         cursor: pointer;
         flex: 1;
         min-width: 150px;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
     }
     .member-rating {
         display: flex;
@@ -281,19 +355,27 @@
                 {% for team_name, members in grouped.items() %}
                 <div class="team-accordion" data-team="{{ team_name }}">
                     <div class="team-header">
-                        <h5><i class="fas fa-users"></i> {{ team_name }} <span class="member-count-badge">{{ members|length }}</span></h5>
+                        <h5><i class="fas fa-users"></i> {{ team_name }} <span class="member-count-badge">{{ members|length }}</span><i class="fas fa-chevron-down team-chevron" aria-hidden="true"></i></h5>
                         <div class="select-all">
-                            <input type="checkbox" class="select-all-checkbox" data-team="{{ team_name }}" id="select-all-{{ loop.index }}">
-                            <label for="select-all-{{ loop.index }}">Alle auswählen</label>
+                            <label class="workshop-check workshop-check-header d-inline-flex align-items-center mb-0">
+                                <input type="checkbox" class="select-all-checkbox" data-team="{{ team_name }}" id="select-all-{{ loop.index }}">
+                                <span class="workshop-check-visual" aria-hidden="true"></span>
+                            </label>
+                            <label for="select-all-{{ loop.index }}" class="mb-0">Alle auswählen</label>
                         </div>
                     </div>
-                    <div class="team-members expanded">
+                    <div class="team-members">
                         {% for member_id, member_name in members %}
                         <div class="member-item" data-member-name="{{ member_name|lower }}" data-team="{{ team_name }}">
-                            <input type="checkbox" name="participant_checkbox" value="{{ member_id }}" data-team="{{ team_name }}"
-                                   id="member-{{ member_id }}"
-                                   {% if is_edit_mode and member_id in existing_participant_ids %}checked{% endif %}>
-                            <label for="member-{{ member_id }}">{{ member_name }}</label>
+                            <label class="member-name-label" for="member-{{ member_id }}">
+                                <span class="workshop-check">
+                                    <input type="checkbox" name="participant_checkbox" value="{{ member_id }}" data-team="{{ team_name }}"
+                                           id="member-{{ member_id }}"
+                                           {% if is_edit_mode and member_id in existing_participant_ids %}checked{% endif %}>
+                                    <span class="workshop-check-visual" aria-hidden="true"></span>
+                                </span>
+                                <span>{{ member_name }}</span>
+                            </label>
                             <div class="member-rating">
                                 <input type="number" name="individual_rating_{{ member_id }}" 
                                        min="0" max="10" step="1" 
@@ -371,6 +453,7 @@
 {{ super() }}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const isEditWorkshop = {{ (is_edit_mode|default(false))|tojson }};
     // --- 1. Bewertungs-Slider ---
     const ratingSlider = document.getElementById('rating_slider');
     const ratingHidden = document.getElementById('overall_rating_hidden');
@@ -462,6 +545,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial die Select-Feld-Optionen setzen (bei Bearbeitung)
     updateSelectedIds();
 
+    document.querySelectorAll('.select-all').forEach(function (el) {
+        el.addEventListener('click', function (e) {
+            e.stopPropagation();
+        });
+    });
+
+    if (isEditWorkshop) {
+        document.querySelectorAll('.team-accordion').forEach(function (acc) {
+            if (acc.querySelector('input[name="participant_checkbox"]:checked')) {
+                var panel = acc.querySelector('.team-members');
+                if (panel) {
+                    panel.classList.add('expanded');
+                    acc.classList.add('is-open');
+                }
+            }
+        });
+    }
+
     // "Alle auswählen"-Buttons initial setzen
     document.querySelectorAll('.team-accordion').forEach(accordion => {
         const team = accordion.dataset.team;
@@ -498,18 +599,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     accordion.style.display = 'none';
                 } else {
                     accordion.style.display = 'block';
+                    if (filterText !== '' && visibleMembers > 0) {
+                        var panel = accordion.querySelector('.team-members');
+                        if (panel) {
+                            panel.classList.add('expanded');
+                            accordion.classList.add('is-open');
+                        }
+                    }
                 }
             });
         });
     }
 
-    // Optional: Team-Header klickbar machen zum Auf-/Zuklappen
     document.querySelectorAll('.team-header').forEach(header => {
         header.addEventListener('click', function(e) {
-            // Verhindern, dass Klick auf Checkbox oder Label das Umschalten auslöst
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
+            if (e.target.closest('.select-all')) return;
             const members = this.nextElementSibling;
+            if (!members || !members.classList.contains('team-members')) return;
             members.classList.toggle('expanded');
+            const acc = this.closest('.team-accordion');
+            if (acc) {
+                acc.classList.toggle('is-open', members.classList.contains('expanded'));
+            }
         });
     });
 });
