@@ -272,30 +272,6 @@
                         </div>
                     {% endfor %}
                 </div>
-
-                <!-- Charts: Top 5 and Bottom 5 Performers -->
-                <div class="row mt-4">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header telekom-bg-magenta text-white">
-                                Top 5 Performer (Gesamtscore)
-                            </div>
-                            <div class="card-body">
-                                <canvas id="topPerformersChart" style="height: 300px; width: 100%;"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header telekom-bg-magenta text-white">
-                                Niedrigste 5 Performer (Gesamtscore)
-                            </div>
-                            <div class="card-body">
-                                <canvas id="bottomPerformersChart" style="height: 300px; width: 100%;"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             {% else %}
                 <p class="text-muted">Keine Teammitglieder in den aktuell sichtbaren Projekten gefunden.</p>
             {% endif %}
