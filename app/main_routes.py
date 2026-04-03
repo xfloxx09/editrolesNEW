@@ -976,7 +976,7 @@ def team_view():
             Coaching.project_id == team.project_id,
         ).order_by(desc(Coaching.coaching_date)).limit(10).all()
 
-    members = team.members.order_by(TeamMember.name).all()
+    members = TeamMember.query.filter_by(team_id=team.id).order_by(TeamMember.name).all()
     return render_template(
         'main/team_view.html',
         title='Mein Team',
