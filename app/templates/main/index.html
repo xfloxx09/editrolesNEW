@@ -142,7 +142,11 @@
                 <label for="project_filter" class="mr-2">Projekt:</label>
                 <select name="project" id="project_filter" class="form-control custom-select form-control-sm">
                     {% if show_global_all_projects_option %}
-                    <option value="" {% if not current_project_filter %}selected{% endif %}>-- Alle Projekte --</option>
+                        {% if coaching_dashboard_project_all_is_blank %}
+                        <option value="" {% if current_project_filter is none %}selected{% endif %}>Alle Projekte</option>
+                        {% else %}
+                        <option value="all" {% if current_project_filter == 'all' %}selected{% endif %}>Alle Projekte</option>
+                        {% endif %}
                     {% endif %}
                     {% for p in all_projects %}
                         <option value="{{ p.id }}" {% if current_project_filter == p.id %}selected{% endif %}>{{ p.name }}</option>
@@ -249,12 +253,15 @@
         <form method="GET" action="{{ url_for('main.coaching_dashboard') }}" class="form-inline float-md-right w-100" id="searchFormInTitle">
             <input type="hidden" name="period" value="{{ current_period_filter }}">
             <input type="hidden" name="team" value="{{ current_team_id_filter }}">
+            {% if coaching_dashboard_url_project is not none %}
+            <input type="hidden" name="project" value="{{ coaching_dashboard_url_project }}">
+            {% endif %}
             <div class="input-group w-100">
                 <input type="text" name="search" class="form-control form-control-sm" placeholder="Suchen (Name, Coach, Thema...)" value="{{ current_search_term or '' }}" aria-label="Suchbegriff für Coachings">
                 <div class="input-group-append">
                     <button type="submit" class="btn telekom-button btn-sm">Suchen</button>
                     {% if current_search_term %}
-                    <a href="{{ url_for('main.coaching_dashboard', period=current_period_filter, team=current_team_id_filter) }}" class="btn btn-outline-secondary btn-sm" title="Suche zurücksetzen">×</a>
+                    <a href="{{ url_for('main.coaching_dashboard', period=current_period_filter, team=current_team_id_filter, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', period=current_period_filter, team=current_team_id_filter) }}" class="btn btn-outline-secondary btn-sm" title="Suche zurücksetzen">×</a>
                     {% endif %}
                 </div>
             </div>
@@ -397,7 +404,7 @@
 <nav aria-label="Coaching Navigation" class="mt-4">
     <ul class="pagination justify-content-center">
         {% if coachings_paginated.has_prev %}
-        <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=coachings_paginated.prev_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">Vorherige</a></li>
+        <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=coachings_paginated.prev_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', page=coachings_paginated.prev_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">Vorherige</a></li>
         {% else %}
         <li class="page-item disabled"><span class="page-link">Vorherige</span></li>
         {% endif %}
@@ -406,14 +413,14 @@
                 {% if coachings_paginated.page == page_num %}
                 <li class="page-item active"><span class="page-link telekom-page-active">{{ page_num }}</span></li>
                 {% else %}
-                <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=page_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">{{ page_num }}</a></li>
+                <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=page_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', page=page_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">{{ page_num }}</a></li>
                 {% endif %}
             {% else %}
             <li class="page-item disabled"><span class="page-link">...</span></li>
             {% endif %}
         {% endfor %}
         {% if coachings_paginated.has_next %}
-        <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=coachings_paginated.next_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">Nächste</a></li>
+        <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=coachings_paginated.next_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', page=coachings_paginated.next_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">Nächste</a></li>
         {% else %}
         <li class="page-item disabled"><span class="page-link">Nächste</span></li>
         {% endif %}

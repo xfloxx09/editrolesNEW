@@ -547,7 +547,14 @@ def coaching_dashboard():
     period_arg = request.args.get('period', '30days')
     team_arg = request.args.get('team', 'all')
     search_arg = request.args.get('search', default='', type=str).strip()
-    project_filter = request.args.get('project', type=int)
+    project_raw = (request.args.get('project') or '').strip()
+    project_filter_int = None
+    project_scope_all = False
+    if project_raw.lower() == 'all':
+        project_scope_all = True
+    elif project_raw.isdigit():
+        project_filter_int = int(project_raw)
+
     accessible = get_accessible_project_ids()
     sees_all_teams = _user_sees_all_teams_coaching_dashboard()
     my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else []
@@ -555,15 +562,17 @@ def coaching_dashboard():
     # Scope filters: Projekt + Zeitraum + Team-Dropdown. KPI-Karten zählen inkl. ARCHIV; Grafiken & Coaching-Liste ohne ARCHIV-Coachees.
     scope_filters = []
     if accessible is None:
-        if project_filter:
-            scope_filters.append(Coaching.project_id == project_filter)
+        if project_filter_int is not None:
+            scope_filters.append(Coaching.project_id == project_filter_int)
     elif not accessible:
         scope_filters.append(Coaching.project_id == -1)
     else:
-        if project_filter is not None and project_filter not in accessible:
-            project_filter = None
-        if project_filter is not None:
-            scope_filters.append(Coaching.project_id == project_filter)
+        if project_filter_int is not None and project_filter_int not in accessible:
+            project_filter_int = None
+        if project_scope_all:
+            scope_filters.append(Coaching.project_id.in_(accessible))
+        elif project_filter_int is not None:
+            scope_filters.append(Coaching.project_id == project_filter_int)
         elif len(accessible) == 1:
             scope_filters.append(Coaching.project_id == accessible[0])
         else:
@@ -574,12 +583,14 @@ def coaching_dashboard():
                 scope_filters.append(Coaching.project_id == accessible[0])
 
     if accessible is None:
-        dashboard_project_id = project_filter
+        dashboard_project_id = project_filter_int
     elif not accessible:
         dashboard_project_id = -1
     else:
-        if project_filter is not None:
-            dashboard_project_id = project_filter
+        if project_scope_all:
+            dashboard_project_id = None
+        elif project_filter_int is not None:
+            dashboard_project_id = project_filter_int
         elif len(accessible) == 1:
             dashboard_project_id = accessible[0]
         else:
@@ -718,6 +729,8 @@ def coaching_dashboard():
         all_teams_for_filter = team_dropdown_q.filter(Team.project_id == dashboard_project_id).order_by(Team.name).all()
     elif dashboard_project_id == -1:
         all_teams_for_filter = []
+    elif accessible is not None and project_scope_all:
+        all_teams_for_filter = team_dropdown_q.filter(Team.project_id.in_(accessible)).order_by(Team.name).all()
     else:
         all_teams_for_filter = team_dropdown_q.order_by(Team.name).all()
 
@@ -739,10 +752,36 @@ def coaching_dashboard():
     else:
         all_projects = []
 
-    show_global_all_projects_option = accessible is None
-    current_project_filter_display = project_filter
-    if accessible is not None and len(accessible) > 1 and project_filter is None:
-        current_project_filter_display = get_visible_project_id()
+    show_global_all_projects_option = accessible is None or (accessible is not None and len(accessible) > 1)
+    coaching_dashboard_project_all_is_blank = accessible is None
+
+    if accessible is None:
+        current_project_filter = project_filter_int
+    elif not accessible:
+        current_project_filter = None
+    else:
+        if project_scope_all:
+            current_project_filter = 'all'
+        elif project_filter_int is not None:
+            current_project_filter = project_filter_int
+        elif len(accessible) == 1:
+            current_project_filter = accessible[0]
+        else:
+            current_project_filter = dashboard_project_id
+
+    coaching_dashboard_url_project = None
+    if all_projects:
+        if accessible is None:
+            coaching_dashboard_url_project = project_filter_int
+        elif not accessible:
+            coaching_dashboard_url_project = None
+        else:
+            if project_scope_all:
+                coaching_dashboard_url_project = 'all'
+            elif project_filter_int is not None:
+                coaching_dashboard_url_project = project_filter_int
+            else:
+                coaching_dashboard_url_project = dashboard_project_id
 
     return render_template('main/index.html',
                            title='Coaching Dashboard',
@@ -760,8 +799,10 @@ def coaching_dashboard():
                            all_projects=all_projects,
                            current_period_filter=period_arg,
                            current_team_id_filter=team_arg,
-                           current_project_filter=current_project_filter_display,
+                           current_project_filter=current_project_filter,
                            show_global_all_projects_option=show_global_all_projects_option,
+                           coaching_dashboard_project_all_is_blank=coaching_dashboard_project_all_is_blank,
+                           coaching_dashboard_url_project=coaching_dashboard_url_project,
                            current_search_term=search_arg,
                            month_options=month_options,
                            can_leave_review=can_leave_review,
