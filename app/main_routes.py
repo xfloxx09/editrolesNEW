@@ -1558,9 +1558,8 @@ def pl_qm_dashboard():
         desc(Coaching.coaching_date)
     ).paginate(page=page, per_page=15, error_out=False)
 
-    role_label = (current_user.role_name or 'Benutzer').strip() or 'Benutzer'
     return render_template('main/projektleiter_dashboard.html',
-                           title=f'{role_label} Dashboard',
+                           title='Teams',
                            project_bar_endpoint='main.pl_qm_dashboard',
                            project_bar_extra_hidden={},
                            project=project,
