@@ -43,16 +43,14 @@ LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
 
 def _try_create_planned_followup_from_request(coaching):
     """
-    If the coaching form included „Nächstes Coaching planen“, create PlannedCoaching.
-    Returns: None (skip), 'bad_date', or 'created'.
+    If „Nächstes Coaching planen“ has a date, create PlannedCoaching on save (no extra checkbox).
+    Returns: None (nothing to do), 'bad_date', or 'created'.
     """
     if not current_user.has_permission('planned_coachings'):
         return None
-    if request.form.get('plan_next_enabled') != '1':
-        return None
     raw = (request.form.get('plan_next_date') or '').strip()
     if not raw:
-        return 'bad_date'
+        return None
     try:
         pdate = datetime.strptime(raw, '%Y-%m-%d').date()
     except ValueError:
@@ -569,10 +567,25 @@ def index():
         1 if u.has_permission('view_review') else 0,
         1 if u.has_permission('view_all_reviews') else 0,
     ])
+    open_planned_coachings_count = 0
+    if u.has_permission('planned_coachings'):
+        pq = PlannedCoaching.query.filter(
+            PlannedCoaching.coach_id == u.id,
+            PlannedCoaching.status == 'open',
+        )
+        acc_ix = get_accessible_project_ids()
+        if acc_ix is not None and len(acc_ix) == 0:
+            open_planned_coachings_count = 0
+        else:
+            if acc_ix is not None:
+                pq = pq.filter(PlannedCoaching.project_id.in_(acc_ix))
+            open_planned_coachings_count = pq.count()
+
     return render_template(
         'main/index_choice.html',
         config=current_app.config,
         index_tile_count=index_tile_count,
+        open_planned_coachings_count=open_planned_coachings_count,
     )
 
 

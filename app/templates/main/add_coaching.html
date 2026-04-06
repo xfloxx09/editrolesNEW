@@ -333,10 +333,6 @@
             </button>
             <div class="collapse mt-3" id="planNextPanel">
                 <div class="border border-secondary rounded p-3" style="background: #333;">
-                    <div class="form-check mb-3">
-                        <input type="checkbox" class="form-check-input" id="plan_next_enabled_cb" name="plan_next_enabled" value="1">
-                        <label class="form-check-label" for="plan_next_enabled_cb">Beim Speichern Folgetermin anlegen</label>
-                    </div>
                     <div class="form-group mb-2">
                         <label class="form-control-label text-light" for="plan_next_date">Geplanter Tag</label>
                         <input type="date" name="plan_next_date" id="plan_next_date" class="form-control">
@@ -349,7 +345,7 @@
                         <input type="checkbox" class="form-check-input" id="plan_next_verabredung" name="plan_next_verabredung" value="1">
                         <label class="form-check-label" for="plan_next_verabredung">Vereinbarung fürs nächste Mal</label>
                     </div>
-                    <div class="form-group mb-0">
+                    <div class="form-group mb-0" id="plan_next_verabredung_wrap" style="display: none;">
                         <label class="text-light" for="plan_next_verabredung_text">Text der Vereinbarung</label>
                         <textarea name="plan_next_verabredung_text" id="plan_next_verabredung_text" class="form-control" rows="2" placeholder="Optional"></textarea>
                     </div>
@@ -398,6 +394,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         styleSelect.addEventListener('change', toggleTcap);
         toggleTcap();
+    }
+
+    const planVerabredungCb = document.getElementById('plan_next_verabredung');
+    const planVerabredungWrap = document.getElementById('plan_next_verabredung_wrap');
+    const planVerabredungText = document.getElementById('plan_next_verabredung_text');
+    if (planVerabredungCb && planVerabredungWrap) {
+        function togglePlanVerabredungText() {
+            const on = planVerabredungCb.checked;
+            planVerabredungWrap.style.display = on ? '' : 'none';
+            if (!on && planVerabredungText) planVerabredungText.value = '';
+        }
+        planVerabredungCb.addEventListener('change', togglePlanVerabredungText);
+        togglePlanVerabredungText();
     }
 
     // --- 2. Leitfaden-Icons ---
