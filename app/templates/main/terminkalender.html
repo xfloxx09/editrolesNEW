@@ -17,7 +17,25 @@
     display: flex; flex-wrap: wrap; gap: 1rem 1.5rem;
     font-size: 0.9rem; margin-bottom: 1rem; color: #ccc;
 }
-.terminkal-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.terminkal-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    max-width: 100%;
+}
+.term-cal-legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.term-cal-legend-swatch.done { background: #e20074; }
+.term-cal-legend-swatch.done-others { background: #5c7cfa; }
+.term-cal-legend-swatch.planned { background: #20c997; }
+.term-cal-legend-swatch.assigned { background: #28a745; }
+.terminkal-legend-label { color: #e0e0e0; }
+.terminkal-legend-total { color: #888; font-size: 0.82rem; }
 .term-cal-desktop { display: none; }
 @media (min-width: 768px) {
     .term-cal-desktop { display: block; }
@@ -117,7 +135,7 @@
     <div class="terminkal-header">
         <div>
             <h1 class="terminkal-title"><i class="fas fa-calendar-alt"></i> {{ title }}</h1>
-            <p class="text-muted small mb-0">Europe/Athens · Ihre Termine, Durchführungen &amp; Zuweisungen</p>
+            <p class="text-muted small mb-0">Ihre Termine, Coachings &amp; Zuweisungen</p>
         </div>
         <div class="terminkal-nav-month d-flex align-items-center flex-wrap" style="gap: 8px;">
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.terminkalender', year=prev_y, month=prev_m) }}" title="Vorheriger Monat">&laquo;</a>
@@ -128,10 +146,32 @@
     </div>
 
     <div class="terminkal-legend">
-        {% if has_perm_dash %}<span><span class="term-cal-stat done" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">2</span> Eigene Durchführungen</span>{% endif %}
-        {% if has_perm_dash %}<span><span class="term-cal-stat done-others" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">3</span> Andere Coaches (sichtbare Teams)</span>{% endif %}
-        {% if has_perm_planned %}<span><span class="term-cal-stat planned" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">1</span> Geplant (offen)</span>{% endif %}
-        {% if has_perm_assigned %}<span><span class="term-cal-stat assigned" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">1</span> Aufgabe Deadline</span>{% endif %}
+        {% if has_perm_dash %}
+        <span class="terminkal-legend-item" title="Anzahl Ihrer eigenen Coachings in diesem Monat">
+            <span class="term-cal-legend-swatch done" aria-hidden="true"></span>
+            <span><span class="terminkal-legend-label">Eigene Coachings</span>
+                <span class="terminkal-legend-total">· {{ month_total_done_me }} im {{ month_title }}</span></span>
+        </span>
+        <span class="terminkal-legend-item" title="Coachings anderer Coaches in Ihrem Dashboard-Sichtbereich">
+            <span class="term-cal-legend-swatch done-others" aria-hidden="true"></span>
+            <span><span class="terminkal-legend-label">Andere Coaches</span>
+                <span class="terminkal-legend-total">· {{ month_total_done_others }} im {{ month_title }}</span></span>
+        </span>
+        {% endif %}
+        {% if has_perm_planned %}
+        <span class="terminkal-legend-item">
+            <span class="term-cal-legend-swatch planned" aria-hidden="true"></span>
+            <span><span class="terminkal-legend-label">Geplant (offen)</span>
+                <span class="terminkal-legend-total">· {{ month_total_planned }} im {{ month_title }}</span></span>
+        </span>
+        {% endif %}
+        {% if has_perm_assigned %}
+        <span class="terminkal-legend-item">
+            <span class="term-cal-legend-swatch assigned" aria-hidden="true"></span>
+            <span><span class="terminkal-legend-label">Aufgabe (Deadline)</span>
+                <span class="terminkal-legend-total">· {{ month_total_assigned }} im {{ month_title }}</span></span>
+        </span>
+        {% endif %}
     </div>
 
     {# —— Desktop Monatsgitter —— #}

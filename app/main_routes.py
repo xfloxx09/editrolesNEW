@@ -1293,6 +1293,16 @@ def terminkalender():
     week_next_start = week_start + timedelta(days=7)
     week_end = week_start + timedelta(days=6)
 
+    month_total_done_me = month_total_done_others = month_total_planned = month_total_assigned = 0
+    d_agg = first
+    while d_agg <= last:
+        bucket = counts.get(d_agg, {})
+        month_total_done_me += bucket.get('done_me', 0)
+        month_total_done_others += bucket.get('done_others', 0)
+        month_total_planned += bucket.get('planned', 0)
+        month_total_assigned += bucket.get('assigned', 0)
+        d_agg += timedelta(days=1)
+
     return render_template(
         'main/terminkalender.html',
         title='Terminkalender',
@@ -1319,6 +1329,10 @@ def terminkalender():
         has_perm_assigned=current_user.has_permission('view_assigned_coachings'),
         has_perm_dash=current_user.has_permission('view_coaching_dashboard'),
         calendar_dash_project=dash_kw.get('project'),
+        month_total_done_me=month_total_done_me,
+        month_total_done_others=month_total_done_others,
+        month_total_planned=month_total_planned,
+        month_total_assigned=month_total_assigned,
         config=current_app.config,
     )
 

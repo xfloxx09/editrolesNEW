@@ -134,7 +134,7 @@ def create_app(config_class=Config):
             ('reject_assigned_coaching', 'Reject assigned coaching task'),
             ('view_abteilung', 'Scope: access all projects of assigned Abteilung (department)'),
             ('planned_coachings', 'Geplante Coachings: Folgetermine planen, Liste und Start am geplanten Tag'),
-            ('terminkalender', 'Terminkalender anzeigen (Kalender mit Terminen und Durchführungen im Sichtbereich)'),
+            ('terminkalender', 'Terminkalender anzeigen (Kalender mit Terminen und Coachings im Sichtbereich)'),
         ]
         for name, desc in default_permissions:
             res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
