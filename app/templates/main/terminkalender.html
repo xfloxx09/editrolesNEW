@@ -14,7 +14,8 @@
 .terminkal-title { color: #e20074; font-weight: 700; font-size: 1.75rem; margin: 0; }
 .terminkal-nav-month .btn { min-width: 2.5rem; }
 .terminkal-legend-wrap {
-    margin-bottom: 1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0;
     border: 1px solid #3d3d3d;
     border-radius: 12px;
     background: linear-gradient(165deg, #2a2a2a 0%, #232323 100%);
@@ -225,60 +226,8 @@ details.terminkal-legend-wrap[open] .terminkal-legend-chev {
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.terminkalender', year=prev_y, month=prev_m) }}" title="Vorheriger Monat">&laquo;</a>
             <span class="px-2 font-weight-bold text-light" style="min-width: 10rem; text-align: center;">{{ month_title }}</span>
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.terminkalender', year=next_y, month=next_m) }}" title="Nächster Monat">&raquo;</a>
-            <a class="btn btn-outline-info btn-sm ml-md-2" href="{{ url_for('main.terminkalender') }}">Heute</a>
         </div>
     </div>
-
-    <details class="terminkal-legend-wrap">
-        <summary class="terminkal-legend-summary" aria-label="Legende ein- oder ausklappen">
-            <span><span class="terminkal-legend-title">Legende</span> <span class="text-muted small font-weight-normal">Farben &amp; Monatszahlen</span></span>
-            <i class="fas fa-chevron-down terminkal-legend-chev" aria-hidden="true"></i>
-        </summary>
-        <div class="terminkal-legend">
-        {% if has_perm_dash %}
-        {% if cal_show_own_coachings %}
-        <span class="terminkal-legend-item" title="Eigene Coachings in diesem Kalendermonat">
-            <span class="term-cal-stat done" aria-label="Eigene Coachings im Monat: {{ month_total_done_me }}">{{ month_total_done_me }}</span>
-            <span class="terminkal-legend-label">Eigene Coachings</span>
-        </span>
-        {% endif %}
-        <span class="terminkal-legend-item" title="{% if cal_show_own_coachings %}Coachings anderer Coaches{% else %}Coachings{% endif %} in Ihrem Dashboard-Sichtbereich">
-            <span class="term-cal-stat done-others" aria-label="{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %} im Monat: {{ month_total_done_others }}">{{ month_total_done_others }}</span>
-            <span class="terminkal-legend-label">{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %}</span>
-        </span>
-        {% endif %}
-        {% if has_perm_workshop %}
-        {% if cal_show_own_workshops %}
-        <span class="terminkal-legend-item" title="Eigene Workshops in diesem Kalendermonat">
-            <span class="term-cal-stat ws-done" aria-label="Eigene Workshops im Monat: {{ month_total_ws_me }}">{{ month_total_ws_me }}</span>
-            <span class="terminkal-legend-label">Eigene Workshops</span>
-        </span>
-        {% endif %}
-        <span class="terminkal-legend-item" title="{% if cal_show_own_workshops %}Workshops anderer Coaches{% else %}Workshops{% endif %} in Ihrem Sichtbereich">
-            <span class="term-cal-stat ws-others" aria-label="{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %} im Monat: {{ month_total_ws_others }}">{{ month_total_ws_others }}</span>
-            <span class="terminkal-legend-label">{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %}</span>
-        </span>
-        {% endif %}
-        {% if can_plan_workshop %}
-        <span class="terminkal-legend-item" title="Offen geplante Workshops in diesem Monat">
-            <span class="term-cal-stat planned-ws" aria-label="Geplant Workshop im Monat: {{ month_total_planned_ws }}">{{ month_total_planned_ws }}</span>
-            <span class="terminkal-legend-label">Gepl. Workshop</span>
-        </span>
-        {% endif %}
-        {% if has_perm_planned %}
-        <span class="terminkal-legend-item" title="Offene geplante Coachings in diesem Monat">
-            <span class="term-cal-stat planned" aria-label="Geplant offen im Monat: {{ month_total_planned }}">{{ month_total_planned }}</span>
-            <span class="terminkal-legend-label">Geplant (offen)</span>
-        </span>
-        {% endif %}
-        {% if has_perm_assigned %}
-        <span class="terminkal-legend-item" title="Zugewiesene Aufgaben mit Deadline in diesem Monat">
-            <span class="term-cal-stat assigned" aria-label="Aufgaben Deadline im Monat: {{ month_total_assigned }}">{{ month_total_assigned }}</span>
-            <span class="terminkal-legend-label">Aufgabe (Deadline)</span>
-        </span>
-        {% endif %}
-        </div>
-    </details>
 
     {# —— Desktop Monatsgitter —— #}
     <div class="term-cal-desktop">
@@ -388,6 +337,57 @@ details.terminkal-legend-wrap[open] .terminkal-legend-chev {
             {% endfor %}
         </div>
     </div>
+
+    <details class="terminkal-legend-wrap">
+        <summary class="terminkal-legend-summary" aria-label="Legende ein- oder ausklappen">
+            <span class="terminkal-legend-title">Legende</span>
+            <i class="fas fa-chevron-down terminkal-legend-chev" aria-hidden="true"></i>
+        </summary>
+        <div class="terminkal-legend">
+        {% if has_perm_dash %}
+        {% if cal_show_own_coachings %}
+        <span class="terminkal-legend-item" title="Eigene Coachings in diesem Kalendermonat">
+            <span class="term-cal-stat done" aria-label="Eigene Coachings im Monat: {{ month_total_done_me }}">{{ month_total_done_me }}</span>
+            <span class="terminkal-legend-label">Eigene Coachings</span>
+        </span>
+        {% endif %}
+        <span class="terminkal-legend-item" title="{% if cal_show_own_coachings %}Coachings anderer Coaches{% else %}Coachings{% endif %} in Ihrem Dashboard-Sichtbereich">
+            <span class="term-cal-stat done-others" aria-label="{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %} im Monat: {{ month_total_done_others }}">{{ month_total_done_others }}</span>
+            <span class="terminkal-legend-label">{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %}</span>
+        </span>
+        {% endif %}
+        {% if has_perm_workshop %}
+        {% if cal_show_own_workshops %}
+        <span class="terminkal-legend-item" title="Eigene Workshops in diesem Kalendermonat">
+            <span class="term-cal-stat ws-done" aria-label="Eigene Workshops im Monat: {{ month_total_ws_me }}">{{ month_total_ws_me }}</span>
+            <span class="terminkal-legend-label">Eigene Workshops</span>
+        </span>
+        {% endif %}
+        <span class="terminkal-legend-item" title="{% if cal_show_own_workshops %}Workshops anderer Coaches{% else %}Workshops{% endif %} in Ihrem Sichtbereich">
+            <span class="term-cal-stat ws-others" aria-label="{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %} im Monat: {{ month_total_ws_others }}">{{ month_total_ws_others }}</span>
+            <span class="terminkal-legend-label">{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %}</span>
+        </span>
+        {% endif %}
+        {% if can_plan_workshop %}
+        <span class="terminkal-legend-item" title="Offen geplante Workshops in diesem Monat">
+            <span class="term-cal-stat planned-ws" aria-label="Geplant Workshop im Monat: {{ month_total_planned_ws }}">{{ month_total_planned_ws }}</span>
+            <span class="terminkal-legend-label">Gepl. Workshop</span>
+        </span>
+        {% endif %}
+        {% if has_perm_planned %}
+        <span class="terminkal-legend-item" title="Offene geplante Coachings in diesem Monat">
+            <span class="term-cal-stat planned" aria-label="Geplant offen im Monat: {{ month_total_planned }}">{{ month_total_planned }}</span>
+            <span class="terminkal-legend-label">Geplant (offen)</span>
+        </span>
+        {% endif %}
+        {% if has_perm_assigned %}
+        <span class="terminkal-legend-item" title="Zugewiesene Aufgaben mit Deadline in diesem Monat">
+            <span class="term-cal-stat assigned" aria-label="Aufgaben Deadline im Monat: {{ month_total_assigned }}">{{ month_total_assigned }}</span>
+            <span class="terminkal-legend-label">Aufgabe (Deadline)</span>
+        </span>
+        {% endif %}
+        </div>
+    </details>
 
     <p class="mt-4 mb-0"><a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Zurück</a></p>
 </div>
