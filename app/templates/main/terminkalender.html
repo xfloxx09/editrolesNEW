@@ -13,9 +13,50 @@
 }
 .terminkal-title { color: #e20074; font-weight: 700; font-size: 1.75rem; margin: 0; }
 .terminkal-nav-month .btn { min-width: 2.5rem; }
+.terminkal-legend-wrap {
+    margin-bottom: 1rem;
+    border: 1px solid #3d3d3d;
+    border-radius: 12px;
+    background: linear-gradient(165deg, #2a2a2a 0%, #232323 100%);
+    overflow: hidden;
+}
+.terminkal-legend-summary {
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    padding: 0.65rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    transition: background 0.15s, color 0.15s;
+}
+.terminkal-legend-summary::-webkit-details-marker { display: none; }
+.terminkal-legend-summary:hover {
+    background: rgba(226, 0, 116, 0.08);
+    color: #fff;
+}
+.terminkal-legend-summary .terminkal-legend-title { color: #e20074; }
+.terminkal-legend-summary:hover .terminkal-legend-title { color: #ff4da6; }
+.terminkal-legend-chev {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: #9a9a9a;
+    transition: transform 0.2s ease;
+}
+details.terminkal-legend-wrap[open] .terminkal-legend-chev {
+    transform: rotate(180deg);
+}
 .terminkal-legend {
     display: flex; flex-wrap: wrap; gap: 1rem 1.5rem;
-    font-size: 0.9rem; margin-bottom: 1rem; color: #ccc;
+    font-size: 0.9rem;
+    padding: 0 1rem 1rem 1rem;
+    margin: 0;
+    color: #ccc;
+    border-top: 1px solid #3a3a3a;
 }
 .terminkal-legend-item {
     display: inline-flex;
@@ -188,7 +229,12 @@
         </div>
     </div>
 
-    <div class="terminkal-legend">
+    <details class="terminkal-legend-wrap">
+        <summary class="terminkal-legend-summary" aria-label="Legende ein- oder ausklappen">
+            <span><span class="terminkal-legend-title">Legende</span> <span class="text-muted small font-weight-normal">Farben &amp; Monatszahlen</span></span>
+            <i class="fas fa-chevron-down terminkal-legend-chev" aria-hidden="true"></i>
+        </summary>
+        <div class="terminkal-legend">
         {% if has_perm_dash %}
         {% if cal_show_own_coachings %}
         <span class="terminkal-legend-item" title="Eigene Coachings in diesem Kalendermonat">
@@ -231,7 +277,8 @@
             <span class="terminkal-legend-label">Aufgabe (Deadline)</span>
         </span>
         {% endif %}
-    </div>
+        </div>
+    </details>
 
     {# —— Desktop Monatsgitter —— #}
     <div class="term-cal-desktop">
