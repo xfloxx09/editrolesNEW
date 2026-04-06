@@ -1175,6 +1175,9 @@ def terminkalender():
     _, hi = athens_calendar_day_utc_naive_bounds(last)
 
     counts = defaultdict(lambda: {'done_me': 0, 'done_others': 0, 'planned': 0, 'assigned': 0})
+    cal_show_own_coachings = current_user.has_permission('add_coaching') or current_user.has_permission(
+        'coach'
+    )
 
     if current_user.has_permission('view_coaching_dashboard'):
         archiv_team = get_or_create_archiv_team()
@@ -1201,7 +1204,7 @@ def terminkalender():
                 q_done = q_done.filter(false())
         for row in q_done.options(joinedload(Coaching.team_member)).all():
             d = utc_naive_or_aware_to_athens_date(row.coaching_date)
-            if row.coach_id == current_user.id:
+            if cal_show_own_coachings and row.coach_id == current_user.id:
                 counts[d]['done_me'] += 1
             else:
                 counts[d]['done_others'] += 1
@@ -1333,6 +1336,7 @@ def terminkalender():
         month_total_done_others=month_total_done_others,
         month_total_planned=month_total_planned,
         month_total_assigned=month_total_assigned,
+        cal_show_own_coachings=cal_show_own_coachings,
         config=current_app.config,
     )
 

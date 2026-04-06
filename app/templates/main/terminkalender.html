@@ -187,13 +187,15 @@
 
     <div class="terminkal-legend">
         {% if has_perm_dash %}
+        {% if cal_show_own_coachings %}
         <span class="terminkal-legend-item" title="Eigene Coachings in diesem Kalendermonat">
             <span class="term-cal-stat done" aria-label="Eigene Coachings im Monat: {{ month_total_done_me }}">{{ month_total_done_me }}</span>
             <span class="terminkal-legend-label">Eigene Coachings</span>
         </span>
-        <span class="terminkal-legend-item" title="Coachings anderer Coaches in Ihrem Dashboard-Sichtbereich">
-            <span class="term-cal-stat done-others" aria-label="Andere Coaches im Monat: {{ month_total_done_others }}">{{ month_total_done_others }}</span>
-            <span class="terminkal-legend-label">Andere Coaches</span>
+        {% endif %}
+        <span class="terminkal-legend-item" title="{% if cal_show_own_coachings %}Coachings anderer Coaches{% else %}Coachings{% endif %} in Ihrem Dashboard-Sichtbereich">
+            <span class="term-cal-stat done-others" aria-label="{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %} im Monat: {{ month_total_done_others }}">{{ month_total_done_others }}</span>
+            <span class="terminkal-legend-label">{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %}</span>
         </span>
         {% endif %}
         {% if has_perm_planned %}
@@ -225,12 +227,12 @@
                     <td class="term-cal-cell {% if not cell.in_month %}other-month{% endif %} {% if cell.is_today %}is-today{% endif %}">
                         <div class="term-cal-daynum">{{ cell.date.day }}</div>
                         <div class="term-cal-stats">
-                            {% if has_perm_dash and cell.done_me > 0 %}
+                            {% if has_perm_dash and cal_show_own_coachings and cell.done_me > 0 %}
                             <a class="term-cal-stat done" title="Eigene Coachings — Dashboard (Tag)"
                                href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_me }}</a>
                             {% endif %}
                             {% if has_perm_dash and cell.done_others > 0 %}
-                            <a class="term-cal-stat done-others" title="Coachings anderer — Dashboard (Tag)"
+                            <a class="term-cal-stat done-others" title="{% if cal_show_own_coachings %}Coachings anderer{% else %}Coachings{% endif %} — Dashboard (Tag)"
                                href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }}</a>
                             {% endif %}
                             {% if has_perm_planned and cell.planned > 0 %}
@@ -272,12 +274,12 @@
                     <span class="term-cal-mobile-date">{{ cell.date.day }}.{{ '%02d'|format(cell.date.month) }}.</span>
                 </div>
                 <div class="term-cal-mobile-stats">
-                    {% if has_perm_dash and cell.done_me > 0 %}
+                    {% if has_perm_dash and cal_show_own_coachings and cell.done_me > 0 %}
                     <a class="term-cal-stat done" title="Eigene Coachings"
                        href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_me }}</a>
                     {% endif %}
                     {% if has_perm_dash and cell.done_others > 0 %}
-                    <a class="term-cal-stat done-others" title="Andere Coaches"
+                    <a class="term-cal-stat done-others" title="{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %}"
                        href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }}</a>
                     {% endif %}
                     {% if has_perm_planned and cell.planned > 0 %}
