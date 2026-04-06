@@ -1,0 +1,99 @@
+<style>
+    /* Einheitliche dunkle Tabs für Zugewiesene Coachings / Gesamtbericht */
+    .assigned-main-tabs {
+        border-bottom: 1px solid #444;
+    }
+    .assigned-main-tabs .nav-link {
+        color: #adb5bd;
+        background-color: #252528;
+        border: 1px solid #3a3a3f;
+        border-bottom: none;
+        margin-right: 4px;
+        border-radius: 8px 8px 0 0;
+        padding: 0.55rem 1rem;
+    }
+    .assigned-main-tabs .nav-link:hover:not(.disabled) {
+        color: #fff;
+        background-color: #35353a;
+        border-color: #555;
+    }
+    .assigned-main-tabs .nav-link.active {
+        color: #fff;
+        background-color: #1a1a1d;
+        border-color: #e20074 #444 transparent;
+        border-top: 2px solid #e20074;
+        font-weight: 600;
+    }
+    .assigned-main-tabs .nav-link.disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    /* Gesamtbericht: Buttons & Pagination (überschreibt BS4 .btn / .page-link Hover hell) */
+    .btn.gesamt-action-primary {
+        background-color: #e20074;
+        border-color: #e20074;
+        color: #fff;
+    }
+    .btn.gesamt-action-primary:hover,
+    .btn.gesamt-action-primary:focus,
+    .btn.gesamt-action-primary:not(:disabled):not(.disabled):active,
+    .btn.gesamt-action-primary:not(:disabled):not(.disabled).active {
+        background-color: #c0005e;
+        border-color: #c0005e;
+        color: #fff;
+        box-shadow: none;
+    }
+    .btn.gesamt-action-secondary {
+        background-color: #35353a;
+        border: 1px solid #555;
+        color: #e9ecef;
+    }
+    .btn.gesamt-action-secondary:hover,
+    .btn.gesamt-action-secondary:focus,
+    .btn.gesamt-action-secondary:not(:disabled):not(.disabled):active,
+    .btn.gesamt-action-secondary:not(:disabled):not(.disabled).active {
+        background-color: #45454d;
+        border-color: #6c757d;
+        color: #fff;
+        box-shadow: none;
+    }
+    .gesamt-pagination .page-link {
+        background-color: #252528;
+        border-color: #444;
+        color: #dee2e6;
+    }
+    .gesamt-pagination .page-item.active .page-link,
+    .gesamt-pagination .page-item.active .page-link:hover,
+    .gesamt-pagination .page-item.active .page-link:focus {
+        background-color: #e20074;
+        border-color: #e20074;
+        color: #fff;
+        box-shadow: none;
+    }
+    .gesamt-pagination .page-link:hover,
+    .gesamt-pagination .page-link:focus {
+        background-color: #35353a;
+        border-color: #555;
+        color: #fff;
+        box-shadow: none;
+    }
+    .gesamt-pagination .page-item.disabled .page-link {
+        background-color: #1a1a1d;
+        border-color: #333;
+        color: #6c757d;
+    }
+    .btn.gesamt-btn-report {
+        background-color: #0f6674;
+        border-color: #0f6674;
+        color: #fff;
+    }
+    .btn.gesamt-btn-report:hover,
+    .btn.gesamt-btn-report:focus,
+    .btn.gesamt-btn-report:not(:disabled):not(.disabled):active,
+    .btn.gesamt-btn-report:not(:disabled):not(.disabled).active {
+        background-color: #0d5c68;
+        border-color: #0d5c68;
+        color: #fff;
+        box-shadow: none;
+    }
+</style>

@@ -615,6 +615,26 @@ def _assigned_coachings_scope_query(project_filter_id=None):
     return q
 
 
+def _gesamtbericht_project_bar_extra(
+    tab_active, team_filter, coach_filter, member_filter, search_term, sort_by, sort_dir
+):
+    """Hidden Felder für Projektwechsel-Leiste auf dem Gesamtbericht."""
+    d = {'status': tab_active}
+    if team_filter:
+        d['team'] = team_filter
+    if coach_filter:
+        d['coach'] = coach_filter
+    if member_filter:
+        d['member'] = member_filter
+    if search_term:
+        d['search'] = search_term
+    if sort_by != 'deadline':
+        d['sort_by'] = sort_by
+    if sort_dir != 'asc':
+        d['sort_dir'] = sort_dir
+    return d
+
+
 @bp.route('/')
 @login_required
 def index():
@@ -2236,6 +2256,10 @@ def assigned_coachings_gesamtbericht():
     if project_filter and acc is not None and project_filter not in acc:
         project_filter = None
 
+    gesamt_pbe = _gesamtbericht_project_bar_extra(
+        tab_active, team_filter, coach_filter, member_filter, search_term, sort_by, sort_dir
+    )
+
     snapshot = _assigned_coachings_scope_query(project_filter_id=project_filter)
     report_count_current = 0
     report_count_completed = 0
@@ -2273,6 +2297,8 @@ def assigned_coachings_gesamtbericht():
             report_count_current=0,
             report_count_completed=0,
             assigned_tabs_project_id=assigned_tabs_project_id,
+            project_bar_endpoint='main.assigned_coachings_gesamtbericht',
+            project_bar_extra_hidden=gesamt_pbe,
             config=current_app.config,
         )
 
@@ -2376,6 +2402,8 @@ def assigned_coachings_gesamtbericht():
         report_count_current=report_count_current,
         report_count_completed=report_count_completed,
         assigned_tabs_project_id=assigned_tabs_project_id,
+        project_bar_endpoint='main.assigned_coachings_gesamtbericht',
+        project_bar_extra_hidden=gesamt_pbe,
         config=current_app.config,
     )
 
