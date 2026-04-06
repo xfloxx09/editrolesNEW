@@ -168,23 +168,12 @@
     </form>
     {% endif %}
 
-    <form id="coachingEinzelForm" method="POST" action="{% if coaching_readonly|default(false) %}#{% elif is_edit_mode %}{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.args.get('next')) }}{% else %}{{ url_for('main.add_coaching') }}{% endif %}" novalidate {% if coaching_readonly|default(false) %}onsubmit="return false;"{% endif %}>
-        {% if not coaching_readonly|default(false) %}
+    <form id="coachingEinzelForm" method="POST" action="{% if is_edit_mode %}{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.args.get('next')) }}{% else %}{{ url_for('main.add_coaching') }}{% endif %}" novalidate>
         {{ form.hidden_tag() }}
-        {% endif %}
         {% if not is_edit_mode|default(false) and selected_coaching_project_id is defined %}
         <input type="hidden" name="project_id" value="{{ selected_coaching_project_id }}">
         {% endif %}
-        {% if not coaching_readonly|default(false) %}
         <input type="hidden" name="fulfill_planned_id" id="fulfill_planned_id" value="{{ initial_fulfill_planned_id or '' }}">
-        {% endif %}
-
-        {% if coaching_readonly|default(false) %}
-        <div class="alert alert-secondary mb-3">
-            <strong>Nur Ansicht.</strong> Dieses Coaching gehört zu einem <strong>abgeschlossenen geplanten Coaching</strong> und kann nicht geändert werden.
-        </div>
-        <fieldset disabled class="border-0 p-0 m-0" style="min-width:0">
-        {% endif %}
 
         <!-- Abschnitt 1: Teammitglied & Coaching-Art -->
         <div class="form-section">
@@ -239,7 +228,6 @@
             </div>
         </div>
 
-        {% if not coaching_readonly|default(false) %}
         <!-- Abschnitt 2: nur sichtbar, wenn es passende zugewiesene Aufgaben gibt (oder Bearbeitung mit Verknüpfung) -->
         <div class="form-section" id="assignedCoachingSection" style="display: none;">
             <h4 class="section-title"><i class="fas fa-tasks"></i> Zugewiesene Aufgabe (optional)</h4>
@@ -271,16 +259,11 @@
             </div>
             <div id="plannedCoachingPendingWrap" class="mt-2 small text-muted"></div>
         </div>
-        {% endif %}
 
         <!-- Abschnitt 3: Leitfaden-Checkliste -->
         <div class="form-section">
             <h4 class="section-title"><i class="fas fa-check-circle"></i> Leitfaden-Checkliste</h4>
-            {% if coaching_readonly|default(false) %}
-            <p class="text-muted mb-3">Erfasste Werte zum Zeitpunkt der Speicherung.</p>
-            {% else %}
             <p class="text-muted mb-3">Klicken Sie auf die entsprechenden Icons, um den Status festzulegen.</p>
-            {% endif %}
 
             {% if not leitfaden_items %}
                 <div class="alert alert-warning mb-0">Keine aktiven Leitfaden-Punkte vorhanden. Ein Admin kann diese unter <strong>Admin → Coaching-Bogen verwalten</strong> (Tab Leitfaden) anlegen.</div>
@@ -358,11 +341,7 @@
         <input type="hidden" name="coach_notes" value="{{ form.coach_notes.data or '' }}">
         {% endif %}
 
-        {% if coaching_readonly|default(false) %}
-        </fieldset>
-        {% endif %}
-
-        {% if has_perm('planned_coachings') and not coaching_readonly|default(false) %}
+        {% if has_perm('planned_coachings') %}
         <div class="form-section">
             <button type="button" class="btn btn-outline-info btn-block mb-0" data-toggle="collapse" data-target="#planNextPanel" aria-expanded="false" aria-controls="planNextPanel">
                 <i class="fas fa-calendar-plus"></i> Nächstes Coaching planen
@@ -392,21 +371,12 @@
 
         <!-- Buttons -->
         <div class="form-group text-center">
-            {% if coaching_readonly|default(false) %}
-            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-secondary btn-lg px-5">
-                <i class="fas fa-arrow-left"></i> Zurück zu geplanten Coachings
-            </a>
-            <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-outline-secondary btn-lg ml-3 px-5">
-                <i class="fas fa-th-list"></i> Coaching-Dashboard
-            </a>
-            {% else %}
             <button type="submit" class="btn telekom-button btn-lg px-5">
                 <i class="fas fa-save"></i> {% if is_edit_mode %}Coaching aktualisieren{% else %}Coaching speichern{% endif %}
             </button>
             <a href="{{ request.args.get('next') or url_for('main.index') }}" class="btn btn-secondary btn-lg ml-3 px-5">
                 <i class="fas fa-times"></i> Abbrechen
             </a>
-            {% endif %}
         </div>
     </form>
 </div>
@@ -415,16 +385,12 @@
 {% block scripts %}
 {{ super() }}
 <script>
-window.__coachingReadonly = {{ coaching_readonly|default(false)|tojson }};
 window.__coachingEditAssignedId = {% if is_edit_mode and coaching and coaching.assigned_coaching_id %}{{ coaching.assigned_coaching_id }}{% else %}null{% endif %};
 window.__coachingEditMemberId = {% if is_edit_mode and coaching %}{{ coaching.team_member_id }}{% else %}null{% endif %};
 window.__initialFulfillPlannedId = {% if initial_fulfill_planned_id %}{{ initial_fulfill_planned_id }}{% else %}null{% endif %};
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    if (window.__coachingReadonly) {
-        return;
-    }
     const preselectAssignedId = {{ (form.assigned_coaching_id.data or 0)|int }};
     // --- 1. TCAP-Feld umschalten ---
     const styleSelect = document.getElementById('coaching_style');

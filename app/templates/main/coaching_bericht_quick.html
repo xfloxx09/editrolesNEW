@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block head_extra %}
+<style>
+.detail-card {
+    background-color: #333;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-top: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+.detail-section {
+    margin-bottom: 18px;
+}
+.detail-section:last-child {
+    margin-bottom: 0;
+}
+.detail-section-title {
+    color: #e20074;
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 5px;
+}
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+}
+.detail-item {
+    background-color: #2b2b2b;
+    border: 1px solid #3d3d3d;
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.detail-item-label {
+    color: #9a9a9a;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+}
+.detail-item-value {
+    color: #f5f5f5;
+    font-weight: 500;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.detail-item-leitfaden {
+    grid-column: 1 / -1;
+}
+.detail-item-leitfaden .detail-leitfaden-wrap {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+.detail-leitfaden-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 8px;
+    min-width: 0;
+}
+.detail-leitfaden-line strong {
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+.detail-leitfaden-line .detail-leitfaden-frac {
+    color: #b0b0b0;
+    font-size: 0.82rem;
+}
+.detail-leitfaden-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #1a1a1a;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+}
+.detail-leitfaden-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #b80a5a 0%, #e20074 100%);
+    max-width: 100%;
+}
+.badge-leitfaden {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-right: 5px;
+}
+.badge-ja {
+    background-color: #28a745;
+    color: white;
+}
+.badge-nein {
+    background-color: #dc3545;
+    color: white;
+}
+.badge-ka {
+    background-color: #6c757d;
+    color: white;
+}
+.leitfaden-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.notes-box {
+    background-color: #2b2b2b;
+    border-left: 3px solid #e20074;
+    padding: 15px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font-style: italic;
+    color: #ddd;
+    margin-top: 10px;
+}
+.bericht-score-bar {
+    height: 1.25rem;
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-2"><i class="fas fa-file-alt text-info"></i> Coaching-Bericht</h2>
+    <p class="text-muted mb-4">Kurzübersicht wie in der Coaching-Liste (Details) · Nur Ansicht</p>
+
+    {% if planned_ctx %}
+    <div class="card mb-4 border-secondary" style="background: #2b2b2b; color: #eee;">
+        <div class="card-body">
+            <h5 class="card-title text-white"><i class="fas fa-calendar-check"></i> Geplanter Termin (erfüllt)</h5>
+            <p class="mb-1"><strong>Geplant für:</strong> {{ planned_ctx.planned_for_date.strftime('%d.%m.%Y') }}</p>
+            {% if planned_ctx.project %}
+            <p class="mb-1 small text-muted">{{ planned_ctx.project.name }}</p>
+            {% endif %}
+            {% if planned_ctx.has_verabredung %}
+            <hr style="border-color: #555;">
+            <p class="mb-1 small"><strong>Vereinbarung:</strong></p>
+            <p class="mb-2 small" style="white-space: pre-wrap;">{% if planned_ctx.verabredung_text %}{{ planned_ctx.verabredung_text }}{% else %}<span class="text-muted">(ohne Text)</span>{% endif %}</p>
+            <p class="mb-0">
+                {% if planned_ctx.verabredung_erfuellt is sameas true %}
+                <span class="badge badge-success">Vereinbarung erfüllt</span>
+                {% elif planned_ctx.verabredung_erfuellt is sameas false %}
+                <span class="badge badge-warning text-dark">Vereinbarung nicht erfüllt</span>
+                {% else %}
+                <span class="badge badge-secondary">Vereinbarung — k. Angabe</span>
+                {% endif %}
+            </p>
+            {% endif %}
+            {% if planned_ctx.notes %}
+            <p class="mb-0 mt-2 small"><strong>Plan-Notizen:</strong> <span style="white-space: pre-wrap;">{{ planned_ctx.notes }}</span></p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mb-3 p-3 rounded border border-secondary" style="background: #252525;">
+        <div class="row small">
+            <div class="col-md-4 mb-2 mb-md-0">
+                <span class="text-muted d-block">Datum</span>
+                <strong>{{ coaching.coaching_date|athens_time }}</strong>
+            </div>
+            <div class="col-md-4 mb-2 mb-md-0">
+                <span class="text-muted d-block">Teammitglied</span>
+                <strong>{{ coaching.team_member.name if coaching.team_member else '–' }}</strong>
+                {% if coaching.team_member and coaching.team_member.team %}
+                <span class="text-muted">({{ coaching.team_member.team.name }})</span>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <span class="text-muted d-block">Coach</span>
+                <strong>{{ coaching.coach.coach_display_name if coaching.coach else '–' }}</strong>
+            </div>
+        </div>
+        <div class="row mt-2 small">
+            <div class="col-md-6">
+                <span class="text-muted d-block">Thema</span>
+                <strong>{{ coaching.coaching_subject or '–' }}</strong>
+            </div>
+            <div class="col-md-6">
+                <span class="text-muted d-block">Stil</span>
+                <strong>{{ coaching.coaching_style or '–' }}</strong>
+                {% if coaching.coaching_style == 'TCAP' and coaching.tcap_id %}
+                <span class="text-muted">· ID {{ coaching.tcap_id }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="detail-card">
+        <div class="detail-section">
+            <div class="detail-section-title">Basis-Informationen</div>
+            <div class="detail-grid" role="group" aria-label="Basis-Informationen">
+                <div class="detail-item">
+                    <span class="detail-item-label">Performance</span>
+                    <span class="detail-item-value">{{ coaching.performance_mark }}/10</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-item-label">Zeitaufwand</span>
+                    <span class="detail-item-value">{% if coaching.time_spent is not none %}{{ coaching.time_spent }} Min.{% else %}–{% endif %}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-item-label">Gesamt-Score</span>
+                    <span class="detail-item-value">
+                        <div class="progress bericht-score-bar">
+                            <div class="progress-bar telekom-progress-bar" role="progressbar" style="width: {{ coaching.overall_score }}%;" aria-valuenow="{{ coaching.overall_score }}" aria-valuemin="0" aria-valuemax="100">{{ coaching.overall_score }}%</div>
+                        </div>
+                    </span>
+                </div>
+                {% set lf = coaching.leitfaden_erfuellung_stats %}
+                <div class="detail-item detail-item-leitfaden">
+                    <span class="detail-item-label">Leitfaden</span>
+                    {% if lf %}
+                    <div class="detail-leitfaden-wrap">
+                        <div class="detail-leitfaden-line">
+                            <strong>{{ lf[0] }}%</strong>
+                            <span class="detail-leitfaden-frac">{{ lf[1] }}/{{ lf[2] }} erfüllt</span>
+                        </div>
+                        <div class="detail-leitfaden-bar" title="{{ lf[0] }}%"><span class="detail-leitfaden-bar-fill" style="width: {{ lf[0] }}%;"></span></div>
+                    </div>
+                    {% else %}
+                    <span class="detail-item-value text-muted">k. A.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-title">Leitfaden-Checkmarks</div>
+            <div class="leitfaden-list">
+                {% for name, value in coaching.leitfaden_fields_list %}
+                    {% if value == 'Ja' %}
+                    <span class="badge-leitfaden badge-ja">{{ name }}: ✓</span>
+                    {% elif value == 'Nein' %}
+                    <span class="badge-leitfaden badge-nein">{{ name }}: ✗</span>
+                    {% else %}
+                    <span class="badge-leitfaden badge-ka">{{ name }}: ?</span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% if coaching.coach_notes %}
+        <div class="detail-section">
+            <div class="detail-section-title">Notizen des Coaches</div>
+            <div class="notes-box">{{ coaching.coach_notes }}</div>
+        </div>
+        {% endif %}
+        {% if coaching.employee_review %}
+        <div class="detail-section">
+            <div class="detail-section-title">Rückmeldung Teammitglied</div>
+            <p class="mb-0 text-light"><strong>{{ coaching.employee_review.rating }}/5</strong>
+                {% if coaching.employee_review.comment %}
+                <span class="text-muted"> — </span>
+                <span style="white-space: pre-wrap;">{{ coaching.employee_review.comment }}</span>
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="form-group text-center mt-4 mb-5">
+        <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-secondary btn-lg px-4">
+            <i class="fas fa-arrow-left"></i> Geplante Coachings
+        </a>
+        <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-outline-secondary btn-lg ml-2 px-4">
+            <i class="fas fa-th-list"></i> Coaching-Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}

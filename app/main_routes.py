@@ -1,5 +1,5 @@
 # app/main_routes.py
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify, abort
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false, exists
 from sqlalchemy.exc import SQLAlchemyError
@@ -1497,7 +1497,16 @@ def add_coaching():
 @login_required
 @permission_required('edit_coaching')
 def view_fulfilled_plan_bericht(coaching_id):
-    coaching = Coaching.query.get_or_404(coaching_id)
+    coaching = (
+        Coaching.query.options(
+            joinedload(Coaching.team_member).joinedload(TeamMember.team),
+            joinedload(Coaching.coach),
+            selectinload(Coaching.leitfaden_responses).joinedload(CoachingLeitfadenResponse.item),
+            joinedload(Coaching.employee_review),
+        ).get(coaching_id)
+    )
+    if coaching is None:
+        abort(404)
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Sie haben keine Berechtigung, diesen Bericht einzusehen.', 'danger')
         return redirect(url_for('main.coaching_dashboard'))
@@ -1505,39 +1514,24 @@ def view_fulfilled_plan_bericht(coaching_id):
         flash('Dieses Coaching ist kein abgeschlossenes geplantes Coaching.', 'warning')
         return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
 
-    cut = (
-        sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
-        if current_user.role_name == ROLE_TEAMLEITER else []
+    planned_ctx = (
+        PlannedCoaching.query.filter_by(
+            fulfilled_coaching_id=coaching_id,
+            status='fulfilled',
+        )
+        .options(
+            joinedload(PlannedCoaching.team_member),
+            joinedload(PlannedCoaching.project),
+        )
+        .first()
     )
-    form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=cut)
-    form.update_team_member_choices(
-        exclude_archiv=True,
-        project_id=coaching.project_id,
-        include_member_ids=[coaching.team_member_id],
-    )
-    form.apply_bogen(coaching.project_id, coaching=coaching)
-    bogen_layout = bogen_layout_for_project(coaching.project_id)
-    leitfaden_items = leitfaden_items_for_coaching_edit(coaching)
-    selected_leitfaden_values = {}
-    if leitfaden_items:
-        try:
-            selected_leitfaden_values = {response.item_id: response.value for response in coaching.leitfaden_responses}
-        except SQLAlchemyError:
-            db.session.rollback()
-            selected_leitfaden_values = {}
 
     return render_template(
-        'main/add_coaching.html',
+        'main/coaching_bericht_quick.html',
         title='Coaching-Bericht',
-        form=form,
-        is_edit_mode=True,
-        coaching_readonly=True,
         coaching=coaching,
-        leitfaden_items=leitfaden_items,
-        selected_leitfaden_values=selected_leitfaden_values,
-        bogen_layout=bogen_layout,
+        planned_ctx=planned_ctx,
         config=current_app.config,
-        initial_fulfill_planned_id=None,
     )
 
 
@@ -1619,7 +1613,6 @@ def edit_coaching(coaching_id):
         title='Coaching bearbeiten',
         form=form,
         is_edit_mode=True,
-        coaching_readonly=False,
         coaching=coaching,
         leitfaden_items=leitfaden_items,
         selected_leitfaden_values=selected_leitfaden_values,
