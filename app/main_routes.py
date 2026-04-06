@@ -416,6 +416,53 @@ def _get_teams_for_team_view():
     return teams
 
 
+def _teams_for_assigned_coaching_filters(project_id_single=None, gesamt_acc=None, gesamt_project_filter=None):
+    """
+    Teams für die Team-Auswahl auf „Zugewiesene Coachings“ und Gesamtbericht — nur was die Rolle sehen darf
+    (wie Mein Team / PL-Dashboard: nicht alle Projektteams für Teamleiter/Coach mit coach_own_team_only).
+    """
+    archiv = get_or_create_archiv_team()
+    archiv_id = archiv.id
+    has_members = exists().where(TeamMember.team_id == Team.id)
+
+    if project_id_single is not None:
+        proj_ids = [project_id_single]
+    else:
+        if gesamt_project_filter is not None:
+            proj_ids = [gesamt_project_filter]
+        elif gesamt_acc is None:
+            proj_ids = None
+        else:
+            proj_ids = list(gesamt_acc) if gesamt_acc else []
+
+    q = Team.query.filter(
+        Team.id != archiv_id,
+        Team.name != ARCHIV_TEAM_NAME,
+    )
+    if proj_ids is not None:
+        if not proj_ids:
+            return []
+        q = q.filter(Team.project_id.in_(proj_ids))
+
+    if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+        q = q.filter(Team.active_for_coaching.is_(True), has_members)
+        return q.order_by(Team.name).all()
+
+    _led_team_ids = {tm.team_id for tm in current_user.team_members if tm.team_id}
+    if current_user.has_permission('coach_own_team_only') or current_user.role_name == ROLE_TEAMLEITER:
+        if not _led_team_ids:
+            return []
+        q = q.filter(Team.id.in_(_led_team_ids), Team.active_for_coaching.is_(True))
+        return q.order_by(Team.name).all()
+
+    if current_user.has_permission('view_pl_qm_dashboard') or current_user.has_permission('assign_coachings'):
+        q = q.filter(Team.active_for_coaching.is_(True), has_members)
+        return q.order_by(Team.name).all()
+
+    q = q.filter(Team.active_for_coaching.is_(True), has_members)
+    return q.order_by(Team.name).all()
+
+
 def _user_sees_all_teams_coaching_dashboard():
     if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
         return True
@@ -2034,6 +2081,52 @@ def assigned_coachings():
     if sort_dir not in ('asc', 'desc'):
         sort_dir = 'asc'
 
+    all_teams = _teams_for_assigned_coaching_filters(project_id_single=project_id)
+    visible_team_ids = [t.id for t in all_teams]
+    _allowed_teams = set(visible_team_ids)
+    if team_filter and team_filter not in _allowed_teams:
+        team_filter = None
+    if member_filter:
+        _mf = TeamMember.query.get(member_filter)
+        if not _mf or _mf.team_id not in _allowed_teams:
+            member_filter = None
+
+    _coach_scope = (
+        AssignedCoaching.query.join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+        .filter(Team.project_id == project_id)
+    )
+    if view_type == 'pl':
+        _coach_scope = _coach_scope.filter(AssignedCoaching.project_leader_id == current_user.id)
+    else:
+        _coach_scope = _coach_scope.filter(AssignedCoaching.coach_id == current_user.id)
+    if visible_team_ids:
+        _coach_scope = _coach_scope.filter(TeamMember.team_id.in_(visible_team_ids))
+    else:
+        _coach_scope = _coach_scope.filter(false())
+    coach_id_list = [r[0] for r in _coach_scope.with_entities(AssignedCoaching.coach_id).distinct().all() if r[0]]
+    if coach_filter and coach_filter not in coach_id_list:
+        coach_filter = None
+    all_coaches = (
+        list(User.query.filter(User.id.in_(coach_id_list)).all())
+        if coach_id_list else []
+    )
+    all_coaches.sort(key=lambda u: (u.coach_display_name or '').lower())
+
+    if visible_team_ids:
+        all_members = (
+            TeamMember.query.join(Team, TeamMember.team_id == Team.id)
+            .filter(
+                TeamMember.team_id.in_(visible_team_ids),
+                Team.name != ARCHIV_TEAM_NAME,
+                or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
+            )
+            .order_by(Team.name, TeamMember.name)
+            .all()
+        )
+    else:
+        all_members = []
+
     q = AssignedCoaching.query.options(
         joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team),
         joinedload(AssignedCoaching.coach),
@@ -2079,28 +2172,6 @@ def assigned_coachings():
         q = q.order_by(order_expr)
 
     assignments = q.paginate(page=page, per_page=15, error_out=False)
-
-    all_teams = Team.query.filter_by(project_id=project_id).filter(
-        Team.name != ARCHIV_TEAM_NAME
-    ).order_by(Team.name).all()
-
-    coach_id_rows = db.session.query(AssignedCoaching.coach_id).join(
-        TeamMember, AssignedCoaching.team_member_id == TeamMember.id
-    ).join(Team, TeamMember.team_id == Team.id).filter(
-        Team.project_id == project_id
-    ).distinct().all()
-    coach_id_list = [r[0] for r in coach_id_rows if r[0]]
-    all_coaches = (
-        list(User.query.filter(User.id.in_(coach_id_list)).all())
-        if coach_id_list else []
-    )
-    all_coaches.sort(key=lambda u: (u.coach_display_name or '').lower())
-
-    all_members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
-        Team.project_id == project_id,
-        Team.name != ARCHIV_TEAM_NAME,
-        or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
-    ).order_by(Team.name, TeamMember.name).all()
 
     member_performance = _member_performance_for_assigned_page(project_id) if view_type == 'pl' else []
 
@@ -2267,6 +2338,52 @@ def assigned_coachings_gesamtbericht():
 
     project_leader_filter = request.args.get('project_leader', type=int)
 
+    all_teams = _teams_for_assigned_coaching_filters(gesamt_acc=acc, gesamt_project_filter=project_filter)
+    visible_team_ids = [t.id for t in all_teams]
+    _allowed_team_set = set(visible_team_ids)
+    if team_filter and team_filter not in _allowed_team_set:
+        team_filter = None
+    if member_filter:
+        _gmem = TeamMember.query.get(member_filter)
+        if not _gmem or _gmem.team_id not in _allowed_team_set:
+            member_filter = None
+
+    coach_sub = (
+        db.session.query(AssignedCoaching.coach_id)
+        .join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+    )
+    if acc is not None:
+        coach_sub = coach_sub.filter(Team.project_id.in_(acc))
+    if project_filter:
+        coach_sub = coach_sub.filter(Team.project_id == project_filter)
+    if visible_team_ids:
+        coach_sub = coach_sub.filter(TeamMember.team_id.in_(visible_team_ids))
+    else:
+        coach_sub = coach_sub.filter(false())
+    g_coach_id_list = [r[0] for r in coach_sub.distinct().all() if r[0]]
+    if coach_filter and coach_filter not in g_coach_id_list:
+        coach_filter = None
+    all_coaches = (
+        list(User.query.filter(User.id.in_(g_coach_id_list)).all())
+        if g_coach_id_list else []
+    )
+    all_coaches.sort(key=lambda usr: (usr.coach_display_name or '').lower())
+
+    if visible_team_ids:
+        all_members = (
+            TeamMember.query.join(Team, TeamMember.team_id == Team.id)
+            .filter(
+                TeamMember.team_id.in_(visible_team_ids),
+                Team.name != ARCHIV_TEAM_NAME,
+                or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
+            )
+            .order_by(Team.name, TeamMember.name)
+            .all()
+        )
+    else:
+        all_members = []
+
     gesamt_pbe = _gesamtbericht_project_bar_extra(
         tab_active,
         team_filter,
@@ -2324,9 +2441,9 @@ def assigned_coachings_gesamtbericht():
             sort_dir=sort_dir,
             project_filter=project_filter,
             filter_projects=filter_projects,
-            all_teams=[],
-            all_coaches=[],
-            all_members=[],
+            all_teams=all_teams,
+            all_coaches=all_coaches,
+            all_members=all_members,
             report_count_current=0,
             report_count_completed=0,
             assigned_tabs_project_id=assigned_tabs_project_id,
@@ -2385,39 +2502,6 @@ def assigned_coachings_gesamtbericht():
         filter_projects = Project.query.order_by(Project.name).all()
     else:
         filter_projects = Project.query.filter(Project.id.in_(acc)).order_by(Project.name).all()
-
-    team_q = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
-    if project_filter:
-        team_q = team_q.filter(Team.project_id == project_filter)
-    elif acc is not None:
-        team_q = team_q.filter(Team.project_id.in_(acc))
-    all_teams = team_q.order_by(Team.name).all()
-
-    coach_sub = (
-        db.session.query(AssignedCoaching.coach_id)
-        .join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
-        .join(Team, TeamMember.team_id == Team.id)
-    )
-    if acc is not None:
-        coach_sub = coach_sub.filter(Team.project_id.in_(acc))
-    if project_filter:
-        coach_sub = coach_sub.filter(Team.project_id == project_filter)
-    coach_id_list = [r[0] for r in coach_sub.distinct().all() if r[0]]
-    all_coaches = (
-        list(User.query.filter(User.id.in_(coach_id_list)).all())
-        if coach_id_list else []
-    )
-    all_coaches.sort(key=lambda usr: (usr.coach_display_name or '').lower())
-
-    mem_q = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
-        Team.name != ARCHIV_TEAM_NAME,
-        or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
-    )
-    if project_filter:
-        mem_q = mem_q.filter(Team.project_id == project_filter)
-    elif acc is not None:
-        mem_q = mem_q.filter(Team.project_id.in_(acc))
-    all_members = mem_q.order_by(Team.name, TeamMember.name).all()
 
     return render_template(
         'main/assigned_coachings_gesamtbericht.html',
