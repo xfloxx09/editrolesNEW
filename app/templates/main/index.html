@@ -612,7 +612,24 @@
 
 {% block content %}
 <div class="coaching-dashboard-root">
+{% macro coaching_dash_href(page) -%}
+{%- if coaching_dashboard_url_project is not none and cal_date_filter is defined and cal_date_filter -%}
+{{ url_for('main.coaching_dashboard', page=page, period=current_period_filter, team=current_team_id_filter, search=current_search_term or '', project=coaching_dashboard_url_project, cal_date=cal_date_filter) }}
+{%- elif coaching_dashboard_url_project is not none -%}
+{{ url_for('main.coaching_dashboard', page=page, period=current_period_filter, team=current_team_id_filter, search=current_search_term or '', project=coaching_dashboard_url_project) }}
+{%- elif cal_date_filter is defined and cal_date_filter -%}
+{{ url_for('main.coaching_dashboard', page=page, period=current_period_filter, team=current_team_id_filter, search=current_search_term or '', cal_date=cal_date_filter) }}
+{%- else -%}
+{{ url_for('main.coaching_dashboard', page=page, period=current_period_filter, team=current_team_id_filter, search=current_search_term or '') }}
+{%- endif -%}
+{%- endmacro %}
 <h2>{{ title }}</h2>
+{% if cal_day_label is defined and cal_day_label %}
+<div class="alert alert-info mb-3">
+    <i class="fas fa-calendar-day"></i> Liste gefiltert auf den Kalendertag <strong>{{ cal_day_label }}</strong>.
+    <a href="{{ url_for('main.coaching_dashboard') }}" class="alert-link ml-2">Kalenderfilter aufheben</a>
+</div>
+{% endif %}
 
 <form method="GET" action="{{ url_for('main.coaching_dashboard') }}" id="filterForm" class="mb-4">
     <div class="form-row align-items-end">
@@ -674,6 +691,9 @@
         </div>
         {% if current_search_term %}
         <input type="hidden" name="search" value="{{ current_search_term }}">
+        {% endif %}
+        {% if cal_date_filter is defined and cal_date_filter %}
+        <input type="hidden" name="cal_date" value="{{ cal_date_filter }}">
         {% endif %}
         <div class="col-md-auto">
             <div class="form-group">
@@ -758,6 +778,9 @@
             <input type="hidden" name="team" value="{{ current_team_id_filter }}">
             {% if coaching_dashboard_url_project is not none %}
             <input type="hidden" name="project" value="{{ coaching_dashboard_url_project }}">
+            {% endif %}
+            {% if cal_date_filter is defined and cal_date_filter %}
+            <input type="hidden" name="cal_date" value="{{ cal_date_filter }}">
             {% endif %}
             <div class="input-group w-100">
                 <input type="text" name="search" class="form-control form-control-sm" placeholder="Suchen (Name, Coach, Thema...)" value="{{ current_search_term or '' }}" aria-label="Suchbegriff für Coachings">
@@ -1088,7 +1111,7 @@
 <nav aria-label="Coaching Navigation" class="mt-4">
     <ul class="pagination justify-content-center">
         {% if coachings_paginated.has_prev %}
-        <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=coachings_paginated.prev_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', page=coachings_paginated.prev_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">Vorherige</a></li>
+        <li class="page-item"><a class="page-link telekom-page-link" href="{{ coaching_dash_href(coachings_paginated.prev_num) }}">Vorherige</a></li>
         {% else %}
         <li class="page-item disabled"><span class="page-link">Vorherige</span></li>
         {% endif %}
@@ -1097,14 +1120,14 @@
                 {% if coachings_paginated.page == page_num %}
                 <li class="page-item active"><span class="page-link telekom-page-active">{{ page_num }}</span></li>
                 {% else %}
-                <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=page_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', page=page_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">{{ page_num }}</a></li>
+                <li class="page-item"><a class="page-link telekom-page-link" href="{{ coaching_dash_href(page_num) }}">{{ page_num }}</a></li>
                 {% endif %}
             {% else %}
             <li class="page-item disabled"><span class="page-link">...</span></li>
             {% endif %}
         {% endfor %}
         {% if coachings_paginated.has_next %}
-        <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.coaching_dashboard', page=coachings_paginated.next_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term, project=coaching_dashboard_url_project) if coaching_dashboard_url_project is not none else url_for('main.coaching_dashboard', page=coachings_paginated.next_num, period=current_period_filter, team=current_team_id_filter, search=current_search_term) }}">Nächste</a></li>
+        <li class="page-item"><a class="page-link telekom-page-link" href="{{ coaching_dash_href(coachings_paginated.next_num) }}">Nächste</a></li>
         {% else %}
         <li class="page-item disabled"><span class="page-link">Nächste</span></li>
         {% endif %}

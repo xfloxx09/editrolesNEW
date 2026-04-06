@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 560px;">
+    <h2 class="mb-3" style="color:#e20074;">Geplantes Coaching</h2>
+    <p class="text-muted">Termin: <strong>{{ plan_date.strftime('%d.%m.%Y') }}</strong></p>
+
+    <form method="post" class="card card-body bg-dark border-secondary text-light">
+        <input type="hidden" name="plan_date" value="{{ plan_date.isoformat() }}">
+        <input type="hidden" name="project_id" value="{{ project_id }}">
+
+        <div class="form-group">
+            <label for="team_member_id">Teammitglied</label>
+            <select name="team_member_id" id="team_member_id" class="form-control" required>
+                <option value="">— Bitte wählen —</option>
+                {% for m in members %}
+                <option value="{{ m.id }}">{{ m.name }} ({{ m.team.name if m.team else '' }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="notes">Notizen</label>
+            <textarea name="notes" id="notes" class="form-control" rows="2" placeholder="Optional"></textarea>
+        </div>
+        <div class="form-check mb-2">
+            <input type="checkbox" class="form-check-input" name="has_verabredung" id="has_verabredung" value="1">
+            <label class="form-check-label" for="has_verabredung">Vereinbarung mit Text</label>
+        </div>
+        <div class="form-group" id="verab_wrap" style="display:none;">
+            <label for="verabredung_text">Text der Vereinbarung</label>
+            <textarea name="verabredung_text" id="verabredung_text" class="form-control" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn telekom-button btn-block">Speichern</button>
+        <a href="{{ url_for('main.terminkalender', year=plan_date.year, month=plan_date.month) }}" class="btn btn-outline-secondary btn-block mt-2">Abbrechen</a>
+    </form>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var cb = document.getElementById('has_verabredung');
+    var w = document.getElementById('verab_wrap');
+    if (cb && w) {
+        function t() { w.style.display = cb.checked ? 'block' : 'none'; }
+        cb.addEventListener('change', t);
+        t();
+    }
+});
+</script>
+{% endblock %}

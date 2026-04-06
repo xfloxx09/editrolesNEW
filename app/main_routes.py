@@ -33,8 +33,11 @@ from app.utils import (
     today_athens_date,
     planned_coaching_can_start_today,
     create_planned_coaching_from_coaching_form,
+    athens_calendar_day_utc_naive_bounds,
+    utc_naive_or_aware_to_athens_date,
 )
 from datetime import datetime, timezone, timedelta, date
+from collections import defaultdict
 import calendar
 
 bp = Blueprint('main', __name__)
@@ -757,6 +760,11 @@ def index():
             or u.has_permission('assign_coachings')
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
+        1 if (
+            u.has_permission('view_coaching_dashboard')
+            or u.has_permission('planned_coachings')
+            or u.has_permission('view_assigned_coachings')
+        ) else 0,
         1 if u.has_permission('planned_coachings') else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
@@ -871,7 +879,19 @@ def coaching_dashboard():
             vid = get_visible_project_id()
             dashboard_project_id = vid if (vid and vid in accessible) else accessible[0]
 
-    start_date, end_date = calculate_date_range(period_arg)
+    cal_date_str = (request.args.get('cal_date') or '').strip()
+    cal_date_active = None
+    if cal_date_str:
+        try:
+            cal_date_active = datetime.strptime(cal_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            cal_date_active = None
+            cal_date_str = ''
+
+    if cal_date_active:
+        start_date, end_date = athens_calendar_day_utc_naive_bounds(cal_date_active)
+    else:
+        start_date, end_date = calculate_date_range(period_arg)
     if start_date:
         scope_filters.append(Coaching.coaching_date >= start_date)
     if end_date:
@@ -1057,6 +1077,8 @@ def coaching_dashboard():
             else:
                 coaching_dashboard_url_project = dashboard_project_id
 
+    cal_day_label = cal_date_active.strftime('%d.%m.%Y') if cal_date_active else None
+
     return render_template('main/index.html',
                            title='Coaching Dashboard',
                            coachings_paginated=coachings_paginated,
@@ -1082,7 +1104,269 @@ def coaching_dashboard():
                            can_leave_review=can_leave_review,
                            review_form_dashboard=review_form_dashboard,
                            review_redirect_next=review_redirect_next,
+                           cal_date_filter=cal_date_str if cal_date_active else None,
+                           cal_day_label=cal_day_label,
                            config=current_app.config)
+
+
+def _terminkalender_coaching_dashboard_project_kw():
+    """project=… für Links zum Coaching-Dashboard (Kalenderfilter)."""
+    acc = get_accessible_project_ids()
+    raw = (request.args.get('project') or '').strip()
+    if raw.lower() == 'all':
+        if acc is not None and len(acc) > 1:
+            return {'project': 'all'}
+        return {}
+    if raw.isdigit():
+        pid = int(raw)
+        if acc is None or (acc and pid in acc):
+            return {'project': pid}
+    vid = get_visible_project_id()
+    if acc is None:
+        return {'project': vid} if vid else {}
+    if not acc:
+        return {}
+    if len(acc) == 1:
+        return {'project': acc[0]}
+    if vid and vid in acc:
+        return {'project': vid}
+    return {'project': 'all'}
+
+
+@bp.route('/terminkalender')
+@login_required
+@any_permission_required('view_coaching_dashboard', 'planned_coachings', 'view_assigned_coachings')
+def terminkalender():
+    today = today_athens_date()
+    try:
+        year = request.args.get('year', type=int) or today.year
+        month = request.args.get('month', type=int) or today.month
+        date(year, month, 1)
+    except ValueError:
+        year, month = today.year, today.month
+
+    acc = get_accessible_project_ids()
+    first = date(year, month, 1)
+    last = date(year, month, calendar.monthrange(year, month)[1])
+    lo, _ = athens_calendar_day_utc_naive_bounds(first)
+    _, hi = athens_calendar_day_utc_naive_bounds(last)
+
+    counts = defaultdict(lambda: {'done': 0, 'planned': 0, 'assigned': 0})
+
+    if current_user.has_permission('view_coaching_dashboard'):
+        q_done = (
+            Coaching.query.filter(
+                Coaching.coach_id == current_user.id,
+                Coaching.coaching_date >= lo,
+                Coaching.coaching_date <= hi,
+            )
+            .join(TeamMember, Coaching.team_member_id == TeamMember.id)
+            .join(Team, TeamMember.team_id == Team.id)
+        )
+        if acc is not None:
+            if acc:
+                q_done = q_done.filter(Team.project_id.in_(acc))
+            else:
+                q_done = q_done.filter(false())
+        for row in q_done.options(joinedload(Coaching.team_member)).all():
+            d = utc_naive_or_aware_to_athens_date(row.coaching_date)
+            counts[d]['done'] += 1
+
+    if current_user.has_permission('planned_coachings'):
+        q_pl = PlannedCoaching.query.filter(
+            PlannedCoaching.coach_id == current_user.id,
+            PlannedCoaching.status == 'open',
+            PlannedCoaching.planned_for_date >= first,
+            PlannedCoaching.planned_for_date <= last,
+        )
+        if acc is not None:
+            if acc:
+                q_pl = q_pl.filter(
+                    or_(PlannedCoaching.project_id.in_(acc), PlannedCoaching.project_id.is_(None))
+                )
+            else:
+                q_pl = q_pl.filter(false())
+        for pc in q_pl.all():
+            counts[pc.planned_for_date]['planned'] += 1
+
+    if current_user.has_permission('view_assigned_coachings'):
+        q_as = (
+            AssignedCoaching.query.filter(
+                AssignedCoaching.coach_id == current_user.id,
+                AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']),
+                AssignedCoaching.deadline >= lo,
+                AssignedCoaching.deadline <= hi,
+            )
+            .join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
+            .join(Team, TeamMember.team_id == Team.id)
+        )
+        if acc is not None:
+            if acc:
+                q_as = q_as.filter(Team.project_id.in_(acc))
+            else:
+                q_as = q_as.filter(false())
+        for asn in q_as.all():
+            ad = utc_naive_or_aware_to_athens_date(asn.deadline)
+            if first <= ad <= last:
+                counts[ad]['assigned'] += 1
+
+    def enrich_day(d):
+        c = counts.get(d, {'done': 0, 'planned': 0, 'assigned': 0})
+        is_past = d < today
+        is_future = d > today
+        return {
+            'date': d,
+            'in_month': d.month == month,
+            'is_today': d == today,
+            'is_past': is_past,
+            'is_future': is_future,
+            'done': c['done'],
+            'planned': c['planned'],
+            'assigned': c['assigned'],
+            'show_add': not is_past and (current_user.has_permission('add_coaching') or current_user.has_permission('planned_coachings')),
+        }
+
+    cal = calendar.Calendar(firstweekday=calendar.MONDAY)
+    month_weeks = [[enrich_day(d) for d in wk] for wk in cal.monthdatescalendar(year, month)]
+
+    week_start_raw = (request.args.get('week_start') or '').strip()
+    try:
+        week_start = datetime.strptime(week_start_raw, '%Y-%m-%d').date() if week_start_raw else today
+    except ValueError:
+        week_start = today
+    week_start = week_start - timedelta(days=week_start.weekday())
+    week_days = [enrich_day(week_start + timedelta(days=i)) for i in range(7)]
+
+    dash_kw = _terminkalender_coaching_dashboard_project_kw()
+    proj_raw = (request.args.get('project') or '').strip()
+
+    can_plan = current_user.has_permission('planned_coachings')
+    add_coaching_project_id = _resolve_coaching_workshop_project_id() if current_user.has_permission('add_coaching') else None
+    if not add_coaching_project_id and proj_raw.isdigit():
+        add_coaching_project_id = int(proj_raw) if (acc is None or int(proj_raw) in acc) else None
+
+    month_title = f'{get_month_name_german(month)} {year}'
+    if month == 1:
+        prev_y, prev_m = year - 1, 12
+    else:
+        prev_y, prev_m = year, month - 1
+    if month == 12:
+        next_y, next_m = year + 1, 1
+    else:
+        next_y, next_m = year, month + 1
+    week_prev_start = week_start - timedelta(days=7)
+    week_next_start = week_start + timedelta(days=7)
+    week_end = week_start + timedelta(days=6)
+
+    return render_template(
+        'main/terminkalender.html',
+        title='Terminkalender',
+        year=year,
+        month=month,
+        month_title=month_title,
+        prev_y=prev_y,
+        prev_m=prev_m,
+        next_y=next_y,
+        next_m=next_m,
+        week_prev_start=week_prev_start,
+        week_next_start=week_next_start,
+        week_end=week_end,
+        month_weeks=month_weeks,
+        week_days=week_days,
+        week_start=week_start,
+        today=today,
+        dash_kw=dash_kw,
+        proj_query=proj_raw,
+        can_plan=can_plan,
+        can_add_coaching=current_user.has_permission('add_coaching'),
+        add_coaching_project_id=add_coaching_project_id,
+        has_perm_planned=current_user.has_permission('planned_coachings'),
+        has_perm_assigned=current_user.has_permission('view_assigned_coachings'),
+        has_perm_dash=current_user.has_permission('view_coaching_dashboard'),
+        calendar_dash_project=dash_kw.get('project'),
+        config=current_app.config,
+    )
+
+
+@bp.route('/terminkalender/plan', methods=['GET', 'POST'])
+@login_required
+@permission_required('planned_coachings')
+def terminkalender_plan():
+    today = today_athens_date()
+    plan_date_str = (request.args.get('day') if request.method == 'GET' else request.form.get('plan_date')) or ''
+    try:
+        plan_date = datetime.strptime(plan_date_str.strip(), '%Y-%m-%d').date()
+    except ValueError:
+        flash('Ungültiges Datum.', 'warning')
+        return redirect(url_for('main.terminkalender'))
+
+    if plan_date < today:
+        flash('Ein Termin kann nicht in der Vergangenheit liegen.', 'warning')
+        return redirect(url_for('main.terminkalender'))
+
+    accessible = get_accessible_project_ids()
+    if request.method == 'POST':
+        project_id = request.form.get('project_id', type=int)
+    else:
+        project_id = _resolve_coaching_workshop_project_id()
+
+    if accessible is not None:
+        if not project_id or project_id not in accessible:
+            project_id = get_visible_project_id()
+        if not project_id or project_id not in accessible:
+            flash('Bitte ein gültiges Projekt wählen.', 'danger')
+            return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+    elif not project_id:
+        flash('Kein Projekt ausgewählt.', 'danger')
+        return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+
+    if request.method == 'POST':
+        member_id = request.form.get('team_member_id', type=int)
+        tm = TeamMember.query.get(member_id) if member_id else None
+        if not tm or not tm.team or tm.team.project_id != project_id:
+            flash('Bitte ein gültiges Teammitglied wählen.', 'warning')
+            return redirect(url_for('main.terminkalender_plan', day=plan_date.isoformat()))
+        if not team_member_eligible_for_new_coaching(tm):
+            flash('Dieses Team ist für Coachings deaktiviert.', 'warning')
+            return redirect(url_for('main.terminkalender_plan', day=plan_date.isoformat()))
+        notes = (request.form.get('notes') or '').strip()
+        has_v = request.form.get('has_verabredung') == '1'
+        vtext = (request.form.get('verabredung_text') or '').strip()
+        create_planned_coaching_from_coaching_form(
+            coach_user_id=current_user.id,
+            team_member_id=member_id,
+            planned_for_date=plan_date,
+            project_id=project_id,
+            team_id=tm.team_id,
+            notes=notes,
+            has_verabredung=has_v,
+            verabredung_text=vtext if has_v else '',
+            source_coaching_id=None,
+        )
+        db.session.commit()
+        flash('Geplantes Coaching wurde angelegt.', 'success')
+        return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+
+    members = (
+        TeamMember.query.join(Team, TeamMember.team_id == Team.id)
+        .filter(
+            Team.project_id == project_id,
+            Team.name != ARCHIV_TEAM_NAME,
+            Team.active_for_coaching.is_(True),
+        )
+        .order_by(Team.name, TeamMember.name)
+        .all()
+    )
+    members = [m for m in members if team_member_eligible_for_new_coaching(m)]
+    return render_template(
+        'main/terminkalender_plan.html',
+        title='Geplantes Coaching anlegen',
+        plan_date=plan_date,
+        project_id=project_id,
+        members=members,
+        today=today,
+        config=current_app.config,
+    )
 
 
 @bp.route('/my-coachings')

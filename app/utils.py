@@ -1,5 +1,5 @@
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, date, time, timezone
 from zoneinfo import ZoneInfo
 from flask_login import current_user
 from flask import flash, redirect, url_for
@@ -487,6 +487,27 @@ def get_or_create_role(role_name):
 def today_athens_date():
     """Calendar date in Europe/Athens for 'Jetzt coachen' / planned-day gating."""
     return datetime.now(ZoneInfo('Europe/Athens')).date()
+
+
+def athens_calendar_day_utc_naive_bounds(d):
+    """
+    Europe/Athens local calendar day d → (start, end) as naive UTC datetimes for DB compare.
+    """
+    z = ZoneInfo('Europe/Athens')
+    lo = datetime.combine(d, time.min, tzinfo=z).astimezone(timezone.utc).replace(tzinfo=None)
+    hi = datetime.combine(d, time.max, tzinfo=z).astimezone(timezone.utc).replace(tzinfo=None)
+    return lo, hi
+
+
+def utc_naive_or_aware_to_athens_date(dt):
+    """Coaching-Zeitstempel (naiv=UTC) → Datum im Kalender Europe/Athens."""
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        u = dt.replace(tzinfo=timezone.utc)
+    else:
+        u = dt.astimezone(timezone.utc)
+    return u.astimezone(ZoneInfo('Europe/Athens')).date()
 
 
 def planned_coaching_can_start_today(planned_for_date):
