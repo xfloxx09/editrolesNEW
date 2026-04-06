@@ -292,8 +292,19 @@
     max-width: 100%;
     overflow-x: hidden;
 }
-/* Coaching-Liste: unter md als Karten (lesbar am Handy) */
+@media (min-width: 768px) {
+    .coaching-dashboard-fixed-table tr.coaching-dash-row-desktop {
+        display: table-row !important;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-mobile-card-row {
+        display: none !important;
+    }
+}
+/* Coaching-Liste: unter md als Karte, zuerst nur Datum, aufklappen für Übersicht + „i“ für volle Details */
 @media (max-width: 767.98px) {
+    .coaching-dashboard-fixed-table tr.coaching-dash-row-desktop {
+        display: none !important;
+    }
     .coaching-dashboard-table-wrap {
         overflow-x: visible;
         padding-left: 2px;
@@ -305,9 +316,6 @@
     }
     .coaching-dashboard-fixed-table.table-hover tbody tr:hover {
         background-color: transparent;
-    }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row:hover {
-        background: rgba(255, 255, 255, 0.07);
     }
     .coaching-dashboard-fixed-table {
         table-layout: auto;
@@ -325,54 +333,93 @@
         display: block;
         width: 100%;
     }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row {
-        margin-top: 14px;
-        margin-bottom: 6px;
-        background: rgba(255, 255, 255, 0.045);
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        border-radius: 10px;
-        overflow: hidden;
+    .coaching-dashboard-fixed-table tr.coaching-mobile-card-row {
+        display: block !important;
+        margin-top: 16px;
+        margin-bottom: 0;
     }
-    .coaching-dashboard-fixed-table tbody tr.coaching-dash-row:first-child {
+    .coaching-dashboard-fixed-table tbody > tr.coaching-dash-row-desktop:first-child + tr.coaching-mobile-card-row {
         margin-top: 0;
     }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row > td {
+    .coaching-mobile-card {
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.045);
+    }
+    .coaching-mobile-expand-header {
+        width: 100%;
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 16px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .coaching-mobile-expand-header:active {
+        background: rgba(255, 255, 255, 0.06);
+    }
+    .coaching-mobile-expand-header .coaching-mobile-datum-text {
+        font-variant-numeric: tabular-nums;
+        flex: 1;
+        min-width: 0;
+    }
+    .coaching-mobile-expand-header .coaching-mobile-chevron {
+        flex-shrink: 0;
+        opacity: 0.75;
+        transition: transform 0.2s ease;
+    }
+    .coaching-mobile-expand-header:not(.collapsed) .coaching-mobile-chevron {
+        transform: rotate(180deg);
+    }
+    .coaching-mobile-expand-body {
+        border-top: 1px solid rgba(255, 255, 255, 0.09);
+        background: rgba(0, 0, 0, 0.12);
+    }
+    .coaching-mobile-expand-body .coaching-mobile-field {
         display: grid;
         grid-template-columns: minmax(0, 42%) minmax(0, 58%);
         gap: 8px 10px;
         align-items: center;
-        padding: 12px 14px !important;
-        border: none;
+        padding: 12px 14px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.09);
         font-size: 0.9rem;
         text-align: left;
-        width: 100% !important;
-        max-width: none;
     }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row > td::before {
+    .coaching-mobile-expand-body .coaching-mobile-field:last-child {
+        border-bottom: none;
+    }
+    .coaching-mobile-expand-body .coaching-mobile-field::before {
         content: attr(data-label);
+        grid-column: 1;
         font-size: 0.68rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: rgba(255, 255, 255, 0.55);
         line-height: 1.25;
-        align-self: center;
     }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row > td > .cdt-mobile-val {
+    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val {
         grid-column: 2;
         justify-self: end;
         text-align: right;
         min-width: 0;
         width: 100%;
     }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row > td.cdt-score > .cdt-mobile-val {
+    .coaching-mobile-expand-body .coaching-mobile-field.coaching-mobile-field-score > .coaching-mobile-val {
         display: block;
         justify-self: stretch;
         text-align: center;
     }
-    .coaching-dashboard-fixed-table tr.coaching-dash-row > td.cdt-team {
-        white-space: normal;
+    .coaching-mobile-expand-body .coaching-mobile-field.coaching-mobile-field-team .coaching-mobile-val {
         overflow-wrap: break-word;
     }
     .coaching-dashboard-fixed-table tr.coaching-dash-note-row td {
@@ -649,7 +696,8 @@
             {% set dash_coach_name = coaching.coach.coach_display_name if coaching.coach else 'N/A' %}
             {% set dash_thema = coaching.coaching_subject if coaching.coaching_subject else '-' %}
             {% set dash_stil = coaching.coaching_style if coaching.coaching_style else '-' %}
-            <tr class="coaching-dash-row">
+            {% set dash_colspan = 13 if can_leave_review else 11 %}
+            <tr class="coaching-dash-row coaching-dash-row-desktop">
                 <td class="cdt-datum" data-label="Datum"><span class="cdt-mobile-val">{{ coaching.coaching_date|athens_time }}</span></td>
                 <td class="cdt-mitglied" data-label="Teammitglied"><span class="cdt-mobile-val">{{ dash_member_name }}</span></td>
                 <td class="cdt-team" data-label="Team"><span class="cdt-mobile-val">{{ dash_team_name }}</span></td>
@@ -708,9 +756,101 @@
                     {% endif %}
                 </span></td>
             </tr>
+            <tr class="coaching-mobile-card-row">
+                <td colspan="{{ dash_colspan }}" class="p-0 border-0">
+                    <div class="coaching-mobile-card">
+                        <button type="button" class="coaching-mobile-expand-header collapsed"
+                                data-toggle="collapse" data-target="#coachingMobileSummary{{ coaching.id }}"
+                                aria-expanded="false" aria-controls="coachingMobileSummary{{ coaching.id }}">
+                            <span class="coaching-mobile-datum-text">{{ coaching.coaching_date|athens_time }}</span>
+                            <i class="fas fa-chevron-down coaching-mobile-chevron" aria-hidden="true"></i>
+                        </button>
+                        <div id="coachingMobileSummary{{ coaching.id }}" class="collapse coaching-mobile-expand-body">
+                            <div class="coaching-mobile-field coaching-mobile-field-member" data-label="Teammitglied">
+                                <span class="coaching-mobile-val">{{ dash_member_name }}</span>
+                            </div>
+                            <div class="coaching-mobile-field coaching-mobile-field-team" data-label="Team">
+                                <span class="coaching-mobile-val">{{ dash_team_name }}</span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Coach">
+                                <span class="coaching-mobile-val">{{ dash_coach_name }}</span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Thema">
+                                <span class="coaching-mobile-val">{{ dash_thema }}</span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Stil">
+                                <span class="coaching-mobile-val">{{ dash_stil }}</span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Note">
+                                <span class="coaching-mobile-val">{{ coaching.performance_mark if coaching.performance_mark is not none else '-'}}</span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Min.">
+                                <span class="coaching-mobile-val">{{ coaching.time_spent if coaching.time_spent is not none else '-' }}</span>
+                            </div>
+                            <div class="coaching-mobile-field coaching-mobile-field-score" data-label="Score">
+                                <div class="coaching-mobile-val">
+                                    <div class="progress coaching-dashboard-score-bar">
+                                        <div class="progress-bar telekom-progress-bar" role="progressbar" style="width: {{ coaching.overall_score }}%;" aria-valuenow="{{ coaching.overall_score }}" aria-valuemin="0" aria-valuemax="100">
+                                            {{ coaching.overall_score }}%
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% if can_leave_review %}
+                            <div class="coaching-mobile-field" data-label="Ihre Bewertung">
+                                <span class="coaching-mobile-val">
+                                    {% if coached_self %}
+                                        {% if coaching.employee_review %}
+                                            {{ coaching.employee_review.rating }}/5
+                                            {% if coaching.employee_review.comment %}
+                                            <button type="button" class="btn btn-sm btn-outline-secondary ml-1 align-baseline btn-review-note py-0 px-2" data-toggle="collapse" data-target="#dashCoachingNote{{ coaching.id }}" aria-expanded="false" title="Kommentar">+</button>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Rückmeldung">
+                                <span class="coaching-mobile-val">
+                                    {% if coached_self %}
+                                        {% if coaching.employee_review %}
+                                        <span class="text-success" title="Bewertung abgegeben"><i class="fas fa-check-circle fa-lg"></i></span>
+                                        {% else %}
+                                        <button type="button" class="btn btn-sm btn-outline-info review-open-btn-dash"
+                                                data-coaching-id="{{ coaching.id }}">Bewertung abgeben</button>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endif %}
+                            <div class="coaching-mobile-field" data-label="Details">
+                                <span class="coaching-mobile-val">
+                                    <button class="btn-icon-circle" type="button" data-toggle="collapse" data-target="#coachingDetails{{ coaching.id }}" aria-expanded="false" aria-controls="coachingDetails{{ coaching.id }}" title="Weitere Details">
+                                        <i class="fas fa-info"></i>
+                                    </button>
+                                </span>
+                            </div>
+                            <div class="coaching-mobile-field" data-label="Bearbeiten">
+                                <span class="coaching-mobile-val">
+                                    {% if current_user.id == coaching.coach_id or current_user.role == config.ROLE_ADMIN %}
+                                    <a href="{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.url) }}" class="btn btn-sm btn-outline-secondary" title="Bearbeiten">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
             {% if coached_self and coaching.employee_review and coaching.employee_review.comment %}
             <tr class="coaching-dash-note-row">
-                <td colspan="{{ 13 if can_leave_review else 11 }}" class="p-0 border-0">
+                <td colspan="{{ dash_colspan }}" class="p-0 border-0">
                     <div class="collapse" id="dashCoachingNote{{ coaching.id }}">
                         <div class="review-comment-panel small text-muted m-2">{{ coaching.employee_review.comment }}</div>
                     </div>
@@ -718,7 +858,7 @@
             </tr>
             {% endif %}
             <tr class="collapse coaching-detail-row" id="coachingDetails{{ coaching.id }}">
-                <td colspan="{{ 13 if can_leave_review else 11 }}">
+                <td colspan="{{ dash_colspan }}">
                     <div class="detail-card">
                         <div class="detail-section">
                             <div class="detail-section-title">Basis-Informationen</div>
