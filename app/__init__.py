@@ -134,6 +134,7 @@ def create_app(config_class=Config):
             ('reject_assigned_coaching', 'Reject assigned coaching task'),
             ('view_abteilung', 'Scope: access all projects of assigned Abteilung (department)'),
             ('planned_coachings', 'Geplante Coachings: Folgetermine planen, Liste und Start am geplanten Tag'),
+            ('terminkalender', 'Terminkalender anzeigen (Kalender mit Terminen und Durchführungen im Sichtbereich)'),
         ]
         for name, desc in default_permissions:
             res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
@@ -196,7 +197,7 @@ def create_app(config_class=Config):
             for perm_name in [
                 'assign_teams', 'coach', 'coach_own_team_only', 'view_own_team', 'multiple_teams',
                 'view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching',
-                'planned_coachings',
+                'planned_coachings', 'terminkalender',
             ]:
                 if perm_name in perm_map:
                     conn.execute(
@@ -220,6 +221,7 @@ def create_app(config_class=Config):
                     'reject_assigned_coaching',
                     'view_abteilung',
                     'planned_coachings',
+                    'terminkalender',
                 ):
                     if perm_name in perm_map:
                         conn.execute(
@@ -231,7 +233,13 @@ def create_app(config_class=Config):
         for coach_role_name in ('Trainer', 'SalesCoach'):
             crid = conn.execute(text("SELECT id FROM roles WHERE name = :n"), {"n": coach_role_name}).fetchone()
             if crid:
-                for perm_name in ('view_assigned_coachings', 'accept_assigned_coaching', 'reject_assigned_coaching', 'planned_coachings'):
+                for perm_name in (
+                    'view_assigned_coachings',
+                    'accept_assigned_coaching',
+                    'reject_assigned_coaching',
+                    'planned_coachings',
+                    'terminkalender',
+                ):
                     if perm_name in perm_map:
                         conn.execute(
                             text("INSERT INTO role_permissions (role_id, permission_id) VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"),
@@ -250,6 +258,32 @@ def create_app(config_class=Config):
                             {"role_id": er[0], "perm_id": perm_map[perm_name]}
                         )
                 print(f"✅ Rolle '{employee_role_name}': view_own_coachings + leave_coaching_review (falls nicht schon gesetzt).")
+
+        # Terminkalender: Rollen, die den Kalender früher über Dashboard / geplant / zugewiesen nutzen konnten
+        try:
+            tkal_id = perm_map.get('terminkalender')
+            if tkal_id:
+                legacy_roles = conn.execute(
+                    text(
+                        """SELECT DISTINCT rp.role_id FROM role_permissions rp
+                           JOIN permissions p ON p.id = rp.permission_id
+                           WHERE p.name IN (
+                               'view_coaching_dashboard', 'planned_coachings', 'view_assigned_coachings'
+                           )"""
+                    )
+                ).fetchall()
+                for (lrid,) in legacy_roles:
+                    conn.execute(
+                        text(
+                            "INSERT INTO role_permissions (role_id, permission_id) "
+                            "VALUES (:role_id, :perm_id) ON CONFLICT DO NOTHING"
+                        ),
+                        {"role_id": lrid, "perm_id": tkal_id},
+                    )
+                conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"ℹ️ terminkalender Abwärtskompatibilität (Rollen): {e}")
 
         # 9. user_id and custom fields in team_members
         if 'team_members' in inspector.get_table_names():

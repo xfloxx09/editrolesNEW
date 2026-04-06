@@ -73,6 +73,7 @@
     padding: 0 6px;
 }
 .term-cal-stat.done { background: #e20074; }
+.term-cal-stat.done-others { background: #5c7cfa; }
 .term-cal-stat.planned { background: #20c997; }
 .term-cal-stat.assigned { background: #28a745; }
 .term-cal-stat.muted { opacity: 0.45; pointer-events: none; }
@@ -127,9 +128,10 @@
     </div>
 
     <div class="terminkal-legend">
-        {% if has_perm_dash %}<span><span class="term-cal-stat done" style="min-width:1.25rem;height:1.25rem;">#</span> Durchgeführte Coachings</span>{% endif %}
-        {% if has_perm_planned %}<span><span class="term-cal-stat planned" style="min-width:1.25rem;height:1.25rem;">#</span> Geplant (offen)</span>{% endif %}
-        {% if has_perm_assigned %}<span><span class="term-cal-stat assigned" style="min-width:1.25rem;height:1.25rem;">#</span> Aufgabe Deadline</span>{% endif %}
+        {% if has_perm_dash %}<span><span class="term-cal-stat done" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">2</span> Eigene Durchführungen</span>{% endif %}
+        {% if has_perm_dash %}<span><span class="term-cal-stat done-others" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">3</span> Andere Coaches (sichtbare Teams)</span>{% endif %}
+        {% if has_perm_planned %}<span><span class="term-cal-stat planned" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">1</span> Geplant (offen)</span>{% endif %}
+        {% if has_perm_assigned %}<span><span class="term-cal-stat assigned" style="min-width:1.35rem;height:1.35rem;font-size:0.72rem;">1</span> Aufgabe Deadline</span>{% endif %}
     </div>
 
     {# —— Desktop Monatsgitter —— #}
@@ -147,9 +149,13 @@
                     <td class="term-cal-cell {% if not cell.in_month %}other-month{% endif %} {% if cell.is_today %}is-today{% endif %}">
                         <div class="term-cal-daynum">{{ cell.date.day }}</div>
                         <div class="term-cal-stats">
-                            {% if has_perm_dash and cell.done > 0 %}
-                            <a class="term-cal-stat done" title="Coachings dieses Tages — zum Dashboard"
-                               href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done }}</a>
+                            {% if has_perm_dash and cell.done_me > 0 %}
+                            <a class="term-cal-stat done" title="Eigene Coachings — Dashboard (Tag)"
+                               href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_me }}</a>
+                            {% endif %}
+                            {% if has_perm_dash and cell.done_others > 0 %}
+                            <a class="term-cal-stat done-others" title="Coachings anderer — Dashboard (Tag)"
+                               href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }}</a>
                             {% endif %}
                             {% if has_perm_planned and cell.planned > 0 %}
                             <a class="term-cal-stat planned" title="Geplante Coachings (Liste)" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned }}</a>
@@ -160,10 +166,10 @@
                             {% if cell.show_add %}
                                 {% if cell.is_today and can_add_coaching and add_coaching_project_id %}
                                 <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
+                                {% elif cell.is_today and can_plan %}
+                                <a class="term-cal-add" title="Geplant / Termin heute" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
                                 {% elif cell.is_future and can_plan %}
                                 <a class="term-cal-add" title="Geplant anlegen" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
-                                {% elif cell.is_future and can_add_coaching and not can_plan and add_coaching_project_id %}
-                                <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
                                 {% endif %}
                             {% endif %}
                         </div>
@@ -187,9 +193,13 @@
             <div class="term-cal-cell {% if cell.is_today %}is-today{% endif %}">
                 <div class="term-cal-daynum" style="font-size:0.95rem;">{{ ['Mo','Di','Mi','Do','Fr','Sa','So'][loop.index0] }}<br>{{ cell.date.day }}.{{ '%02d'|format(cell.date.month) }}.</div>
                 <div class="term-cal-stats flex-column align-items-stretch">
-                    {% if has_perm_dash and cell.done > 0 %}
+                    {% if has_perm_dash and cell.done_me > 0 %}
                     <a class="term-cal-stat done w-100" style="width:100%!important;"
-                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done }} Coaching(s)</a>
+                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_me }} eig.</a>
+                    {% endif %}
+                    {% if has_perm_dash and cell.done_others > 0 %}
+                    <a class="term-cal-stat done-others w-100" style="width:100%!important;"
+                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }} Team</a>
                     {% endif %}
                     {% if has_perm_planned and cell.planned > 0 %}
                     <a class="term-cal-stat planned w-100" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned }} geplant</a>
@@ -201,10 +211,10 @@
                     <div class="mt-1 text-center w-100">
                         {% if cell.is_today and can_add_coaching and add_coaching_project_id %}
                         <a class="btn btn-sm btn-block telekom-button" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+ Coaching</a>
+                        {% elif cell.is_today and can_plan %}
+                        <a class="btn btn-sm btn-block btn-outline-info" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+ Geplant</a>
                         {% elif cell.is_future and can_plan %}
                         <a class="btn btn-sm btn-block btn-outline-info" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+ Geplant</a>
-                        {% elif cell.is_future and can_add_coaching and not can_plan and add_coaching_project_id %}
-                        <a class="btn btn-sm btn-block telekom-button" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+ Coaching</a>
                         {% endif %}
                     </div>
                     {% endif %}

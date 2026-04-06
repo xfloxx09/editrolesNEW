@@ -760,11 +760,7 @@ def index():
             or u.has_permission('assign_coachings')
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
-        1 if (
-            u.has_permission('view_coaching_dashboard')
-            or u.has_permission('planned_coachings')
-            or u.has_permission('view_assigned_coachings')
-        ) else 0,
+        1 if u.has_permission('terminkalender') else 0,
         1 if u.has_permission('planned_coachings') else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
@@ -1109,6 +1105,33 @@ def coaching_dashboard():
                            config=current_app.config)
 
 
+def _team_members_for_planned_coaching_picker(project_id):
+    """Gleiche Team-/Mitglied-Sicht wie beim Coaching erfassen (kein volles Projekt für eingeschränkte Rollen)."""
+    query = (
+        TeamMember.query.join(Team, TeamMember.team_id == Team.id)
+        .filter(
+            Team.project_id == project_id,
+            Team.name != ARCHIV_TEAM_NAME,
+            Team.active_for_coaching.is_(True),
+        )
+    )
+    if current_user.has_permission('coach_own_team_only'):
+        coach_team_member = current_user.team_members[0] if current_user.team_members else None
+        if coach_team_member:
+            query = query.filter(TeamMember.team_id == coach_team_member.team_id)
+        else:
+            query = query.filter(false())
+    else:
+        if current_user.role_name == ROLE_TEAMLEITER:
+            led = sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
+            if led:
+                query = query.filter(TeamMember.team_id.in_(led))
+        elif current_user.role_name not in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+            pass
+    members = query.order_by(Team.name, TeamMember.name).all()
+    return [m for m in members if team_member_eligible_for_new_coaching(m)]
+
+
 def _terminkalender_coaching_dashboard_project_kw():
     """project=… für Links zum Coaching-Dashboard (Kalenderfilter)."""
     acc = get_accessible_project_ids()
@@ -1135,7 +1158,7 @@ def _terminkalender_coaching_dashboard_project_kw():
 
 @bp.route('/terminkalender')
 @login_required
-@any_permission_required('view_coaching_dashboard', 'planned_coachings', 'view_assigned_coachings')
+@permission_required('terminkalender')
 def terminkalender():
     today = today_athens_date()
     try:
@@ -1151,26 +1174,37 @@ def terminkalender():
     lo, _ = athens_calendar_day_utc_naive_bounds(first)
     _, hi = athens_calendar_day_utc_naive_bounds(last)
 
-    counts = defaultdict(lambda: {'done': 0, 'planned': 0, 'assigned': 0})
+    counts = defaultdict(lambda: {'done_me': 0, 'done_others': 0, 'planned': 0, 'assigned': 0})
 
     if current_user.has_permission('view_coaching_dashboard'):
+        archiv_team = get_or_create_archiv_team()
+        sees_all_teams = _user_sees_all_teams_coaching_dashboard()
+        my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else None
         q_done = (
             Coaching.query.filter(
-                Coaching.coach_id == current_user.id,
                 Coaching.coaching_date >= lo,
                 Coaching.coaching_date <= hi,
             )
             .join(TeamMember, Coaching.team_member_id == TeamMember.id)
             .join(Team, TeamMember.team_id == Team.id)
+            .filter(TeamMember.team_id != archiv_team.id)
         )
         if acc is not None:
             if acc:
                 q_done = q_done.filter(Team.project_id.in_(acc))
             else:
                 q_done = q_done.filter(false())
+        if not sees_all_teams:
+            if my_dash_team_ids:
+                q_done = q_done.filter(TeamMember.team_id.in_(my_dash_team_ids))
+            else:
+                q_done = q_done.filter(false())
         for row in q_done.options(joinedload(Coaching.team_member)).all():
             d = utc_naive_or_aware_to_athens_date(row.coaching_date)
-            counts[d]['done'] += 1
+            if row.coach_id == current_user.id:
+                counts[d]['done_me'] += 1
+            else:
+                counts[d]['done_others'] += 1
 
     if current_user.has_permission('planned_coachings'):
         q_pl = PlannedCoaching.query.filter(
@@ -1211,19 +1245,21 @@ def terminkalender():
                 counts[ad]['assigned'] += 1
 
     def enrich_day(d):
-        c = counts.get(d, {'done': 0, 'planned': 0, 'assigned': 0})
+        c = counts.get(d, {'done_me': 0, 'done_others': 0, 'planned': 0, 'assigned': 0})
         is_past = d < today
         is_future = d > today
+        can_plan = current_user.has_permission('planned_coachings')
         return {
             'date': d,
             'in_month': d.month == month,
             'is_today': d == today,
             'is_past': is_past,
             'is_future': is_future,
-            'done': c['done'],
+            'done_me': c['done_me'],
+            'done_others': c['done_others'],
             'planned': c['planned'],
             'assigned': c['assigned'],
-            'show_add': not is_past and (current_user.has_permission('add_coaching') or current_user.has_permission('planned_coachings')),
+            'show_add': not is_past and can_plan,
         }
 
     cal = calendar.Calendar(firstweekday=calendar.MONDAY)
@@ -1240,7 +1276,6 @@ def terminkalender():
     dash_kw = _terminkalender_coaching_dashboard_project_kw()
     proj_raw = (request.args.get('project') or '').strip()
 
-    can_plan = current_user.has_permission('planned_coachings')
     add_coaching_project_id = _resolve_coaching_workshop_project_id() if current_user.has_permission('add_coaching') else None
     if not add_coaching_project_id and proj_raw.isdigit():
         add_coaching_project_id = int(proj_raw) if (acc is None or int(proj_raw) in acc) else None
@@ -1277,7 +1312,7 @@ def terminkalender():
         today=today,
         dash_kw=dash_kw,
         proj_query=proj_raw,
-        can_plan=can_plan,
+        can_plan=current_user.has_permission('planned_coachings'),
         can_add_coaching=current_user.has_permission('add_coaching'),
         add_coaching_project_id=add_coaching_project_id,
         has_perm_planned=current_user.has_permission('planned_coachings'),
@@ -1323,11 +1358,9 @@ def terminkalender_plan():
     if request.method == 'POST':
         member_id = request.form.get('team_member_id', type=int)
         tm = TeamMember.query.get(member_id) if member_id else None
-        if not tm or not tm.team or tm.team.project_id != project_id:
+        allowed_ids = {m.id for m in _team_members_for_planned_coaching_picker(project_id)}
+        if not tm or tm.id not in allowed_ids:
             flash('Bitte ein gültiges Teammitglied wählen.', 'warning')
-            return redirect(url_for('main.terminkalender_plan', day=plan_date.isoformat()))
-        if not team_member_eligible_for_new_coaching(tm):
-            flash('Dieses Team ist für Coachings deaktiviert.', 'warning')
             return redirect(url_for('main.terminkalender_plan', day=plan_date.isoformat()))
         notes = (request.form.get('notes') or '').strip()
         has_v = request.form.get('has_verabredung') == '1'
@@ -1347,17 +1380,7 @@ def terminkalender_plan():
         flash('Geplantes Coaching wurde angelegt.', 'success')
         return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
 
-    members = (
-        TeamMember.query.join(Team, TeamMember.team_id == Team.id)
-        .filter(
-            Team.project_id == project_id,
-            Team.name != ARCHIV_TEAM_NAME,
-            Team.active_for_coaching.is_(True),
-        )
-        .order_by(Team.name, TeamMember.name)
-        .all()
-    )
-    members = [m for m in members if team_member_eligible_for_new_coaching(m)]
+    members = _team_members_for_planned_coaching_picker(project_id)
     return render_template(
         'main/terminkalender_plan.html',
         title='Geplantes Coaching anlegen',
