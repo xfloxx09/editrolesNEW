@@ -1415,6 +1415,24 @@ def terminkalender():
             if pwr.planned_for_date <= today and pwr.planned_for_date not in planned_ws_capture_by_date:
                 planned_ws_capture_by_date[pwr.planned_for_date] = (pwr.id, pwr.project_id)
 
+    can_view_others_planned_cal = _can_view_others_planned_in_scope()
+    if can_view_others_planned_cal:
+        q_pws_o = PlannedWorkshop.query.filter(
+            PlannedWorkshop.coach_id != current_user.id,
+            PlannedWorkshop.status == 'open',
+            PlannedWorkshop.planned_for_date >= first,
+            PlannedWorkshop.planned_for_date <= last,
+        )
+        if acc is not None:
+            if acc:
+                q_pws_o = q_pws_o.filter(
+                    or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None))
+                )
+            else:
+                q_pws_o = q_pws_o.filter(false())
+        for pwr in q_pws_o.all():
+            counts[pwr.planned_for_date]['planned_ws'] += 1
+
     if current_user.has_permission('planned_coachings'):
         q_pl = PlannedCoaching.query.filter(
             PlannedCoaching.coach_id == current_user.id,
@@ -1430,6 +1448,21 @@ def terminkalender():
             else:
                 q_pl = q_pl.filter(false())
         for pc in q_pl.all():
+            counts[pc.planned_for_date]['planned'] += 1
+
+    if can_view_others_planned_cal:
+        q_pl_o = PlannedCoaching.query.filter(
+            PlannedCoaching.coach_id != current_user.id,
+            PlannedCoaching.status == 'open',
+            PlannedCoaching.planned_for_date >= first,
+            PlannedCoaching.planned_for_date <= last,
+        )
+        if acc is not None:
+            if acc:
+                q_pl_o = q_pl_o.filter(PlannedCoaching.project_id.in_(acc))
+            else:
+                q_pl_o = q_pl_o.filter(false())
+        for pc in q_pl_o.all():
             counts[pc.planned_for_date]['planned'] += 1
 
     if current_user.has_permission('view_assigned_coachings'):
@@ -1455,6 +1488,8 @@ def terminkalender():
 
     can_plan_c = current_user.has_permission('planned_coachings')
     can_plan_w = current_user.has_permission('add_workshop')
+    show_terminkalender_planned = can_plan_c or can_view_others_planned_cal
+    show_terminkalender_planned_ws = can_plan_w or can_view_others_planned_cal
 
     def enrich_day(d):
         z = counts[d]
@@ -1558,6 +1593,8 @@ def terminkalender():
         can_add_coaching=current_user.has_permission('add_coaching'),
         add_coaching_project_id=add_coaching_project_id,
         has_perm_planned=can_plan_c,
+        show_terminkalender_planned=show_terminkalender_planned,
+        show_terminkalender_planned_ws=show_terminkalender_planned_ws,
         has_perm_assigned=current_user.has_permission('view_assigned_coachings'),
         has_perm_dash=current_user.has_permission('view_coaching_dashboard'),
         has_perm_workshop=current_user.has_permission('view_workshop_dashboard'),

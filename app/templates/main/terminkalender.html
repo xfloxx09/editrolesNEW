@@ -255,7 +255,7 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
                             <a class="term-cal-stat done-others" title="{% if cal_show_own_coachings %}Coachings anderer{% else %}Coachings{% endif %} — Dashboard (Tag)"
                                href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }}</a>
                             {% endif %}
-                            {% if has_perm_planned and cell.planned > 0 %}
+                            {% if show_terminkalender_planned and cell.planned > 0 %}
                             <a class="term-cal-stat planned" title="Geplante Coachings (Liste)" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned }}</a>
                             {% endif %}
                             {% if has_perm_assigned and cell.assigned > 0 %}
@@ -269,7 +269,7 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
                             <a class="term-cal-stat ws-others" title="{% if cal_show_own_workshops %}Workshops anderer{% else %}Workshops{% endif %} — Dashboard (Tag)"
                                href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_others }}</a>
                             {% endif %}
-                            {% if can_plan_workshop and cell.planned_ws > 0 %}
+                            {% if show_terminkalender_planned_ws and cell.planned_ws > 0 %}
                             <a class="term-cal-stat planned-ws" title="{% if cell.planned_workshop_capture_id %}Geplanten Workshop erfassen{% else %}Geplante Workshops (Liste){% endif %}" href="{% if cell.planned_workshop_capture_id %}{% if cell.planned_workshop_capture_project_id %}{{ url_for('main.add_workshop', project=cell.planned_workshop_capture_project_id, planned_workshop=cell.planned_workshop_capture_id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=cell.planned_workshop_capture_id) }}{% endif %}{% else %}{{ url_for('main.planned_coachings_list') }}{% endif %}">{{ cell.planned_ws }}</a>
                             {% endif %}
                             {% if cell.show_add %}
@@ -313,7 +313,7 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
                     <a class="term-cal-stat done-others" title="{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %}"
                        href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }}</a>
                     {% endif %}
-                    {% if has_perm_planned and cell.planned > 0 %}
+                    {% if show_terminkalender_planned and cell.planned > 0 %}
                     <a class="term-cal-stat planned" title="Geplant" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned }}</a>
                     {% endif %}
                     {% if has_perm_assigned and cell.assigned > 0 %}
@@ -327,7 +327,7 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
                     <a class="term-cal-stat ws-others" title="{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %}"
                        href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_others }}</a>
                     {% endif %}
-                    {% if can_plan_workshop and cell.planned_ws > 0 %}
+                    {% if show_terminkalender_planned_ws and cell.planned_ws > 0 %}
                     <a class="term-cal-stat planned-ws" title="{% if cell.planned_workshop_capture_id %}Workshop erfassen{% else %}Gepl. Workshop (Liste){% endif %}" href="{% if cell.planned_workshop_capture_id %}{% if cell.planned_workshop_capture_project_id %}{{ url_for('main.add_workshop', project=cell.planned_workshop_capture_project_id, planned_workshop=cell.planned_workshop_capture_id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=cell.planned_workshop_capture_id) }}{% endif %}{% else %}{{ url_for('main.planned_coachings_list') }}{% endif %}">{{ cell.planned_ws }}</a>
                     {% endif %}
                     {% if cell.show_add %}
@@ -375,13 +375,13 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
             <span class="terminkal-legend-label">{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %}</span>
         </span>
         {% endif %}
-        {% if can_plan_workshop %}
+        {% if show_terminkalender_planned_ws %}
         <span class="terminkal-legend-item" title="Offen geplante Workshops in diesem Monat">
             <span class="term-cal-stat planned-ws" aria-label="Geplant Workshop im Monat: {{ month_total_planned_ws }}">{{ month_total_planned_ws }}</span>
             <span class="terminkal-legend-label">Gepl. Workshop</span>
         </span>
         {% endif %}
-        {% if has_perm_planned %}
+        {% if show_terminkalender_planned %}
         <span class="terminkal-legend-item" title="Offene geplante Coachings in diesem Monat">
             <span class="term-cal-stat planned" aria-label="Geplant offen im Monat: {{ month_total_planned }}">{{ month_total_planned }}</span>
             <span class="terminkal-legend-label">Geplant (offen)</span>
