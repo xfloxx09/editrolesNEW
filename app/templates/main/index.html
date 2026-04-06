@@ -129,63 +129,36 @@
     padding: 0.4rem 0.35rem;
     font-size: 0.8125rem;
 }
-/* Coaching-Liste: gleichmäßige Spalten, keine hässlichen Zeichen-Trennungen */
-.coaching-dashboard-fixed-table td.cdt-mitglied,
-.coaching-dashboard-fixed-table td.cdt-coach,
-.coaching-dashboard-fixed-table td.cdt-thema {
-    min-width: 0;
+/* Coaching-Liste: voller Text, Umbruch an Wörtern — keine Ellipsis/Punkte */
+.coaching-dashboard-fixed-table thead th {
+    white-space: normal;
+    line-height: 1.25;
+    font-weight: 600;
 }
-.coaching-dashboard-fixed-table .cdt-clip-2 {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow: hidden;
-    word-break: normal;
-    overflow-wrap: break-word;
-    min-width: 0;
+.coaching-dashboard-fixed-table tbody tr:not(.coaching-detail-row) > td {
+    vertical-align: top;
 }
-.coaching-dashboard-fixed-table .cdt-clip-3 {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    overflow: hidden;
-    word-break: normal;
-    overflow-wrap: break-word;
-    min-width: 0;
+.coaching-dashboard-fixed-table tbody tr:not(.coaching-detail-row) > td.cdt-score,
+.coaching-dashboard-fixed-table tbody tr:not(.coaching-detail-row) > td.cdt-details,
+.coaching-dashboard-fixed-table tbody tr:not(.coaching-detail-row) > td.cdt-edit,
+.coaching-dashboard-fixed-table tbody tr:not(.coaching-detail-row) > td.cdt-coach-act {
+    vertical-align: middle;
 }
-.coaching-dashboard-fixed-table th.cdt-datum,
 .coaching-dashboard-fixed-table td.cdt-datum {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    overflow-wrap: normal;
     font-variant-numeric: tabular-nums;
 }
-.coaching-dashboard-fixed-table th.cdt-team,
-.coaching-dashboard-fixed-table td.cdt-team {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    overflow-wrap: normal;
-}
-.coaching-dashboard-fixed-table th.cdt-stil,
+.coaching-dashboard-fixed-table td.cdt-mitglied,
+.coaching-dashboard-fixed-table td.cdt-coach,
+.coaching-dashboard-fixed-table td.cdt-thema,
+.coaching-dashboard-fixed-table td.cdt-team,
 .coaching-dashboard-fixed-table td.cdt-stil {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    overflow-wrap: normal;
+    min-width: 0;
 }
 .coaching-dashboard-fixed-table th.cdt-note,
 .coaching-dashboard-fixed-table td.cdt-note,
 .coaching-dashboard-fixed-table th.cdt-min,
 .coaching-dashboard-fixed-table td.cdt-min {
     text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    overflow-wrap: normal;
 }
 .coaching-dashboard-fixed-table th.cdt-score,
 .coaching-dashboard-fixed-table td.cdt-score {
@@ -210,7 +183,6 @@
 .coaching-dashboard-fixed-table td.cdt-coach-act .btn {
     white-space: normal;
     line-height: 1.2;
-    max-width: 7.5rem;
     font-size: 0.75rem;
     padding: 0.2rem 0.35rem;
 }
@@ -529,12 +501,12 @@
             {% set dash_thema = coaching.coaching_subject if coaching.coaching_subject else '-' %}
             {% set dash_stil = coaching.coaching_style if coaching.coaching_style else '-' %}
             <tr>
-                <td class="cdt-datum" title="{{ coaching.coaching_date|athens_time }}">{{ coaching.coaching_date|athens_time }}</td>
-                <td class="cdt-mitglied" title="{{ dash_member_name }}"><span class="cdt-clip-2">{{ dash_member_name }}</span></td>
-                <td class="cdt-team" title="{{ dash_team_name }}">{{ dash_team_name }}</td>
-                <td class="cdt-coach" title="{{ dash_coach_name }}"><span class="cdt-clip-2">{{ dash_coach_name }}</span></td>
-                <td class="cdt-thema" title="{{ dash_thema }}"><span class="cdt-clip-3">{{ dash_thema }}</span></td>
-                <td class="cdt-stil" title="{{ dash_stil }}">{{ dash_stil }}</td>
+                <td class="cdt-datum">{{ coaching.coaching_date|athens_time }}</td>
+                <td class="cdt-mitglied">{{ dash_member_name }}</td>
+                <td class="cdt-team">{{ dash_team_name }}</td>
+                <td class="cdt-coach">{{ dash_coach_name }}</td>
+                <td class="cdt-thema">{{ dash_thema }}</td>
+                <td class="cdt-stil">{{ dash_stil }}</td>
                 <td class="cdt-note">{{ coaching.performance_mark if coaching.performance_mark is not none else '-'}}</td>
                 <td class="cdt-min">{{ coaching.time_spent if coaching.time_spent is not none else '-' }}</td>
                 <td class="cdt-score">
