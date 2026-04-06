@@ -179,14 +179,21 @@
     text-align: center;
 }
 .coaching-dashboard-fixed-table th.cdt-details,
-.coaching-dashboard-fixed-table td.cdt-details,
-.coaching-dashboard-fixed-table th.cdt-edit,
-.coaching-dashboard-fixed-table td.cdt-edit {
+.coaching-dashboard-fixed-table td.cdt-details {
     text-align: center;
     width: 1%;
     white-space: nowrap;
     padding-left: 0.25rem;
     padding-right: 0.25rem;
+}
+.coaching-dashboard-fixed-table th.cdt-edit,
+.coaching-dashboard-fixed-table td.cdt-edit {
+    text-align: center;
+    width: 1%;
+    white-space: nowrap;
+    /* etwas mehr Padding rechts: Überschrift wirkt nicht nach rechts geklebt */
+    padding-left: 0.35rem;
+    padding-right: 0.5rem;
 }
 .coaching-dashboard-fixed-table td.cdt-coach-act .btn {
     white-space: normal;
@@ -459,15 +466,15 @@
             <col style="width:13%">
             <col style="width:9%">
             <col style="width:12%">
-            <col style="width:15%">
+            <col style="width:13%">
             <col style="width:8%">
             <col style="width:4%">
             <col style="width:4%">
             <col style="width:8%">
             <col style="width:6%">
             <col style="width:6%">
-            <col style="width:4%">
-            <col style="width:4%">
+            <col style="width:5%">
+            <col style="width:5%">
         </colgroup>
         {% else %}
         <colgroup>
@@ -480,8 +487,8 @@
             <col style="width:4%">
             <col style="width:4%">
             <col style="width:9%">
-            <col style="width:6%">
-            <col style="width:6%">
+            <col style="width:5%">
+            <col style="width:7%">
         </colgroup>
         {% endif %}
         <thead class="telekom-bg-magenta text-white">
