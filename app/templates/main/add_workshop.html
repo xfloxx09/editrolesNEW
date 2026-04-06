@@ -368,8 +368,20 @@
 <div class="container">
     <h2 class="mb-4">{{ title }}</h2>
 
+    {% if planned_workshop_fulfill and not is_edit_mode|default(false) %}
+    <div class="alert alert-secondary border-info mb-3">
+        <i class="fas fa-calendar-check text-info"></i>
+        <strong>Geplanter Workshop</strong> —
+        Termin {{ planned_workshop_fulfill.planned_for_date.strftime('%d.%m.%Y') }}.
+        Titel/Notizen wurden übernommen. Nach dem Speichern wird die Planung als erfüllt markiert.
+    </div>
+    {% endif %}
+
     {% if not is_edit_mode|default(false) and show_workshop_project_picker|default(false) %}
     <form method="get" action="{{ url_for('main.add_workshop') }}" class="form-section form-inline align-items-end mb-3 flex-wrap">
+        {% if planned_workshop_fulfill %}
+        <input type="hidden" name="planned_workshop" value="{{ planned_workshop_fulfill.id }}">
+        {% endif %}
         <div class="form-group mr-3 mb-2 mb-md-0">
             <label for="pick_workshop_project" class="mr-2 font-weight-bold">Projekt</label>
             <select name="project" id="pick_workshop_project" class="form-control" onchange="this.form.submit()">
@@ -386,6 +398,9 @@
         {{ form.hidden_tag() }}
         {% if not is_edit_mode|default(false) and selected_workshop_project_id is defined %}
         <input type="hidden" name="project_id" value="{{ selected_workshop_project_id }}">
+        {% endif %}
+        {% if planned_workshop_fulfill %}
+        <input type="hidden" name="planned_workshop_id" value="{{ planned_workshop_fulfill.id }}">
         {% endif %}
 
         <!-- Abschnitt 1: Workshop-Thema -->

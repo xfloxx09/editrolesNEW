@@ -174,6 +174,34 @@ def _user_may_edit_planned_coaching(pc):
     return True
 
 
+def _user_may_edit_planned_workshop(pw):
+    """Coach owns the row, still open, project in scope (None = global)."""
+    if pw is None or pw.coach_id != current_user.id or pw.status != 'open':
+        return False
+    acc = get_accessible_project_ids()
+    if acc is not None:
+        if len(acc) == 0:
+            return False
+        if pw.project_id is not None and pw.project_id not in acc:
+            return False
+    return True
+
+
+def _resolve_planned_workshop_fulfill_for_form(project_id):
+    """Offener Plan des Users, passend zum gewählten Projekt (planned project leer = egal)."""
+    pw_id = request.form.get('planned_workshop_id', type=int) if request.method == 'POST' else request.args.get(
+        'planned_workshop', type=int
+    )
+    if not pw_id:
+        return None
+    cand = PlannedWorkshop.query.get(pw_id)
+    if not cand or cand.coach_id != current_user.id or cand.status != 'open':
+        return None
+    if cand.project_id is not None and cand.project_id != project_id:
+        return None
+    return cand
+
+
 def _safe_internal_path(path_val):
     """Only allow same-app relative paths (no open redirects)."""
     if not path_val or not isinstance(path_val, str):
@@ -775,24 +803,35 @@ def index():
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
         1 if u.has_permission('terminkalender') else 0,
-        1 if u.has_permission('planned_coachings') else 0,
+        1 if (u.has_permission('planned_coachings') or u.has_permission('add_workshop')) else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
         1 if u.has_permission('view_all_reviews') else 0,
     ])
     open_planned_coachings_count = 0
+    acc_ix = get_accessible_project_ids()
     if u.has_permission('planned_coachings'):
         pq = PlannedCoaching.query.filter(
             PlannedCoaching.coach_id == u.id,
             PlannedCoaching.status == 'open',
         )
-        acc_ix = get_accessible_project_ids()
         if acc_ix is not None and len(acc_ix) == 0:
-            open_planned_coachings_count = 0
+            pass
         else:
             if acc_ix is not None:
                 pq = pq.filter(PlannedCoaching.project_id.in_(acc_ix))
             open_planned_coachings_count = pq.count()
+    if u.has_permission('add_workshop'):
+        wq = PlannedWorkshop.query.filter(
+            PlannedWorkshop.coach_id == u.id,
+            PlannedWorkshop.status == 'open',
+        )
+        if acc_ix is not None and len(acc_ix) == 0:
+            pass
+        else:
+            if acc_ix is not None:
+                wq = wq.filter(or_(PlannedWorkshop.project_id.in_(acc_ix), PlannedWorkshop.project_id.is_(None)))
+            open_planned_coachings_count += wq.count()
 
     assigned_coachings_notify_count = 0
     if (
@@ -2197,21 +2236,35 @@ def add_workshop():
 
     show_workshop_project_picker = len(workshop_projects) > 1
 
+    fulfill_pw = _resolve_planned_workshop_fulfill_for_form(project_id)
+
     current_user_team_ids = (
         sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
         if current_user.role_name == ROLE_TEAMLEITER else []
     )
     form = WorkshopForm(current_user_role=current_user.role_name, current_user_team_ids=current_user_team_ids)
     form.update_participant_choices(project_id=project_id)
+    if request.method == 'GET' and fulfill_pw:
+        if fulfill_pw.title:
+            form.title.data = fulfill_pw.title
+        if fulfill_pw.notes:
+            form.notes.data = fulfill_pw.notes
     if form.validate_on_submit():
+        fulfill_pw_post = _resolve_planned_workshop_fulfill_for_form(project_id)
         for member_id in form.team_member_ids.data:
             wm = TeamMember.query.get(member_id)
             if not wm or not wm.team or wm.team.project_id != project_id:
                 flash('Mindestens ein Teilnehmer gehört nicht zum gewählten Projekt.', 'danger')
-                return redirect(url_for('main.add_workshop', project=project_id))
+                redir = url_for('main.add_workshop', project=project_id)
+                if fulfill_pw_post:
+                    redir = url_for('main.add_workshop', project=project_id, planned_workshop=fulfill_pw_post.id)
+                return redirect(redir)
             if not team_member_eligible_for_new_coaching(wm):
                 flash('Mindestens ein Teilnehmer gehört zu einem Team, das für neue Workshops deaktiviert ist.', 'danger')
-                return redirect(url_for('main.add_workshop'))
+                redir = url_for('main.add_workshop', project=project_id)
+                if fulfill_pw_post:
+                    redir = url_for('main.add_workshop', project=project_id, planned_workshop=fulfill_pw_post.id)
+                return redirect(redir)
         workshop = Workshop(
             title=form.title.data,
             coach_id=current_user.id,
@@ -2231,6 +2284,9 @@ def add_workshop():
                 original_team_id=None
             )
             db.session.execute(stmt)
+        if fulfill_pw_post:
+            fulfill_pw_post.fulfilled_workshop_id = workshop.id
+            fulfill_pw_post.status = 'fulfilled'
         db.session.commit()
         flash('Workshop erfolgreich gespeichert.', 'success')
         return redirect(url_for('main.workshop_dashboard'))
@@ -2240,6 +2296,7 @@ def add_workshop():
         workshop_projects=workshop_projects,
         selected_workshop_project_id=project_id,
         show_workshop_project_picker=show_workshop_project_picker,
+        planned_workshop_fulfill=fulfill_pw,
         config=current_app.config,
     )
 
@@ -2605,50 +2662,89 @@ def open_planned_coachings_for_member():
 
 @bp.route('/geplante-coachings')
 @login_required
-@permission_required('planned_coachings')
+@any_permission_required('planned_coachings', 'add_workshop')
 def planned_coachings_list():
-    q = (
-        PlannedCoaching.query.filter(
-            PlannedCoaching.coach_id == current_user.id,
-            PlannedCoaching.status == 'open',
+    can_pc = current_user.has_permission('planned_coachings')
+    can_pw = current_user.has_permission('add_workshop')
+    acc = get_accessible_project_ids()
+
+    items = []
+    if can_pc:
+        q = (
+            PlannedCoaching.query.filter(
+                PlannedCoaching.coach_id == current_user.id,
+                PlannedCoaching.status == 'open',
+            )
+            .options(
+                joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
+                joinedload(PlannedCoaching.project),
+                joinedload(PlannedCoaching.team),
+            )
         )
-        .options(
+        if acc is not None:
+            q = q.filter(PlannedCoaching.project_id.in_(acc))
+        items = q.order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id).all()
+
+    workshop_items = []
+    fulfilled_workshop_plans = []
+    if can_pw:
+        wq = PlannedWorkshop.query.filter(
+            PlannedWorkshop.coach_id == current_user.id,
+            PlannedWorkshop.status == 'open',
+        ).options(joinedload(PlannedWorkshop.project))
+        if acc is not None:
+            wq = wq.filter(or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)))
+        workshop_items = wq.order_by(PlannedWorkshop.planned_for_date, PlannedWorkshop.id).all()
+
+        q_w_done = PlannedWorkshop.query.filter(
+            PlannedWorkshop.coach_id == current_user.id,
+            PlannedWorkshop.fulfilled_workshop_id.isnot(None),
+        ).options(
+            joinedload(PlannedWorkshop.project),
+            joinedload(PlannedWorkshop.fulfilled_workshop),
+        )
+        if acc is not None:
+            q_w_done = q_w_done.filter(or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)))
+        fulfilled_workshop_plans = q_w_done.all()
+        fulfilled_workshop_plans.sort(
+            key=lambda p: (
+                p.fulfilled_workshop.workshop_date if p.fulfilled_workshop else datetime.min,
+                p.id,
+            ),
+            reverse=True,
+        )
+        fulfilled_workshop_plans = fulfilled_workshop_plans[:100]
+
+    fulfilled_plans = []
+    if can_pc:
+        q_done = PlannedCoaching.query.filter(
+            PlannedCoaching.coach_id == current_user.id,
+            PlannedCoaching.status == 'fulfilled',
+        ).options(
             joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
             joinedload(PlannedCoaching.project),
             joinedload(PlannedCoaching.team),
+            joinedload(PlannedCoaching.fulfilled_coaching),
         )
-    )
-    acc = get_accessible_project_ids()
-    if acc is not None:
-        q = q.filter(PlannedCoaching.project_id.in_(acc))
-    items = q.order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id).all()
-
-    q_done = PlannedCoaching.query.filter(
-        PlannedCoaching.coach_id == current_user.id,
-        PlannedCoaching.status == 'fulfilled',
-    ).options(
-        joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
-        joinedload(PlannedCoaching.project),
-        joinedload(PlannedCoaching.team),
-        joinedload(PlannedCoaching.fulfilled_coaching),
-    )
-    if acc is not None:
-        q_done = q_done.filter(PlannedCoaching.project_id.in_(acc))
-    fulfilled_plans = q_done.all()
-    fulfilled_plans.sort(
-        key=lambda p: (
-            p.fulfilled_coaching.coaching_date if p.fulfilled_coaching else datetime.min,
-            p.id,
-        ),
-        reverse=True,
-    )
-    fulfilled_plans = fulfilled_plans[:100]
+        if acc is not None:
+            q_done = q_done.filter(PlannedCoaching.project_id.in_(acc))
+        fulfilled_plans = q_done.all()
+        fulfilled_plans.sort(
+            key=lambda p: (
+                p.fulfilled_coaching.coaching_date if p.fulfilled_coaching else datetime.min,
+                p.id,
+            ),
+            reverse=True,
+        )
+        fulfilled_plans = fulfilled_plans[:100]
 
     return render_template(
         'main/planned_coachings.html',
-        title='Geplante Coachings',
+        title='Geplante Coachings / Workshops',
         items=items,
+        workshop_items=workshop_items,
         fulfilled_plans=fulfilled_plans,
+        fulfilled_workshop_plans=fulfilled_workshop_plans,
         today_d=today_athens_date(),
         config=current_app.config,
     )
@@ -2688,6 +2784,47 @@ def planned_coaching_delete(planned_id):
     db.session.delete(pc)
     db.session.commit()
     flash('Geplantes Coaching wurde entfernt.', 'success')
+    return redirect(url_for('main.planned_coachings_list'))
+
+
+@bp.route('/geplante-coachings/workshop/<int:planned_w_id>/datum', methods=['POST'])
+@login_required
+@permission_required('add_workshop')
+def planned_workshop_update_date(planned_w_id):
+    pw = PlannedWorkshop.query.get_or_404(planned_w_id)
+    if not _user_may_edit_planned_workshop(pw):
+        flash('Keine Berechtigung oder Eintrag nicht gefunden.', 'danger')
+        return redirect(url_for('main.planned_coachings_list'))
+    raw = (request.form.get('planned_for_date') or '').strip()
+    if not raw:
+        flash('Bitte ein Datum wählen.', 'warning')
+        return redirect(url_for('main.planned_coachings_list'))
+    try:
+        new_date = datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Ungültiges Datum.', 'warning')
+        return redirect(url_for('main.planned_coachings_list'))
+    today = today_athens_date()
+    if new_date < today:
+        flash('Ein Termin kann nicht in der Vergangenheit liegen.', 'warning')
+        return redirect(url_for('main.planned_coachings_list'))
+    pw.planned_for_date = new_date
+    db.session.commit()
+    flash('Datum wurde aktualisiert.', 'success')
+    return redirect(url_for('main.planned_coachings_list'))
+
+
+@bp.route('/geplante-coachings/workshop/<int:planned_w_id>/loeschen', methods=['POST'])
+@login_required
+@permission_required('add_workshop')
+def planned_workshop_delete(planned_w_id):
+    pw = PlannedWorkshop.query.get_or_404(planned_w_id)
+    if not _user_may_edit_planned_workshop(pw):
+        flash('Keine Berechtigung oder Eintrag nicht gefunden.', 'danger')
+        return redirect(url_for('main.planned_coachings_list'))
+    db.session.delete(pw)
+    db.session.commit()
+    flash('Geplanter Workshop wurde entfernt.', 'success')
     return redirect(url_for('main.planned_coachings_list'))
 
 
