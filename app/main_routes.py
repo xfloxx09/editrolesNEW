@@ -90,6 +90,19 @@ def _maybe_fulfill_planned_coaching(coaching, fulfill_planned_id):
     pc.status = 'fulfilled'
 
 
+def _user_may_edit_planned_coaching(pc):
+    """Coach owns the row, still open, and project is in scope (same rules as list)."""
+    if pc is None or pc.coach_id != current_user.id or pc.status != 'open':
+        return False
+    acc = get_accessible_project_ids()
+    if acc is not None:
+        if len(acc) == 0:
+            return False
+        if not pc.project_id or pc.project_id not in acc:
+            return False
+    return True
+
+
 def _safe_internal_path(path_val):
     """Only allow same-app relative paths (no open redirects)."""
     if not path_val or not isinstance(path_val, str):
@@ -1807,6 +1820,43 @@ def planned_coachings_list():
         today_d=today_athens_date(),
         config=current_app.config,
     )
+
+
+@bp.route('/geplante-coachings/<int:planned_id>/datum', methods=['POST'])
+@login_required
+@permission_required('planned_coachings')
+def planned_coaching_update_date(planned_id):
+    pc = PlannedCoaching.query.get_or_404(planned_id)
+    if not _user_may_edit_planned_coaching(pc):
+        flash('Keine Berechtigung oder Eintrag nicht gefunden.', 'danger')
+        return redirect(url_for('main.planned_coachings_list'))
+    raw = (request.form.get('planned_for_date') or '').strip()
+    if not raw:
+        flash('Bitte ein Datum wählen.', 'warning')
+        return redirect(url_for('main.planned_coachings_list'))
+    try:
+        new_date = datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Ungültiges Datum.', 'warning')
+        return redirect(url_for('main.planned_coachings_list'))
+    pc.planned_for_date = new_date
+    db.session.commit()
+    flash('Datum wurde aktualisiert.', 'success')
+    return redirect(url_for('main.planned_coachings_list'))
+
+
+@bp.route('/geplante-coachings/<int:planned_id>/loeschen', methods=['POST'])
+@login_required
+@permission_required('planned_coachings')
+def planned_coaching_delete(planned_id):
+    pc = PlannedCoaching.query.get_or_404(planned_id)
+    if not _user_may_edit_planned_coaching(pc):
+        flash('Keine Berechtigung oder Eintrag nicht gefunden.', 'danger')
+        return redirect(url_for('main.planned_coachings_list'))
+    db.session.delete(pc)
+    db.session.commit()
+    flash('Geplantes Coaching wurde entfernt.', 'success')
+    return redirect(url_for('main.planned_coachings_list'))
 
 
 @bp.route('/api/member-coaching-trend')

@@ -1,5 +1,49 @@
 {% extends "base.html" %}
 
+{% block head_extra %}
+<style>
+    .planned-tile-link {
+        position: relative;
+        overflow: visible;
+    }
+    .planned-tile-icon-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.5rem;
+    }
+    .planned-tile-badge {
+        position: absolute;
+        top: -6px;
+        right: -14px;
+        min-width: 1.65rem;
+        height: 1.65rem;
+        padding: 0 5px;
+        border-radius: 9999px;
+        background: linear-gradient(160deg, #ff4d9a 0%, #e20074 50%, #b8005c 100%);
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.78rem;
+        line-height: 1.65rem;
+        text-align: center;
+        box-shadow:
+            0 2px 6px rgba(0, 0, 0, 0.22),
+            0 0 0 2px rgba(255, 255, 255, 0.95),
+            0 0 14px rgba(226, 0, 116, 0.35);
+        z-index: 2;
+        animation: planned-badge-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes planned-badge-pop {
+        from { transform: scale(0.6); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .planned-tile-badge { animation: none; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-5">
     <div class="row {% if index_tile_count == 1 %}justify-content-center{% endif %}">
@@ -32,11 +76,13 @@
         {% endif %}
         {% if has_perm('planned_coachings') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4" style="background-color: #20c997; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;">
-                {% if open_planned_coachings_count > 0 %}
-                <span class="badge badge-light text-dark font-weight-bold border border-dark" style="position: absolute; top: 10px; right: 10px; font-size: 0.9rem; min-width: 1.6rem;">{{ open_planned_coachings_count }}</span>
-                {% endif %}
-                <i class="fas fa-calendar-alt fa-3x mb-2"></i>
+            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4 planned-tile-link" style="background-color: #20c997; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <span class="planned-tile-icon-wrap">
+                    {% if open_planned_coachings_count > 0 %}
+                    <span class="planned-tile-badge" title="{{ open_planned_coachings_count }} offene Termine" aria-label="{{ open_planned_coachings_count }} offene geplante Coachings">{{ open_planned_coachings_count }}</span>
+                    {% endif %}
+                    <i class="fas fa-calendar-alt fa-3x"></i>
+                </span>
                 <h4 class="mb-0">Geplante Coachings</h4>
             </a>
         </div>
