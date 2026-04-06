@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block head_extra %}
+<style>
+    .assignment-status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: bold;
+    }
+    .status-pending { background-color: #ffc107; color: #212529; }
+    .status-accepted { background-color: #17a2b8; color: white; }
+    .status-in_progress { background-color: #007bff; color: white; }
+    .status-completed { background-color: #28a745; color: white; }
+    .status-expired { background-color: #6c757d; color: white; }
+    .status-rejected { background-color: #dc3545; color: white; }
+    .status-cancelled { background-color: #6c757d; color: white; }
+    .progress { background-color: #5a6268; height: 10px; margin-top: 4px; }
+    .progress-bar { background-color: #e20074; }
+    .deadline-overdue { color: #dc3545; font-weight: bold; }
+    .sort-link { color: #e20074; margin-left: 4px; }
+    .gesamt-kpi { border-radius: 8px; padding: 12px 16px; background: #2b2b2b; border: 1px solid #444; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+        <h2 class="mb-0"><i class="fas fa-chart-bar text-info"></i> {{ title }}</h2>
+        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary btn-sm">Zurück zum Dashboard</a>
+    </div>
+    <p class="text-muted">Alle zugewiesenen Coachings in Ihrem Projektbereich (gemäß Benutzerkontext und Abteilung). Schließen Sie mit den Filtern einzelne Projekte ein.</p>
+
+    <div class="row mb-4">
+        <div class="col-md-6 mb-2">
+            <div class="gesamt-kpi">
+                <strong>Aktuelle Aufträge</strong>
+                <span class="badge badge-info badge-pill ml-2">{{ report_count_current }}</span>
+            </div>
+        </div>
+        <div class="col-md-6 mb-2">
+            <div class="gesamt-kpi">
+                <strong>Abgeschlossen &amp; Archiv</strong>
+                <span class="badge badge-secondary badge-pill ml-2">{{ report_count_completed }}</span>
+            </div>
+        </div>
+    </div>
+
+    <form method="get" action="{{ url_for('main.assigned_coachings_gesamtbericht') }}" class="card mb-3" style="background:#2c3238;border-color:#444;">
+        <div class="card-body">
+            <input type="hidden" name="status" value="{{ tab_active }}">
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-3">
+                    <label class="small text-muted mb-0">Projekt</label>
+                    <select name="project" class="form-control form-control-sm bg-dark text-light border-secondary" onchange="this.form.submit()">
+                        <option value="">Alle zugänglichen Projekte</option>
+                        {% for p in filter_projects %}
+                        <option value="{{ p.id }}" {% if project_filter == p.id %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
+                    <label class="small text-muted mb-0">Team</label>
+                    <select name="team" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        <option value="">Alle Teams</option>
+                        {% for team in all_teams %}
+                        <option value="{{ team.id }}" {% if team_filter == team.id %}selected{% endif %}>{{ team.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
+                    <label class="small text-muted mb-0">Coach</label>
+                    <select name="coach" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        <option value="">Alle</option>
+                        {% for coach in all_coaches %}
+                        <option value="{{ coach.id }}" {% if coach_filter == coach.id %}selected{% endif %}>{{ coach.coach_display_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
+                    <label class="small text-muted mb-0">Mitglied</label>
+                    <select name="member" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        <option value="">Alle</option>
+                        {% for member in all_members %}
+                        <option value="{{ member.id }}" {% if member_filter == member.id %}selected{% endif %}>{{ member.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-3">
+                    <label class="small text-muted mb-0">Suche</label>
+                    <input type="text" name="search" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Name / Coach" value="{{ search_term }}">
+                </div>
+            </div>
+            <div class="mt-2">
+                <button type="submit" class="btn btn-primary btn-sm">Filtern</button>
+                <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active) }}" class="btn btn-secondary btn-sm">Filter zurücksetzen</a>
+            </div>
+        </div>
+    </form>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            <a class="nav-link {% if tab_active == 'current' %}active{% endif %}"
+               href="{{ url_for('main.assigned_coachings_gesamtbericht', status='current', project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Aktuelle Aufträge</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if tab_active == 'completed' %}active{% endif %}"
+               href="{{ url_for('main.assigned_coachings_gesamtbericht', status='completed', project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene &amp; Archiv</a>
+        </li>
+    </ul>
+
+    {% if assignments.items %}
+    <div class="table-responsive">
+        <table class="table table-striped table-dark table-hover">
+            <thead>
+                <tr>
+                    <th>Deadline <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='deadline', sort_dir='asc' if sort_by != 'deadline' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Projekt <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='project_name', sort_dir='asc' if sort_by != 'project_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Mitglied <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='member_name', sort_dir='asc' if sort_by != 'member_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Coach <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='coach_name', sort_dir='asc' if sort_by != 'coach_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Zuweiser</th>
+                    <th>Erwartet</th>
+                    <th>Fortschritt</th>
+                    <th>Status</th>
+                    <th>Bericht</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assignment in assignments.items %}
+                <tr>
+                    <td>{{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}</td>
+                    <td>{{ assignment.team_member.team.project.name if assignment.team_member.team and assignment.team_member.team.project else '—' }}</td>
+                    <td>{{ assignment.team_member.name }} <span class="text-muted">({{ assignment.team_member.team.name }})</span></td>
+                    <td>{{ assignment.coach.coach_display_name if assignment.coach else '—' }}</td>
+                    <td>{{ assignment.project_leader.username if assignment.project_leader else '—' }}</td>
+                    <td>{{ assignment.expected_coaching_count }}</td>
+                    <td>
+                        <div class="progress" style="width:100px;">
+                            <div class="progress-bar" style="width: {{ assignment.progress }}%;"></div>
+                        </div>
+                        {{ assignment.progress }}%
+                    </td>
+                    <td>
+                        <span class="assignment-status status-{{ assignment.status }}">{{ assignment.status|status_de }}</span>
+                        {% if assignment.is_overdue and assignment.status not in ['completed','expired','cancelled','rejected'] %}
+                        <span class="deadline-overdue d-block small">Überfällig</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if assignment.status == 'completed' %}
+                        <a href="{{ url_for('main.assigned_coaching_report', assignment_id=assignment.id) }}" class="btn btn-sm btn-info">Bericht</a>
+                        {% else %}
+                        <span class="text-muted small">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <nav aria-label="Pagination">
+        <ul class="pagination justify-content-center">
+            {% if assignments.has_prev %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=assignments.prev_num, status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Vorherige</a></li>
+            {% endif %}
+            {% for page_num in assignments.iter_pages() %}
+                {% if page_num %}
+                <li class="page-item {% if assignments.page == page_num %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=page_num, status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">{{ page_num }}</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+            {% endfor %}
+            {% if assignments.has_next %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=assignments.next_num, status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Nächste</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% else %}
+    <p class="text-center text-muted py-4">Keine Einträge für die gewählten Filter.</p>
+    {% endif %}
+</div>
+{% endblock %}

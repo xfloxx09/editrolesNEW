@@ -592,6 +592,29 @@ def _assigned_coachings_index_badge_count(user):
     return q.count()
 
 
+def _assigned_coachings_scope_query(project_filter_id=None):
+    """
+    AssignedCoachings in Projekten aus get_accessible_project_ids() (inkl. Abteilungs-Scope).
+    project_filter_id: optional eine der erlaubten Projekt-IDs.
+    Returns None wenn keine Projekte sichtbar.
+    """
+    acc = get_accessible_project_ids()
+    if acc is not None and len(acc) == 0:
+        return None
+    if project_filter_id is not None:
+        if acc is not None and project_filter_id not in acc:
+            return None
+    q = (
+        AssignedCoaching.query.join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+    )
+    if acc is not None:
+        q = q.filter(Team.project_id.in_(acc))
+    if project_filter_id is not None:
+        q = q.filter(Team.project_id == project_filter_id)
+    return q
+
+
 @bp.route('/')
 @login_required
 def index():
@@ -604,6 +627,7 @@ def index():
             or u.has_permission('assign_coachings')
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
+        1 if u.has_permission('view_assigned_coaching_report') else 0,
         1 if u.has_permission('planned_coachings') else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
@@ -2183,26 +2207,200 @@ def get_member_current_score():
     return jsonify({'score': score})
 
 
+@bp.route('/assigned-coachings/gesamtbericht')
+@login_required
+@permission_required('view_assigned_coaching_report')
+def assigned_coachings_gesamtbericht():
+    tab_active = request.args.get('status', 'current')
+    if tab_active not in ('current', 'completed'):
+        tab_active = 'current'
+    page = request.args.get('page', 1, type=int)
+    team_filter = request.args.get('team', type=int)
+    coach_filter = request.args.get('coach', type=int)
+    member_filter = request.args.get('member', type=int)
+    search_term = (request.args.get('search') or '').strip()
+    sort_by = request.args.get('sort_by', 'deadline')
+    sort_dir = request.args.get('sort_dir', 'asc')
+    if sort_dir not in ('asc', 'desc'):
+        sort_dir = 'asc'
+
+    acc = get_accessible_project_ids()
+    project_filter = request.args.get('project', type=int)
+    if project_filter and acc is not None and project_filter not in acc:
+        project_filter = None
+
+    snapshot = _assigned_coachings_scope_query(project_filter_id=project_filter)
+    report_count_current = 0
+    report_count_completed = 0
+    if snapshot is not None:
+        report_count_current = snapshot.filter(
+            AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress'])
+        ).count()
+        report_count_completed = snapshot.filter(
+            AssignedCoaching.status.in_(['completed', 'expired', 'rejected', 'cancelled'])
+        ).count()
+
+    base_q = _assigned_coachings_scope_query(project_filter_id=project_filter)
+    if base_q is None:
+        empty_page = AssignedCoaching.query.filter(false()).paginate(page=page, per_page=20, error_out=False)
+        if acc is None:
+            filter_projects = Project.query.order_by(Project.name).all()
+        else:
+            filter_projects = []
+        return render_template(
+            'main/assigned_coachings_gesamtbericht.html',
+            title='Zugewiesene Coachings – Gesamtbericht',
+            assignments=empty_page,
+            tab_active=tab_active,
+            team_filter=team_filter,
+            coach_filter=coach_filter,
+            member_filter=member_filter,
+            search_term=search_term,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            project_filter=project_filter,
+            filter_projects=filter_projects,
+            all_teams=[],
+            all_coaches=[],
+            all_members=[],
+            report_count_current=0,
+            report_count_completed=0,
+            config=current_app.config,
+        )
+
+    q = base_q.options(
+        joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team).joinedload(Team.project),
+        joinedload(AssignedCoaching.coach),
+        joinedload(AssignedCoaching.project_leader),
+    )
+
+    if tab_active == 'completed':
+        q = q.filter(AssignedCoaching.status.in_(['completed', 'expired', 'rejected', 'cancelled']))
+    else:
+        q = q.filter(AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']))
+
+    if team_filter:
+        q = q.filter(TeamMember.team_id == team_filter)
+    if coach_filter:
+        q = q.filter(AssignedCoaching.coach_id == coach_filter)
+    if member_filter:
+        q = q.filter(AssignedCoaching.team_member_id == member_filter)
+    if search_term:
+        st = f'%{search_term}%'
+        q = q.filter(or_(
+            AssignedCoaching.coach.has(User.username.ilike(st)),
+            TeamMember.name.ilike(st),
+        ))
+
+    CoachAlias = aliased(User)
+    if sort_by == 'coach_name':
+        q = q.join(CoachAlias, AssignedCoaching.coach_id == CoachAlias.id)
+        order_expr = CoachAlias.username
+    elif sort_by == 'member_name':
+        order_expr = TeamMember.name
+    elif sort_by == 'project_name':
+        q = q.join(Project, Team.project_id == Project.id)
+        order_expr = Project.name
+    else:
+        order_expr = AssignedCoaching.deadline
+
+    if sort_dir == 'desc':
+        q = q.order_by(desc(order_expr))
+    else:
+        q = q.order_by(order_expr)
+
+    assignments = q.paginate(page=page, per_page=20, error_out=False)
+
+    if acc is None:
+        filter_projects = Project.query.order_by(Project.name).all()
+    else:
+        filter_projects = Project.query.filter(Project.id.in_(acc)).order_by(Project.name).all()
+
+    team_q = Team.query.filter(Team.name != ARCHIV_TEAM_NAME)
+    if project_filter:
+        team_q = team_q.filter(Team.project_id == project_filter)
+    elif acc is not None:
+        team_q = team_q.filter(Team.project_id.in_(acc))
+    all_teams = team_q.order_by(Team.name).all()
+
+    coach_sub = (
+        db.session.query(AssignedCoaching.coach_id)
+        .join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+    )
+    if acc is not None:
+        coach_sub = coach_sub.filter(Team.project_id.in_(acc))
+    if project_filter:
+        coach_sub = coach_sub.filter(Team.project_id == project_filter)
+    coach_id_list = [r[0] for r in coach_sub.distinct().all() if r[0]]
+    all_coaches = (
+        list(User.query.filter(User.id.in_(coach_id_list)).all())
+        if coach_id_list else []
+    )
+    all_coaches.sort(key=lambda usr: (usr.coach_display_name or '').lower())
+
+    mem_q = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
+        Team.name != ARCHIV_TEAM_NAME,
+        or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
+    )
+    if project_filter:
+        mem_q = mem_q.filter(Team.project_id == project_filter)
+    elif acc is not None:
+        mem_q = mem_q.filter(Team.project_id.in_(acc))
+    all_members = mem_q.order_by(Team.name, TeamMember.name).all()
+
+    return render_template(
+        'main/assigned_coachings_gesamtbericht.html',
+        title='Zugewiesene Coachings – Gesamtbericht',
+        assignments=assignments,
+        tab_active=tab_active,
+        team_filter=team_filter,
+        coach_filter=coach_filter,
+        member_filter=member_filter,
+        search_term=search_term,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        project_filter=project_filter,
+        filter_projects=filter_projects,
+        all_teams=all_teams,
+        all_coaches=all_coaches,
+        all_members=all_members,
+        report_count_current=report_count_current,
+        report_count_completed=report_count_completed,
+        config=current_app.config,
+    )
+
+
 @bp.route('/assigned-coaching-report/<int:assignment_id>')
 @login_required
-@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+@any_permission_required('assign_coachings', 'view_pl_qm_dashboard', 'view_assigned_coaching_report')
 def assigned_coaching_report(assignment_id):
-    project_id = get_visible_project_id()
-    if not project_id:
-        flash('Kein Projekt ausgewählt.', 'danger')
-        return redirect(url_for('main.index'))
-
     assignment = AssignedCoaching.query.options(
         joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team),
         joinedload(AssignedCoaching.coach),
     ).get_or_404(assignment_id)
 
-    if assignment.team_member.team.project_id != project_id:
-        flash('Aufgabe gehört nicht zum aktiven Projekt.', 'danger')
-        return redirect(url_for('main.assigned_coachings', project=project_id))
-    if assignment.project_leader_id != current_user.id:
-        flash('Nur die zuweisende Person kann den Bericht einsehen.', 'danger')
-        return redirect(url_for('main.assigned_coachings', project=project_id))
+    tm = assignment.team_member
+    if not tm or not tm.team:
+        flash('Ungültige Zuweisung.', 'danger')
+        return redirect(url_for('main.index'))
+    project_id = tm.team.project_id
+
+    acc = get_accessible_project_ids()
+    if acc is not None:
+        if len(acc) == 0 or project_id not in acc:
+            flash('Kein Zugriff auf diese Zuweisung.', 'danger')
+            return redirect(url_for('main.index'))
+
+    is_pl_owner = assignment.project_leader_id == current_user.id
+    may_pl = is_pl_owner and (
+        current_user.has_permission('assign_coachings')
+        or current_user.has_permission('view_pl_qm_dashboard')
+    )
+    may_scope = current_user.has_permission('view_assigned_coaching_report')
+    if not may_pl and not may_scope:
+        flash('Keine Berechtigung für diesen Bericht.', 'danger')
+        return redirect(url_for('main.index'))
 
     done_list = Coaching.query.options(joinedload(Coaching.coach)).filter(
         Coaching.assigned_coaching_id == assignment.id
