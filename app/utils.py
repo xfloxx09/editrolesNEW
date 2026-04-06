@@ -261,6 +261,13 @@ def has_permission(user, permission_name):
     return user.role.has_permission(permission_name)
 
 
+def projects_in_abteilung(abteilung_id):
+    """Ordered projects linked to an Abteilung (for primary project / sync)."""
+    if not abteilung_id:
+        return []
+    return Project.query.filter_by(abteilung_id=abteilung_id).order_by(Project.id).all()
+
+
 def get_accessible_project_ids():
     """
     Projects this user may see in dashboards, filters, and URLs.
@@ -269,15 +276,20 @@ def get_accessible_project_ids():
         None — Admin / Betriebsleiter: no restriction (all projects).
         [] — not authenticated or no projects linked (caller should handle).
         [id, ...] — explicit allow-list (primary ``User.project_id`` plus optional
-        ``User.projects`` M2M; Abteilungsleiter uses only ``User.projects``).
+        ``User.projects`` M2M; Abteilungsleiter uses ``User.projects``).
+        Users with ``view_abteilung`` and ``User.abteilung_id`` also see all projects
+        of that Abteilung.
     """
     if not current_user.is_authenticated:
         return []
     if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
         return None
-    if current_user.role_name == ROLE_ABTEILUNGSLEITER:
-        return sorted({p.id for p in current_user.projects})
     ids = set()
+    if current_user.has_permission('view_abteilung') and current_user.abteilung_id:
+        ids.update(p.id for p in projects_in_abteilung(current_user.abteilung_id))
+    if current_user.role_name == ROLE_ABTEILUNGSLEITER:
+        ids.update(p.id for p in current_user.projects)
+        return sorted(ids)
     if current_user.project_id:
         ids.add(current_user.project_id)
     for p in current_user.projects:

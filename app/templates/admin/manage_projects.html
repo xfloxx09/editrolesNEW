@@ -4,6 +4,7 @@
 <h1>Projekte verwalten</h1>
 <div class="mb-3">
     <a href="{{ url_for('admin.create_project') }}" class="btn telekom-button">Neues Projekt</a>
+    <a href="{{ url_for('admin.manage_abteilungen') }}" class="btn btn-outline-secondary">Abteilungen</a>
     <a href="{{ url_for('admin.manage_teams_coaching') }}" class="btn btn-outline-secondary">Teams &amp; aktives Coaching</a>
 </div>
 
@@ -22,6 +23,7 @@
         <tr>
             <td>{{ project.id }}</td>
             <td>{{ project.name }}</td>
+            <td>{{ project.abteilung.name if project.abteilung else '—' }}</td>
             <td>{{ project.description or '-' }}</td>
             <td>{{ project.created_at|athens_time('%d.%m.%Y') if project.created_at else '-' }}</td>
             <td>

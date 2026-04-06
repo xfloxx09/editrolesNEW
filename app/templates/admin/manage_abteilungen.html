@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>Abteilungen</h1>
+    <p class="text-muted">Abteilungen gruppieren Projekte (mit allen Teams). Benutzer mit der Berechtigung „Abteilung einsehen“ können einer Abteilung zugeordnet werden und sehen damit alle zugehörigen Projekte.</p>
+    <div class="mb-3">
+        <a href="{{ url_for('admin.create_abteilung') }}" class="btn telekom-button">Neue Abteilung</a>
+        <a href="{{ url_for('admin.manage_projects') }}" class="btn btn-outline-secondary">Zu Projekten</a>
+    </div>
+    <table class="table table-sm table-bordered">
+        <thead class="telekom-bg-magenta text-white">
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Projekte</th>
+                <th>Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in abteilungen %}
+            <tr>
+                <td>{{ a.id }}</td>
+                <td>{{ a.name }}{% if a.description %}<br><small class="text-muted">{{ a.description }}</small>{% endif %}</td>
+                <td>{{ a.projects|length }}</td>
+                <td>
+                    <a href="{{ url_for('admin.edit_abteilung', abteilung_id=a.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
+                    <form action="{{ url_for('admin.delete_abteilung', abteilung_id=a.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Abteilung wirklich löschen? Projekte und Benutzer werden von der Abteilung getrennt.');">
+                        <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted">Noch keine Abteilungen.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

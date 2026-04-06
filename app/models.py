@@ -43,9 +43,11 @@ class User(UserMixin, db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'))
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
     team_id_if_leader = db.Column(db.Integer, db.ForeignKey('teams.id'))
+    abteilung_id = db.Column(db.Integer, db.ForeignKey('abteilungen.id'), nullable=True)
 
     role = db.relationship('Role', back_populates='users')
     project = db.relationship('Project', back_populates='users')
+    abteilung = db.relationship('Abteilung', back_populates='users')
     teams_led = db.relationship('Team', secondary=team_leaders, back_populates='leaders')
     projects = db.relationship('Project', secondary=user_projects, back_populates='assigned_users')
     team_members = db.relationship('TeamMember', back_populates='user')
@@ -100,12 +102,25 @@ class Permission(db.Model):
     roles = db.relationship('Role', secondary=role_permissions, back_populates='permissions')
 
 
+class Abteilung(db.Model):
+    """Department above projects: assign whole projects (and their teams) for scoped access."""
+    __tablename__ = 'abteilungen'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False, unique=True)
+    description = db.Column(db.String(500))
+
+    projects = db.relationship('Project', back_populates='abteilung')
+    users = db.relationship('User', back_populates='abteilung')
+
+
 class Project(db.Model):
     __tablename__ = 'projects'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.String(500))
+    abteilung_id = db.Column(db.Integer, db.ForeignKey('abteilungen.id'), nullable=True)
 
+    abteilung = db.relationship('Abteilung', back_populates='projects')
     users = db.relationship('User', back_populates='project')
     teams = db.relationship('Team', back_populates='project')
     workshops = db.relationship('Workshop', back_populates='project')

@@ -5,9 +5,9 @@ from sqlalchemy import desc, or_, false
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse
-from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm
-from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung
+from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm, AbteilungForm
+from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
@@ -22,6 +22,23 @@ LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
 
 def _role_ids_with_multiple_teams():
     return [r.id for r in Role.query.order_by(Role.name).all() if r.has_permission('multiple_teams')]
+
+
+def _role_ids_with_view_abteilung():
+    return [r.id for r in Role.query.order_by(Role.name).all() if r.has_permission('view_abteilung')]
+
+
+def _sync_abteilung_projects(abteilung_id, project_id_list):
+    Project.query.filter_by(abteilung_id=abteilung_id).update({Project.abteilung_id: None}, synchronize_session='fetch')
+    for pid in project_id_list or []:
+        p = Project.query.get(pid)
+        if p:
+            p.abteilung_id = abteilung_id
+
+
+def _abteilung_pk_from_form(form):
+    v = form.abteilung_id.data if getattr(form, 'abteilung_id', None) else None
+    return v if v else None
 
 
 def _sync_user_team_members_from_form(user, role, form):
@@ -244,7 +261,7 @@ def panel():
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def manage_projects():
-    projects = Project.query.order_by(Project.name).all()
+    projects = Project.query.options(joinedload(Project.abteilung)).order_by(Project.name).all()
     return render_template('admin/manage_projects.html', projects=projects)
 
 
@@ -291,13 +308,76 @@ def manage_teams_coaching():
     )
 
 
+@bp.route('/abteilungen')
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def manage_abteilungen():
+    abteilungen = Abteilung.query.options(joinedload(Abteilung.projects)).order_by(Abteilung.name).all()
+    return render_template(
+        'admin/manage_abteilungen.html',
+        title='Abteilungen',
+        abteilungen=abteilungen,
+        config=current_app.config,
+    )
+
+
+@bp.route('/abteilungen/create', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def create_abteilung():
+    form = AbteilungForm()
+    if form.validate_on_submit():
+        a = Abteilung(name=form.name.data.strip(), description=(form.description.data or '').strip() or None)
+        db.session.add(a)
+        db.session.flush()
+        _sync_abteilung_projects(a.id, form.project_ids.data)
+        db.session.commit()
+        flash('Abteilung gespeichert.', 'success')
+        return redirect(url_for('admin.manage_abteilungen'))
+    return render_template('admin/create_abteilung.html', title='Abteilung anlegen', form=form, config=current_app.config)
+
+
+@bp.route('/abteilungen/<int:abteilung_id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def edit_abteilung(abteilung_id):
+    abt = Abteilung.query.get_or_404(abteilung_id)
+    form = AbteilungForm()
+    if form.validate_on_submit():
+        abt.name = form.name.data.strip()
+        abt.description = (form.description.data or '').strip() or None
+        _sync_abteilung_projects(abt.id, form.project_ids.data)
+        db.session.commit()
+        flash('Abteilung aktualisiert.', 'success')
+        return redirect(url_for('admin.manage_abteilungen'))
+    if request.method == 'GET':
+        form.name.data = abt.name
+        form.description.data = abt.description
+        form.project_ids.data = [p.id for p in abt.projects]
+    return render_template('admin/edit_abteilung.html', title='Abteilung bearbeiten', form=form, abteilung=abt, config=current_app.config)
+
+
+@bp.route('/abteilungen/<int:abteilung_id>/delete', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def delete_abteilung(abteilung_id):
+    abt = Abteilung.query.get_or_404(abteilung_id)
+    User.query.filter_by(abteilung_id=abteilung_id).update({User.abteilung_id: None}, synchronize_session='fetch')
+    Project.query.filter_by(abteilung_id=abteilung_id).update({Project.abteilung_id: None}, synchronize_session='fetch')
+    db.session.delete(abt)
+    db.session.commit()
+    flash('Abteilung gelöscht. Benutzer- und Projekt-Verknüpfungen wurden entfernt.', 'success')
+    return redirect(url_for('admin.manage_abteilungen'))
+
+
 @bp.route('/projects/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def create_project():
     form = ProjectForm()
     if form.validate_on_submit():
-        project = Project(name=form.name.data, description=form.description.data)
+        pk = _abteilung_pk_from_form(form)
+        project = Project(name=form.name.data, description=form.description.data, abteilung_id=pk)
         db.session.add(project)
         db.session.commit()
         flash('Projekt erfolgreich erstellt.', 'success')
@@ -311,9 +391,12 @@ def create_project():
 def edit_project(project_id):
     project = Project.query.get_or_404(project_id)
     form = ProjectForm(obj=project)
+    if request.method == 'GET':
+        form.abteilung_id.data = project.abteilung_id or 0
     if form.validate_on_submit():
         project.name = form.name.data
         project.description = form.description.data
+        project.abteilung_id = _abteilung_pk_from_form(form)
         db.session.commit()
         flash('Projekt aktualisiert.', 'success')
         return redirect(url_for('admin.manage_projects'))
@@ -350,32 +433,74 @@ def create_user():
                     title='Benutzer erstellen',
                     form=form,
                     role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                    role_ids_view_abteilung=_role_ids_with_view_abteilung(),
                     config=current_app.config,
                 )
 
+            dept_id = _abteilung_pk_from_form(form) if role.has_permission('view_abteilung') else None
+
             if role.name == ROLE_ABTEILUNGSLEITER:
-                primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
-                if primary_project_id is None:
-                    flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
-                    return render_template(
-                        'admin/create_user.html',
-                        title='Benutzer erstellen',
-                        form=form,
-                        role_ids_multiple_teams=_role_ids_with_multiple_teams(),
-                        config=current_app.config,
+                if dept_id:
+                    plist = projects_in_abteilung(dept_id)
+                    if not plist:
+                        flash('Die gewählte Abteilung enthält keine Projekte. Ordnen Sie der Abteilung zuerst Projekte zu.', 'danger')
+                        return render_template(
+                            'admin/create_user.html',
+                            title='Benutzer erstellen',
+                            form=form,
+                            role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                            role_ids_view_abteilung=_role_ids_with_view_abteilung(),
+                            config=current_app.config,
+                        )
+                    primary_project_id = plist[0].id
+                    user = User(
+                        username=form.username.data,
+                        email=form.email.data if form.email.data else None,
+                        role_id=form.role_id.data,
+                        project_id=primary_project_id,
+                        abteilung_id=dept_id,
                     )
-                user = User(
-                    username=form.username.data,
-                    email=form.email.data if form.email.data else None,
-                    role_id=form.role_id.data,
-                    project_id=primary_project_id
-                )
+                else:
+                    primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
+                    if primary_project_id is None:
+                        flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
+                        return render_template(
+                            'admin/create_user.html',
+                            title='Benutzer erstellen',
+                            form=form,
+                            role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                            role_ids_view_abteilung=_role_ids_with_view_abteilung(),
+                            config=current_app.config,
+                        )
+                    user = User(
+                        username=form.username.data,
+                        email=form.email.data if form.email.data else None,
+                        role_id=form.role_id.data,
+                        project_id=primary_project_id,
+                        abteilung_id=None,
+                    )
             else:
+                if dept_id:
+                    plist = projects_in_abteilung(dept_id)
+                    if not plist:
+                        flash('Die gewählte Abteilung enthält keine Projekte. Ordnen Sie der Abteilung zuerst Projekte zu.', 'danger')
+                        return render_template(
+                            'admin/create_user.html',
+                            title='Benutzer erstellen',
+                            form=form,
+                            role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                            role_ids_view_abteilung=_role_ids_with_view_abteilung(),
+                            config=current_app.config,
+                        )
+                    primary_project_id = plist[0].id
+                else:
+                    primary_project_id = form.project_id.data
                 user = User(
                     username=form.username.data,
                     email=form.email.data if form.email.data else None,
                     role_id=form.role_id.data,
-                    project_id=form.project_id.data
+                    project_id=primary_project_id,
+                    abteilung_id=dept_id,
                 )
             user.set_password(form.password.data)
             db.session.add(user)
@@ -386,9 +511,13 @@ def create_user():
             else:
                 user.teams_led = []
 
-            if role.name == ROLE_ABTEILUNGSLEITER and form.project_ids.data:
-                selected_projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
-                user.projects = selected_projects
+            if role.name == ROLE_ABTEILUNGSLEITER:
+                if dept_id:
+                    user.projects = list(projects_in_abteilung(dept_id))
+                elif form.project_ids.data:
+                    user.projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
+                else:
+                    user.projects = []
             else:
                 extra_ids = [i for i in (form.extra_project_ids.data or []) if i and i != user.project_id]
                 user.projects = (
@@ -438,6 +567,7 @@ def create_user():
         title='Benutzer erstellen',
         form=form,
         role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+        role_ids_view_abteilung=_role_ids_with_view_abteilung(),
         config=current_app.config,
     )
 
@@ -458,6 +588,7 @@ def edit_user(user_id):
         form.username.data = user_to_edit.username
         form.email.data = user_to_edit.email
         form.role_id.data = user_to_edit.role_id
+        form.abteilung_id.data = user_to_edit.abteilung_id or 0
         form.team_ids.data = [team.id for team in user_to_edit.teams_led]
         role_g = user_to_edit.role
         if not role_g or role_g.name != ROLE_ABTEILUNGSLEITER:
@@ -508,6 +639,7 @@ def edit_user(user_id):
                     form=form,
                     user=user_to_edit,
                     role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                    role_ids_view_abteilung=_role_ids_with_view_abteilung(),
                     config=current_app.config,
                 )
 
@@ -515,22 +647,60 @@ def edit_user(user_id):
             user_to_edit.email = form.email.data if form.email.data else None
             user_to_edit.role_id = form.role_id.data
 
-            if role.name == ROLE_ABTEILUNGSLEITER:
-                primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
-                if primary_project_id is None:
-                    flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
-                    return render_template(
-                        'admin/edit_user.html',
-                        title='Benutzer bearbeiten',
-                        form=form,
-                        user=user_to_edit,
-                        role_ids_multiple_teams=_role_ids_with_multiple_teams(),
-                        config=current_app.config,
-                    )
-                user_to_edit.project_id = primary_project_id
-                user_to_edit.projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
+            dept_id = _abteilung_pk_from_form(form) if role.has_permission('view_abteilung') else None
+            if not role.has_permission('view_abteilung'):
+                user_to_edit.abteilung_id = None
             else:
-                user_to_edit.project_id = form.project_id.data
+                user_to_edit.abteilung_id = dept_id
+
+            if role.name == ROLE_ABTEILUNGSLEITER:
+                if dept_id:
+                    plist = projects_in_abteilung(dept_id)
+                    if not plist:
+                        flash('Die gewählte Abteilung enthält keine Projekte.', 'danger')
+                        return render_template(
+                            'admin/edit_user.html',
+                            title='Benutzer bearbeiten',
+                            form=form,
+                            user=user_to_edit,
+                            role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                            role_ids_view_abteilung=_role_ids_with_view_abteilung(),
+                            config=current_app.config,
+                        )
+                    user_to_edit.project_id = plist[0].id
+                    user_to_edit.projects = list(plist)
+                else:
+                    primary_project_id = form.project_ids.data[0] if form.project_ids.data else None
+                    if primary_project_id is None:
+                        flash('Mindestens ein Projekt muss ausgewählt werden.', 'danger')
+                        return render_template(
+                            'admin/edit_user.html',
+                            title='Benutzer bearbeiten',
+                            form=form,
+                            user=user_to_edit,
+                            role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                            role_ids_view_abteilung=_role_ids_with_view_abteilung(),
+                            config=current_app.config,
+                        )
+                    user_to_edit.project_id = primary_project_id
+                    user_to_edit.projects = Project.query.filter(Project.id.in_(form.project_ids.data)).all()
+            else:
+                if dept_id:
+                    plist = projects_in_abteilung(dept_id)
+                    if not plist:
+                        flash('Die gewählte Abteilung enthält keine Projekte.', 'danger')
+                        return render_template(
+                            'admin/edit_user.html',
+                            title='Benutzer bearbeiten',
+                            form=form,
+                            user=user_to_edit,
+                            role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                            role_ids_view_abteilung=_role_ids_with_view_abteilung(),
+                            config=current_app.config,
+                        )
+                    user_to_edit.project_id = plist[0].id
+                else:
+                    user_to_edit.project_id = form.project_id.data
                 extra_ids = [i for i in (form.extra_project_ids.data or []) if i and i != user_to_edit.project_id]
                 user_to_edit.projects = (
                     Project.query.filter(Project.id.in_(extra_ids)).all() if extra_ids else []
@@ -552,6 +722,7 @@ def edit_user(user_id):
                     form=form,
                     user=user_to_edit,
                     role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+                    role_ids_view_abteilung=_role_ids_with_view_abteilung(),
                     config=current_app.config,
                 )
 
@@ -569,6 +740,7 @@ def edit_user(user_id):
         form=form,
         user=user_to_edit,
         role_ids_multiple_teams=_role_ids_with_multiple_teams(),
+        role_ids_view_abteilung=_role_ids_with_view_abteilung(),
         config=current_app.config,
     )
 

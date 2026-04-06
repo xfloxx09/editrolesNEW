@@ -7,7 +7,7 @@ from flask_login import current_user
 from sqlalchemy import false, or_
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem
+from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem, Abteilung
 from app.utils import (
     ARCHIV_TEAM_NAME,
     ROLE_TEAMLEITER,
@@ -42,6 +42,12 @@ class RegistrationForm(FlaskForm):
         coerce=int,
         choices=[],
         validators=[Optional()],
+    )
+    abteilung_id = SelectField(
+        'Abteilung (nur bei Berechtigung „Abteilung einsehen“)',
+        coerce=int,
+        validators=[Optional()],
+        choices=[],
     )
 
     # Team member fields
@@ -90,6 +96,7 @@ class RegistrationForm(FlaskForm):
         self.project_id.choices = [(p.id, p.name) for p in all_projects]
         self.project_ids.choices = [(p.id, p.name) for p in all_projects]
         self.extra_project_ids.choices = [(p.id, p.name) for p in all_projects]
+        self.abteilung_id.choices = [(0, '— keine —')] + [(a.id, a.name) for a in Abteilung.query.order_by(Abteilung.name).all()]
         self.role_id.choices = [(r.id, r.name) for r in Role.query.order_by(Role.name).all()]
 
     def validate_username(self, username_field):
@@ -103,15 +110,21 @@ class RegistrationForm(FlaskForm):
     def validate_project_id(self, field):
         role = Role.query.get(self.role_id.data)
         role_name = role.name if role else None
+        if role_name == ROLE_ABTEILUNGSLEITER:
+            return
+        if role and role.has_permission('view_abteilung') and self.abteilung_id.data:
+            return
         if role_name != ROLE_ABTEILUNGSLEITER and not field.data:
             raise ValidationError('Projekt ist erforderlich.')
-        if role_name == ROLE_ABTEILUNGSLEITER and not self.project_ids.data:
-            raise ValidationError('Mindestens ein Projekt muss ausgewählt werden.')
 
     def validate_project_ids(self, field):
         role = Role.query.get(self.role_id.data)
-        if role and role.name == ROLE_ABTEILUNGSLEITER and not field.data:
-            raise ValidationError('Mindestens ein Projekt muss ausgewählt werden.')
+        if not role or role.name != ROLE_ABTEILUNGSLEITER:
+            return
+        if role.has_permission('view_abteilung') and self.abteilung_id.data:
+            return
+        if not field.data:
+            raise ValidationError('Mindestens ein Projekt oder eine Abteilung muss ausgewählt werden.')
 
     def validate(self, extra_validators=None):
         if not super(RegistrationForm, self).validate(extra_validators):
@@ -324,7 +337,23 @@ class TeamsCoachingBulkForm(FlaskForm):
 class ProjectForm(FlaskForm):
     name = StringField('Projektname', validators=[DataRequired(), Length(min=3, max=100)])
     description = TextAreaField('Beschreibung', validators=[Length(max=500)])
+    abteilung_id = SelectField('Abteilung (optional)', coerce=int, validators=[Optional()], choices=[])
     submit = SubmitField('Projekt speichern')
+
+    def __init__(self, *args, **kwargs):
+        super(ProjectForm, self).__init__(*args, **kwargs)
+        self.abteilung_id.choices = [(0, '— keine —')] + [(a.id, a.name) for a in Abteilung.query.order_by(Abteilung.name).all()]
+
+
+class AbteilungForm(FlaskForm):
+    name = StringField('Name der Abteilung', validators=[DataRequired(), Length(min=2, max=150)])
+    description = TextAreaField('Beschreibung', validators=[Length(max=500)])
+    project_ids = SelectMultipleField('Projekte (alle zugehörigen Teams gelten mit)', coerce=int, choices=[])
+    submit = SubmitField('Speichern')
+
+    def __init__(self, *args, **kwargs):
+        super(AbteilungForm, self).__init__(*args, **kwargs)
+        self.project_ids.choices = [(p.id, p.name) for p in Project.query.order_by(Project.name).all()]
 
 
 class AssignedCoachingForm(FlaskForm):

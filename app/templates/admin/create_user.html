@@ -82,9 +82,17 @@
     const extraProjectsField = document.getElementById('extra_projects_block');
     const teamLeaderField = document.getElementById('team_leader_teams');
     const abteilungsleiterField = document.getElementById('abteilungsleiter_projects');
+    const abteilungBlock = document.getElementById('abteilung_block');
     const memberTeamSingle = document.getElementById('member_team_single');
     const memberTeamMulti = document.getElementById('member_team_multi');
     const roleIdsMultipleTeams = new Set({{ role_ids_multiple_teams|default([])|tojson }});
+    const roleIdsViewAbteilung = new Set({{ role_ids_view_abteilung|default([])|tojson }});
+
+    function toggleAbteilungField() {
+        const rid = parseInt(roleSelect.value, 10);
+        if (!abteilungBlock) return;
+        abteilungBlock.style.display = roleIdsViewAbteilung.has(rid) ? 'block' : 'none';
+    }
 
     function toggleMemberTeamMode() {
         const rid = parseInt(roleSelect.value, 10);
@@ -112,6 +120,7 @@
             extraProjectsField.style.display = 'block';
         }
         toggleMemberTeamMode();
+        toggleAbteilungField();
     }
     roleSelect.addEventListener('change', toggleRoleFields);
     toggleRoleFields();

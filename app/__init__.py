@@ -131,6 +131,7 @@ def create_app(config_class=Config):
             ('view_assigned_coachings', 'View assigned coaching tasks'),
             ('accept_assigned_coaching', 'Accept assigned coaching task'),
             ('reject_assigned_coaching', 'Reject assigned coaching task'),
+            ('view_abteilung', 'Scope: access all projects of assigned Abteilung (department)'),
         ]
         for name, desc in default_permissions:
             res = conn.execute(text("SELECT id FROM permissions WHERE name = :name"), {"name": name}).fetchone()
@@ -213,6 +214,7 @@ def create_app(config_class=Config):
                     'view_assigned_coachings',
                     'accept_assigned_coaching',
                     'reject_assigned_coaching',
+                    'view_abteilung',
                 ):
                     if perm_name in perm_map:
                         conn.execute(
@@ -330,6 +332,47 @@ def create_app(config_class=Config):
                     except Exception as e2:
                         conn.rollback()
                         print(f"ℹ️ teams.visible_for_coaching_assignment: {e} / {e2}")
+
+        # 13. Abteilungen (departments above projects)
+        inspector = inspect(db.engine)
+        if 'abteilungen' not in inspector.get_table_names():
+            try:
+                conn.execute(text(
+                    'CREATE TABLE abteilungen ('
+                    'id SERIAL PRIMARY KEY, '
+                    'name VARCHAR(150) NOT NULL UNIQUE, '
+                    'description VARCHAR(500))'
+                ))
+                conn.commit()
+                print("✅ Tabelle 'abteilungen' erstellt.")
+            except Exception as e:
+                conn.rollback()
+                print(f"ℹ️ abteilungen table: {e}")
+        inspector = inspect(db.engine)
+        if 'projects' in inspector.get_table_names():
+            pc = [c['name'] for c in inspector.get_columns('projects')]
+            if 'abteilung_id' not in pc:
+                try:
+                    conn.execute(text(
+                        'ALTER TABLE projects ADD COLUMN abteilung_id INTEGER REFERENCES abteilungen(id)'
+                    ))
+                    conn.commit()
+                    print("✅ projects.abteilung_id hinzugefügt.")
+                except Exception as e:
+                    conn.rollback()
+                    print(f"ℹ️ projects.abteilung_id: {e}")
+        if 'users' in inspector.get_table_names():
+            uc = [c['name'] for c in inspector.get_columns('users')]
+            if 'abteilung_id' not in uc:
+                try:
+                    conn.execute(text(
+                        'ALTER TABLE users ADD COLUMN abteilung_id INTEGER REFERENCES abteilungen(id)'
+                    ))
+                    conn.commit()
+                    print("✅ users.abteilung_id hinzugefügt.")
+                except Exception as e:
+                    conn.rollback()
+                    print(f"ℹ️ users.abteilung_id: {e}")
 
         print("--- Migration abgeschlossen ---")
 
