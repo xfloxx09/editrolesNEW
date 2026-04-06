@@ -47,10 +47,9 @@
     color: #9a9a9a;
     padding: 0.5rem 0;
 }
-/* Einheitliche Kastenhöhe: immer so hoch wie bei mehreren Badges / + (kein „Einsinken“ leerer Tage) */
+/* Desktop: gleiche Mindesthöhe für leere/volle Tage; Inhalt darf Zeile bei Bedarf etwas höher machen */
 .term-cal-table td.term-cal-cell {
-    height: 200px;
-    min-height: 200px;
+    min-height: 132px;
     box-sizing: border-box;
 }
 .term-cal-cell {
@@ -108,20 +107,58 @@
     line-height: 1;
 }
 .term-cal-add:hover { background: #e20074; color: #fff !important; }
+/* Mobil: eine Zeile pro Tag — lesbar, keine 7 Micro-Spalten */
 .term-cal-week-mobile {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    grid-auto-rows: 1fr;
-    align-items: stretch;
-    gap: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     margin-bottom: 1rem;
 }
-@media (max-width: 767.98px) {
-    .term-cal-week-mobile .term-cal-cell {
-        min-height: 220px;
-        height: 100%;
-        box-sizing: border-box;
-    }
+.term-cal-mobile-day {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    min-height: 52px;
+}
+.term-cal-mobile-day-head {
+    flex: 0 0 auto;
+    line-height: 1.25;
+}
+.term-cal-mobile-dow {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #9a9a9a;
+    text-transform: uppercase;
+}
+.term-cal-mobile-date {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+}
+.term-cal-mobile-stats {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: flex-end;
+    align-items: center;
+    align-content: flex-start;
+}
+.term-cal-mobile-stats .term-cal-stat {
+    min-width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.72rem;
+    padding: 0 5px;
+}
+.term-cal-mobile-stats .term-cal-add {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 1rem;
+    margin-left: 0;
 }
 .term-week-nav {
     display: flex;
@@ -229,33 +266,34 @@
         </div>
         <div class="term-cal-week-mobile">
             {% for cell in week_days %}
-            <div class="term-cal-cell {% if cell.is_today %}is-today{% endif %}">
-                <div class="term-cal-daynum" style="font-size:0.95rem;">{{ ['Mo','Di','Mi','Do','Fr','Sa','So'][loop.index0] }}<br>{{ cell.date.day }}.{{ '%02d'|format(cell.date.month) }}.</div>
-                <div class="term-cal-stats flex-column align-items-stretch">
+            <div class="term-cal-cell term-cal-mobile-day {% if cell.is_today %}is-today{% endif %}">
+                <div class="term-cal-mobile-day-head">
+                    <span class="term-cal-mobile-dow">{{ ['Mo','Di','Mi','Do','Fr','Sa','So'][loop.index0] }}</span>
+                    <span class="term-cal-mobile-date">{{ cell.date.day }}.{{ '%02d'|format(cell.date.month) }}.</span>
+                </div>
+                <div class="term-cal-mobile-stats">
                     {% if has_perm_dash and cell.done_me > 0 %}
-                    <a class="term-cal-stat done w-100" style="width:100%!important;"
-                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_me }} eig.</a>
+                    <a class="term-cal-stat done" title="Eigene Coachings"
+                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_me }}</a>
                     {% endif %}
                     {% if has_perm_dash and cell.done_others > 0 %}
-                    <a class="term-cal-stat done-others w-100" style="width:100%!important;"
-                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }} Team</a>
+                    <a class="term-cal-stat done-others" title="Andere Coaches"
+                       href="{% if calendar_dash_project == 'all' %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project='all') }}{% elif calendar_dash_project is not none %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all', project=calendar_dash_project) }}{% else %}{{ url_for('main.coaching_dashboard', cal_date=cell.date.isoformat(), period='30days', team='all') }}{% endif %}">{{ cell.done_others }}</a>
                     {% endif %}
                     {% if has_perm_planned and cell.planned > 0 %}
-                    <a class="term-cal-stat planned w-100" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned }} geplant</a>
+                    <a class="term-cal-stat planned" title="Geplant" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned }}</a>
                     {% endif %}
                     {% if has_perm_assigned and cell.assigned > 0 %}
-                    <a class="term-cal-stat assigned w-100" href="{{ url_for('main.assigned_coachings') }}">{{ cell.assigned }} Aufg.</a>
+                    <a class="term-cal-stat assigned" title="Zuweisungen" href="{{ url_for('main.assigned_coachings') }}">{{ cell.assigned }}</a>
                     {% endif %}
                     {% if cell.show_add %}
-                    <div class="mt-1 text-center w-100">
                         {% if cell.is_today and can_add_coaching and add_coaching_project_id %}
-                        <a class="btn btn-sm btn-block telekom-button" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+ Coaching</a>
+                        <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
                         {% elif cell.is_today and can_plan %}
-                        <a class="btn btn-sm btn-block btn-outline-info" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+ Geplant</a>
+                        <a class="term-cal-add" title="Geplant" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
                         {% elif cell.is_future and can_plan %}
-                        <a class="btn btn-sm btn-block btn-outline-info" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+ Geplant</a>
+                        <a class="term-cal-add" title="Geplant anlegen" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
                         {% endif %}
-                    </div>
                     {% endif %}
                 </div>
             </div>
