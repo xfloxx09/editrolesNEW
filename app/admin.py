@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm, AbteilungForm
-from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung
+from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung, leitfaden_items_for_coaching_edit
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
@@ -128,14 +128,6 @@ def _sync_user_team_members_from_form(user, role, form):
                 if m.team_id != keep and Coaching.query.filter_by(team_member_id=m.id).count() == 0:
                     db.session.delete(m)
     return True
-
-
-def get_active_leitfaden_items_safe():
-    try:
-        return LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return []
 
 
 @bp.route('/')
@@ -1144,7 +1136,7 @@ def edit_coaching_entry(coaching_id):
     coaching_to_edit = Coaching.query.get_or_404(coaching_id)
     form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=False, project_id=coaching_to_edit.project_id)
-    leitfaden_items = get_active_leitfaden_items_safe()
+    leitfaden_items = leitfaden_items_for_coaching_edit(coaching_to_edit)
     selected_leitfaden_values = {}
     if leitfaden_items:
         try:
@@ -1450,43 +1442,155 @@ def delete_role(role_id):
 
 
 # --- Leitfaden Management ---
+def _parse_raw_leitfaden_project(raw, *, abort_on_invalid=False):
+    """None / leer / 0 = Standard (global). Bei ungültigem Wert: Flash; (None, True) nur wenn abort_on_invalid."""
+    if raw is None or str(raw).strip() in ('', '0'):
+        return None, False
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        flash('Ungültiges Projekt.', 'warning')
+        return None, abort_on_invalid
+    if v <= 0:
+        flash('Ungültiges Projekt.', 'warning')
+        return None, abort_on_invalid
+    if not Project.query.get(v):
+        flash('Projekt nicht gefunden.', 'warning')
+        return None, abort_on_invalid
+    return v, False
+
+
+def _parse_leitfaden_project_param(*, abort_on_invalid=False):
+    return _parse_raw_leitfaden_project(request.args.get('project'), abort_on_invalid=abort_on_invalid)
+
+
+def _leitfaden_create_scope_from_request():
+    """GET: ?project= ; POST: hidden field project (damit der Kontext beim Speichern erhalten bleibt)."""
+    raw = request.form.get('project') if request.method == 'POST' else request.args.get('project')
+    return _parse_raw_leitfaden_project(raw, abort_on_invalid=True)
+
+
+def _redirect_manage_leitfaden(project_id=None):
+    if project_id:
+        return redirect(url_for('admin.manage_leitfaden', project=project_id))
+    return redirect(url_for('admin.manage_leitfaden'))
+
+
 @bp.route('/leitfaden')
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def manage_leitfaden():
+    scope_project_id, _ = _parse_leitfaden_project_param(abort_on_invalid=False)
+    all_projects = []
     try:
-        items = LeitfadenItem.query.order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+        all_projects = Project.query.order_by(Project.name).all()
+        if scope_project_id is None:
+            q = LeitfadenItem.query.filter(LeitfadenItem.project_id.is_(None))
+        else:
+            q = LeitfadenItem.query.filter_by(project_id=scope_project_id)
+        items = q.order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+        show_copy_from_standard = bool(
+            scope_project_id
+            and LeitfadenItem.query.filter_by(project_id=scope_project_id).count() == 0
+        )
     except SQLAlchemyError:
         db.session.rollback()
         flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
         items = []
-    return render_template('admin/manage_leitfaden.html', items=items, config=current_app.config)
+        show_copy_from_standard = False
+    return render_template(
+        'admin/manage_leitfaden.html',
+        items=items,
+        all_projects=all_projects,
+        scope_project_id=scope_project_id,
+        show_copy_from_standard=show_copy_from_standard,
+        config=current_app.config,
+    )
+
+
+@bp.route('/leitfaden/copy_standard', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def copy_standard_leitfaden_to_project():
+    project_id = request.form.get('project', type=int)
+    if not project_id or not Project.query.get(project_id):
+        flash('Ungültiges Projekt.', 'danger')
+        return _redirect_manage_leitfaden()
+    if LeitfadenItem.query.filter_by(project_id=project_id).count() > 0:
+        flash('Dieses Projekt hat bereits einen eigenen Leitfaden.', 'info')
+        return _redirect_manage_leitfaden(project_id)
+    try:
+        standard = (
+            LeitfadenItem.query.filter(LeitfadenItem.project_id.is_(None))
+            .order_by(LeitfadenItem.position, LeitfadenItem.id)
+            .all()
+        )
+        if not standard:
+            flash('Es gibt keinen Standard-Leitfaden zum Kopieren.', 'warning')
+            return _redirect_manage_leitfaden(project_id)
+        for src in standard:
+            db.session.add(
+                LeitfadenItem(
+                    name=src.name,
+                    position=src.position,
+                    is_active=src.is_active,
+                    project_id=project_id,
+                )
+            )
+        db.session.commit()
+        flash(f'{len(standard)} Punkt(e) aus dem Standard-Leitfaden übernommen.', 'success')
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Leitfaden konnte nicht kopiert werden.', 'danger')
+    return _redirect_manage_leitfaden(project_id)
 
 
 @bp.route('/leitfaden/create', methods=['GET', 'POST'])
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def create_leitfaden_item():
-    form = LeitfadenItemForm()
+    scope_project_id, bad = _leitfaden_create_scope_from_request()
+    if bad:
+        return _redirect_manage_leitfaden()
+    form = LeitfadenItemForm(scope_project_id=scope_project_id)
     if request.method == 'GET' and form.position.data is None:
         try:
-            last_item = LeitfadenItem.query.order_by(LeitfadenItem.position.desc(), LeitfadenItem.id.desc()).first()
+            q = LeitfadenItem.query
+            if scope_project_id is None:
+                q = q.filter(LeitfadenItem.project_id.is_(None))
+            else:
+                q = q.filter_by(project_id=scope_project_id)
+            last_item = q.order_by(LeitfadenItem.position.desc(), LeitfadenItem.id.desc()).first()
             form.position.data = (last_item.position + 1) if last_item else 1
         except SQLAlchemyError:
             db.session.rollback()
             flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
-            return redirect(url_for('admin.manage_leitfaden'))
+            return _redirect_manage_leitfaden(scope_project_id)
     if form.validate_on_submit():
         item = LeitfadenItem(
             name=form.name.data.strip(),
             position=form.position.data,
-            is_active=form.is_active.data
+            is_active=form.is_active.data,
+            project_id=scope_project_id,
         )
         db.session.add(item)
         db.session.commit()
         flash('Leitfaden-Punkt erstellt.', 'success')
-        return redirect(url_for('admin.manage_leitfaden'))
-    return render_template('admin/edit_leitfaden_item.html', form=form, title='Leitfaden-Punkt erstellen', item=None, config=current_app.config)
+        return _redirect_manage_leitfaden(scope_project_id)
+    leitfaden_list_url = (
+        url_for('admin.manage_leitfaden', project=scope_project_id)
+        if scope_project_id
+        else url_for('admin.manage_leitfaden')
+    )
+    return render_template(
+        'admin/edit_leitfaden_item.html',
+        form=form,
+        title='Leitfaden-Punkt erstellen',
+        item=None,
+        scope_project_id=scope_project_id,
+        leitfaden_list_url=leitfaden_list_url,
+        config=current_app.config,
+    )
 
 
 @bp.route('/leitfaden/edit/<int:item_id>', methods=['GET', 'POST'])
@@ -1498,16 +1602,29 @@ def edit_leitfaden_item(item_id):
     except SQLAlchemyError:
         db.session.rollback()
         flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
-        return redirect(url_for('admin.manage_leitfaden'))
-    form = LeitfadenItemForm(obj=item, original_name=item.name)
+        return _redirect_manage_leitfaden()
+    form = LeitfadenItemForm(obj=item, original_name=item.name, scope_project_id=item.project_id)
     if form.validate_on_submit():
         item.name = form.name.data.strip()
         item.position = form.position.data
         item.is_active = form.is_active.data
         db.session.commit()
         flash('Leitfaden-Punkt aktualisiert.', 'success')
-        return redirect(url_for('admin.manage_leitfaden'))
-    return render_template('admin/edit_leitfaden_item.html', form=form, title='Leitfaden-Punkt bearbeiten', item=item, config=current_app.config)
+        return _redirect_manage_leitfaden(item.project_id)
+    leitfaden_list_url = (
+        url_for('admin.manage_leitfaden', project=item.project_id)
+        if item.project_id
+        else url_for('admin.manage_leitfaden')
+    )
+    return render_template(
+        'admin/edit_leitfaden_item.html',
+        form=form,
+        title='Leitfaden-Punkt bearbeiten',
+        item=item,
+        scope_project_id=item.project_id,
+        leitfaden_list_url=leitfaden_list_url,
+        config=current_app.config,
+    )
 
 
 @bp.route('/leitfaden/delete/<int:item_id>', methods=['POST'])
@@ -1516,13 +1633,15 @@ def edit_leitfaden_item(item_id):
 def delete_leitfaden_item(item_id):
     try:
         item = LeitfadenItem.query.get_or_404(item_id)
+        scope_pid = item.project_id
         db.session.delete(item)
         db.session.commit()
         flash('Leitfaden-Punkt gelöscht.', 'success')
+        return _redirect_manage_leitfaden(scope_pid)
     except SQLAlchemyError:
         db.session.rollback()
         flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
-    return redirect(url_for('admin.manage_leitfaden'))
+    return _redirect_manage_leitfaden()
 
 
 # --- Assigned Coachings Management (Admin) ---

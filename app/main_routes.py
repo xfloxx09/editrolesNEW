@@ -5,7 +5,7 @@ from sqlalchemy import desc, or_, false, exists
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, CoachingReview
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, CoachingLeitfadenResponse, CoachingReview
 from app.forms import CoachingForm, WorkshopForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
 from app.utils import (
     role_required,
@@ -27,6 +27,8 @@ from app.utils import (
     user_eligible_assignable_coach,
     users_for_assignment_coach_dropdown,
     workshop_individual_rating_from_request,
+    leitfaden_items_for_project,
+    leitfaden_items_for_coaching_edit,
 )
 from datetime import datetime, timezone, timedelta, date
 import calendar
@@ -53,13 +55,6 @@ def _redirect_after_coaching_review(form, my_coachings_query_args):
         return redirect(target)
     return redirect(url_for('main.my_coachings', **my_coachings_query_args))
 
-
-def get_active_leitfaden_items_safe():
-    try:
-        return LeitfadenItem.query.filter_by(is_active=True).order_by(LeitfadenItem.position, LeitfadenItem.id).all()
-    except SQLAlchemyError:
-        db.session.rollback()
-        return []
 
 # Helper to get the active project for the current user
 def get_visible_project_id():
@@ -1088,7 +1083,7 @@ def add_coaching():
     )
     form = CoachingForm(current_user_role=current_user_role, current_user_team_ids=current_user_team_ids)
     form.update_team_member_choices(exclude_archiv=True, project_id=project_id)
-    leitfaden_items = get_active_leitfaden_items_safe()
+    leitfaden_items = leitfaden_items_for_project(project_id)
 
     if form.validate_on_submit():
         team_member = TeamMember.query.get(form.team_member_id.data)
@@ -1195,7 +1190,7 @@ def edit_coaching(coaching_id):
         project_id=coaching.project_id,
         include_member_ids=[coaching.team_member_id],
     )
-    leitfaden_items = get_active_leitfaden_items_safe()
+    leitfaden_items = leitfaden_items_for_coaching_edit(coaching)
     selected_leitfaden_values = {}
     if leitfaden_items:
         try:

@@ -7,6 +7,9 @@
     <div class="card-body">
         <form method="POST" novalidate>
             {{ form.hidden_tag() }}
+            {% if not item and scope_project_id %}
+            <input type="hidden" name="project" value="{{ scope_project_id }}">
+            {% endif %}
             <div class="form-group">
                 {{ form.name.label(class="form-control-label") }}
                 {{ form.name(class="form-control " + ("is-invalid" if form.name.errors else "")) }}
@@ -26,7 +29,7 @@
                 {{ form.is_active.label(class="form-check-label") }}
             </div>
             <button type="submit" class="btn telekom-button">{{ form.submit.label.text }}</button>
-            <a href="{{ url_for('admin.manage_leitfaden') }}" class="btn btn-secondary">Abbrechen</a>
+            <a href="{{ leitfaden_list_url }}" class="btn btn-secondary">Abbrechen</a>
         </form>
     </div>
 </div>

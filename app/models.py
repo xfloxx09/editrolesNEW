@@ -133,6 +133,7 @@ class Project(db.Model):
     coachings = db.relationship('Coaching', back_populates='project')
     assigned_users = db.relationship('User', secondary=user_projects, back_populates='projects')
     roles = db.relationship('Role', secondary=role_projects, back_populates='projects')
+    leitfaden_items = db.relationship('LeitfadenItem', back_populates='project')
 
 
 class Team(db.Model):
@@ -258,7 +259,10 @@ class LeitfadenItem(db.Model):
     position = db.Column(db.Integer, nullable=False, default=0)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # NULL = global standard (default for all projects without their own set)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
 
+    project = db.relationship('Project', back_populates='leitfaden_items')
     responses = db.relationship('CoachingLeitfadenResponse', back_populates='item')
 
 

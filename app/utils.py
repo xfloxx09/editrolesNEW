@@ -1,8 +1,9 @@
 from functools import wraps
 from flask_login import current_user
 from flask import flash, redirect, url_for
+from sqlalchemy.exc import SQLAlchemyError
 from app import db
-from app.models import Team, Project, Role, TeamMember, User
+from app.models import Team, Project, Role, TeamMember, User, LeitfadenItem
 
 ROLE_ADMIN = 'Admin'
 ROLE_BETRIEBSLEITER = 'Betriebsleiter'
@@ -16,6 +17,66 @@ ROLE_ABTEILUNGSLEITER = 'Abteilungsleiter'
 ROLE_MITARBEITER = 'Mitarbeiter'
 
 ARCHIV_TEAM_NAME = "ARCHIV"
+
+
+def leitfaden_items_for_project(project_id):
+    """
+    Active checklist items for new coachings in this project.
+    If the project has at least one active project-specific item, use only those.
+    Otherwise use the global standard (project_id IS NULL).
+    """
+    if project_id is None:
+        try:
+            return (
+                LeitfadenItem.query.filter(
+                    LeitfadenItem.is_active.is_(True),
+                    LeitfadenItem.project_id.is_(None),
+                )
+                .order_by(LeitfadenItem.position, LeitfadenItem.id)
+                .all()
+            )
+        except SQLAlchemyError:
+            db.session.rollback()
+            return []
+    try:
+        scoped = (
+            LeitfadenItem.query.filter_by(is_active=True, project_id=project_id)
+            .order_by(LeitfadenItem.position, LeitfadenItem.id)
+            .all()
+        )
+        if scoped:
+            return scoped
+        return (
+            LeitfadenItem.query.filter(
+                LeitfadenItem.is_active.is_(True),
+                LeitfadenItem.project_id.is_(None),
+            )
+            .order_by(LeitfadenItem.position, LeitfadenItem.id)
+            .all()
+        )
+    except SQLAlchemyError:
+        db.session.rollback()
+        return []
+
+
+def leitfaden_items_for_coaching_edit(coaching):
+    """
+    Items for editing a coaching: current project checklist plus any items already linked
+    in saved responses (so legacy rows stay visible if the project checklist changed).
+    """
+    if not coaching:
+        return []
+    base = leitfaden_items_for_project(coaching.project_id)
+    base_ids = {i.id for i in base}
+    extra = []
+    try:
+        for r in coaching.leitfaden_responses or []:
+            if r.item_id not in base_ids and r.item:
+                extra.append(r.item)
+    except SQLAlchemyError:
+        db.session.rollback()
+    extra.sort(key=lambda x: (x.position, x.id))
+    return base + extra
 
 
 def user_is_archived_only_for_login(user):

@@ -374,6 +374,21 @@ def create_app(config_class=Config):
                     conn.rollback()
                     print(f"ℹ️ users.abteilung_id: {e}")
 
+        # 14. leitfaden_items.project_id (NULL = global standard checklist)
+        inspector = inspect(db.engine)
+        if 'leitfaden_items' in inspector.get_table_names():
+            lic = [c['name'] for c in inspector.get_columns('leitfaden_items')]
+            if 'project_id' not in lic:
+                try:
+                    conn.execute(text(
+                        'ALTER TABLE leitfaden_items ADD COLUMN project_id INTEGER REFERENCES projects(id)'
+                    ))
+                    conn.commit()
+                    print("✅ leitfaden_items.project_id hinzugefügt.")
+                except Exception as e:
+                    conn.rollback()
+                    print(f"ℹ️ leitfaden_items.project_id: {e}")
+
         print("--- Migration abgeschlossen ---")
 
     # --- Blueprint registration ---

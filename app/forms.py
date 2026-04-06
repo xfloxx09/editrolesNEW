@@ -458,17 +458,22 @@ class LeitfadenItemForm(FlaskForm):
     is_active = BooleanField('Aktiv', default=True)
     submit = SubmitField('Speichern')
 
-    def __init__(self, original_name=None, *args, **kwargs):
+    def __init__(self, original_name=None, scope_project_id=None, *args, **kwargs):
         super(LeitfadenItemForm, self).__init__(*args, **kwargs)
         self.original_name = original_name
+        self.scope_project_id = scope_project_id
 
     def validate_name(self, field):
         name = (field.data or '').strip()
         query = LeitfadenItem.query.filter(db.func.lower(LeitfadenItem.name) == name.lower())
+        if self.scope_project_id is None:
+            query = query.filter(LeitfadenItem.project_id.is_(None))
+        else:
+            query = query.filter(LeitfadenItem.project_id == self.scope_project_id)
         if self.original_name and self.original_name.strip().lower() == name.lower():
             return
         if query.first():
-            raise ValidationError('Diese Leitfaden-Bezeichnung existiert bereits.')
+            raise ValidationError('Diese Leitfaden-Bezeichnung existiert bereits (in diesem Kontext).')
 
 
 class CoachingReviewForm(FlaskForm):

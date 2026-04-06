@@ -1,14 +1,52 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
     <h2 class="mb-0">Leitfaden verwalten</h2>
-    <a href="{{ url_for('admin.create_leitfaden_item') }}" class="btn telekom-button">+ Neuer Punkt</a>
+    <a href="{{ url_for('admin.create_leitfaden_item', project=scope_project_id) if scope_project_id else url_for('admin.create_leitfaden_item') }}" class="btn telekom-button">+ Neuer Punkt</a>
 </div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="get" action="{{ url_for('admin.manage_leitfaden') }}" class="form-inline align-items-end flex-wrap gap-2">
+            <div class="form-group mr-3 mb-2 mb-md-0">
+                <label for="leitfaden-project-select" class="mr-2">Projekt-Kontext</label>
+                <select name="project" id="leitfaden-project-select" class="form-control" onchange="this.form.submit()">
+                    <option value="" {% if scope_project_id is none %}selected{% endif %}>Standard (für alle Projekte ohne eigenen Leitfaden)</option>
+                    {% for p in all_projects %}
+                    <option value="{{ p.id }}" {% if scope_project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+        <p class="text-muted mb-0 mt-2 small">
+            Projekte ohne eigene Einträge nutzen automatisch den Standard-Leitfaden. Sobald Sie für ein Projekt mindestens einen Punkt anlegen (oder den Standard kopieren), gilt nur noch die projektbezogene Liste für neue Coachings in diesem Projekt.
+        </p>
+    </div>
+</div>
+
+{% if show_copy_from_standard %}
+<div class="card mb-3 border-primary">
+    <div class="card-body py-3">
+        <form method="POST" action="{{ url_for('admin.copy_standard_leitfaden_to_project') }}" class="d-flex flex-wrap align-items-center gap-2" onsubmit="return confirm('Alle Punkte aus dem Standard-Leitfaden in dieses Projekt kopieren?');">
+            <input type="hidden" name="project" value="{{ scope_project_id }}">
+            {{ csrf_token if csrf_token else '' }}
+            <span class="text-muted mr-2">Dieses Projekt hat noch keinen eigenen Leitfaden.</span>
+            <button type="submit" class="btn btn-outline-primary btn-sm">Standard-Leitfaden übernehmen</button>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <div class="card">
     <div class="card-body">
-        <p class="text-muted">Diese Punkte erscheinen im Einzel-Coaching-Bogen als Checkmarks. Reihenfolge und Aktiv-Status sind frei anpassbar.</p>
+        <p class="text-muted">
+            {% if scope_project_id %}
+            Leitfaden nur für das gewählte Projekt. Reihenfolge und Aktiv-Status sind frei anpassbar.
+            {% else %}
+            Standard-Leitfaden (global). Diese Punkte gelten für Projekte, für die kein eigener Leitfaden definiert ist.
+            {% endif %}
+        </p>
         <table class="table table-sm">
             <thead>
                 <tr>
@@ -33,13 +71,20 @@
                         <td>
                             <a href="{{ url_for('admin.edit_leitfaden_item', item_id=item.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
                             <form method="POST" action="{{ url_for('admin.delete_leitfaden_item', item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Leitfaden-Punkt wirklich löschen?');">
+                                {{ csrf_token if csrf_token else '' }}
                                 <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
                             </form>
                         </td>
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="4" class="text-center text-muted">Noch keine Leitfaden-Punkte vorhanden.</td>
+                        <td colspan="4" class="text-center text-muted">
+                            {% if scope_project_id %}
+                            Noch keine projektbezogenen Punkte. Legen Sie Einträge an oder übernehmen Sie den Standard-Leitfaden.
+                            {% else %}
+                            Noch keine Standard-Leitfaden-Punkte vorhanden.
+                            {% endif %}
+                        </td>
                     </tr>
                 {% endfor %}
             </tbody>
