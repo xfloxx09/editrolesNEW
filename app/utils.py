@@ -437,6 +437,11 @@ def get_accessible_project_ids():
         ids.add(current_user.project_id)
     for p in current_user.projects:
         ids.add(p.id)
+    if current_user.has_permission('view_assigned_coachings'):
+        for tm in current_user.team_members or []:
+            team = getattr(tm, 'team', None)
+            if team and team.project_id:
+                ids.add(team.project_id)
     return sorted(ids)
 
 

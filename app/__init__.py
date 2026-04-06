@@ -506,18 +506,18 @@ def create_app(config_class=Config):
         active_project_name = None
         show_project_switcher = False
         if current_user.is_authenticated:
+            from app.main_routes import get_visible_project_id
+
             if current_user.role_name in [ROLE_ADMIN, ROLE_BETRIEBSLEITER]:
                 projects = Project.query.order_by(Project.name).all()
             else:
                 ids = get_accessible_project_ids()
-                if ids is not None and len(ids) > 1:
+                if ids is not None and len(ids) > 0:
                     projects = Project.query.filter(Project.id.in_(ids)).order_by(Project.name).all()
             show_project_switcher = len(projects) > 1
-            if projects:
-                from app.main_routes import get_visible_project_id
-
-                active_project_id = get_visible_project_id()
-                ap = Project.query.get(active_project_id) if active_project_id else None
+            active_project_id = get_visible_project_id()
+            if active_project_id:
+                ap = Project.query.get(active_project_id)
                 active_project_name = ap.name if ap else None
         return {
             'user_allowed_projects': projects,
