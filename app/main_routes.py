@@ -563,6 +563,35 @@ def url_for_paginated(endpoint, page, filter_args):
     return url_for(endpoint, **kw)
 
 
+def _assigned_coachings_index_badge_count(user):
+    """
+    Offene zugewiesene Coachings für die Startseiten-Kachel: Status pending/accepted/in_progress.
+    Zählt für den eingeloggten Nutzer als Coach und/oder als zuweisende Person (PL/QM-Ansicht),
+    über alle Projekte aus get_accessible_project_ids().
+    """
+    acc = get_accessible_project_ids()
+    if acc is not None and len(acc) == 0:
+        return 0
+    role_filters = []
+    if user.has_permission('view_assigned_coachings'):
+        role_filters.append(AssignedCoaching.coach_id == user.id)
+    if user.has_permission('assign_coachings') or user.has_permission('view_pl_qm_dashboard'):
+        role_filters.append(AssignedCoaching.project_leader_id == user.id)
+    if not role_filters:
+        return 0
+    q = (
+        AssignedCoaching.query.join(TeamMember, AssignedCoaching.team_member_id == TeamMember.id)
+        .join(Team, TeamMember.team_id == Team.id)
+        .filter(
+            AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']),
+            or_(*role_filters),
+        )
+    )
+    if acc is not None:
+        q = q.filter(Team.project_id.in_(acc))
+    return q.count()
+
+
 @bp.route('/')
 @login_required
 def index():
@@ -594,11 +623,20 @@ def index():
                 pq = pq.filter(PlannedCoaching.project_id.in_(acc_ix))
             open_planned_coachings_count = pq.count()
 
+    assigned_coachings_notify_count = 0
+    if (
+        u.has_permission('view_assigned_coachings')
+        or u.has_permission('assign_coachings')
+        or u.has_permission('view_pl_qm_dashboard')
+    ):
+        assigned_coachings_notify_count = _assigned_coachings_index_badge_count(u)
+
     return render_template(
         'main/index_choice.html',
         config=current_app.config,
         index_tile_count=index_tile_count,
         open_planned_coachings_count=open_planned_coachings_count,
+        assigned_coachings_notify_count=assigned_coachings_notify_count,
     )
 
 
