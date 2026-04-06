@@ -1529,21 +1529,34 @@ def terminkalender_plan_menu():
 
     can_plan_c = current_user.has_permission('planned_coachings')
     can_plan_w = current_user.has_permission('add_workshop')
+    is_today = plan_date == today
     add_coaching_project_id = None
     if current_user.has_permission('add_coaching'):
         add_coaching_project_id = _resolve_coaching_workshop_project_id()
+    workshop_project_id = None
+    if can_plan_w:
+        workshop_project_id = _resolve_coaching_workshop_project_id()
     acc = get_accessible_project_ids()
     proj_raw = (request.args.get('project') or '').strip()
     if not add_coaching_project_id and proj_raw.isdigit():
-        add_coaching_project_id = int(proj_raw) if (acc is None or int(proj_raw) in acc) else None
+        pid = int(proj_raw)
+        if acc is None or pid in acc:
+            add_coaching_project_id = pid
+    if can_plan_w and not workshop_project_id and proj_raw.isdigit():
+        pid = int(proj_raw)
+        if acc is None or pid in acc:
+            workshop_project_id = pid
 
     can_capture_today = (
-        plan_date == today
+        is_today
         and current_user.has_permission('add_coaching')
         and bool(add_coaching_project_id)
     )
+    can_workshop_capture_today = is_today and can_plan_w and bool(workshop_project_id)
+    show_plan_coaching = can_plan_c and not is_today
+    show_plan_workshop = can_plan_w and not is_today
 
-    if not (can_plan_c or can_plan_w or can_capture_today):
+    if not (show_plan_coaching or show_plan_workshop or can_capture_today or can_workshop_capture_today):
         flash('Keine passende Berechtigung für diese Aktion.', 'danger')
         return redirect(url_for('main.terminkalender'))
 
@@ -1551,10 +1564,13 @@ def terminkalender_plan_menu():
         'main/terminkalender_plan_menu.html',
         title='Termin anlegen',
         plan_date=plan_date,
-        can_plan_coaching=can_plan_c,
-        can_plan_workshop=can_plan_w,
+        is_today=is_today,
+        show_plan_coaching=show_plan_coaching,
+        show_plan_workshop=show_plan_workshop,
         can_capture_today=can_capture_today,
+        can_workshop_capture_today=can_workshop_capture_today,
         add_coaching_project_id=add_coaching_project_id,
+        workshop_project_id=workshop_project_id,
         config=current_app.config,
     )
 
