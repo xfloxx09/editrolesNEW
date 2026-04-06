@@ -244,13 +244,23 @@ class Coaching(db.Model):
         return [(name, value or 'k.A.') for name, value in legacy]
 
     @property
-    def leitfaden_erfuellung_display(self):
+    def leitfaden_erfuellung_stats(self):
+        """Returns (percent:int, positive:int, total:int) or None if nothing to score."""
         checks = [value for _, value in self.leitfaden_fields_list if value and value != 'k.A.']
         if not checks:
-            return 'k.A.'
+            return None
         positive = sum(1 for value in checks if str(value).strip().lower() in ['ja', 'yes', '1', 'true'])
-        percent = round((positive / len(checks)) * 100)
-        return f"{percent}% ({positive}/{len(checks)})"
+        total = len(checks)
+        percent = round((positive / total) * 100)
+        return (percent, positive, total)
+
+    @property
+    def leitfaden_erfuellung_display(self):
+        st = self.leitfaden_erfuellung_stats
+        if st is None:
+            return 'k.A.'
+        percent, positive, total = st
+        return f"{percent}% ({positive}/{total})"
 
 
 class LeitfadenItem(db.Model):

@@ -7,65 +7,105 @@
     background-color: #333;
     border: 1px solid #444;
     border-radius: 8px;
-    padding: 20px;
-    margin-top: 10px;
+    padding: 16px 18px;
+    margin-top: 8px;
     width: 100%;
-    max-width: min(100%, calc(100vw - 2.5rem));
+    max-width: 100%;
     min-width: 0;
     box-sizing: border-box;
+    overflow-x: hidden;
 }
 .detail-section {
-    margin-bottom: 20px;
+    margin-bottom: 18px;
+}
+.detail-section:last-child {
+    margin-bottom: 0;
 }
 .detail-section-title {
     color: #e20074;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 600;
     margin-bottom: 10px;
     border-bottom: 1px solid #444;
     padding-bottom: 5px;
 }
-.detail-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: stretch;
-}
-.detail-item {
-    background-color: #2b2b2b;
-    padding: 10px 12px;
-    border-radius: 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 6px;
-    flex: 1 1 180px;
-    max-width: min(360px, 100%);
-    min-width: 0;
-    box-sizing: border-box;
-}
-.detail-item.detail-item-full {
-    flex: 1 1 100%;
-    max-width: 100%;
-}
-.detail-item strong {
-    color: #aaa;
-    font-weight: normal;
-    margin-right: 0;
+/* Kompakte Basis-Infos: feste Label-Spalte, Werte brechen um — kein Kachel-Raster */
+.detail-kv {
+    display: grid;
+    grid-template-columns: minmax(5.5rem, 7.5rem) minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 8px;
+    align-items: baseline;
     font-size: 0.9rem;
-    line-height: 1.3;
-    width: 100%;
-    overflow-wrap: anywhere;
+    line-height: 1.35;
 }
-.detail-item span {
-    color: #fff;
+.detail-kv-k {
+    color: #9a9a9a;
     font-weight: 500;
-    width: 100%;
+    text-align: right;
+    padding-right: 4px;
+}
+.detail-kv-v {
+    color: #f0f0f0;
     min-width: 0;
-    text-align: left;
     overflow-wrap: anywhere;
     word-break: break-word;
-    line-height: 1.35;
+}
+.detail-leitfaden-wrap {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 100%;
+}
+.detail-leitfaden-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 10px;
+    min-width: 0;
+}
+.detail-leitfaden-line strong {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+.detail-leitfaden-line .detail-leitfaden-frac {
+    color: #b0b0b0;
+    font-size: 0.85rem;
+}
+.detail-leitfaden-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #1a1a1a;
+    overflow: hidden;
+    max-width: min(240px, 100%);
+}
+.detail-leitfaden-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #b80a5a 0%, #e20074 100%);
+    max-width: 100%;
+}
+.coaching-dashboard-table {
+    max-width: 100%;
+}
+.coaching-dashboard-table .table {
+    width: 100%;
+    table-layout: auto;
+}
+.coaching-dashboard-table .coaching-dashboard-score-bar {
+    min-width: 0;
+    width: 100%;
+    max-width: 88px;
+    height: 1.1rem;
+    font-size: 0.7rem;
+}
+.coaching-dashboard-table tr.coaching-detail-row > td {
+    padding: 8px 12px;
+    vertical-align: top;
+    background: rgba(0,0,0,0.15);
 }
 .badge-leitfaden {
     display: inline-block;
@@ -294,7 +334,7 @@
 </div>
 
 {% if coachings_paginated and coachings_paginated.items %}
-<div class="table-responsive">
+<div class="table-responsive coaching-dashboard-table">
     <table class="table table-striped table-hover">
         <thead class="telekom-bg-magenta text-white">
             <tr>
@@ -325,7 +365,7 @@
                 <td>{{ coaching.performance_mark if coaching.performance_mark is not none else '-'}}</td>
                 <td>{{ coaching.time_spent if coaching.time_spent is not none else '-' }}</td>
                 <td>
-                    <div class="progress" style="min-width: 100px;">
+                    <div class="progress coaching-dashboard-score-bar">
                         <div class="progress-bar telekom-progress-bar" role="progressbar" style="width: {{ coaching.overall_score }}%;" aria-valuenow="{{ coaching.overall_score }}" aria-valuemin="0" aria-valuemax="100">
                             {{ coaching.overall_score }}%
                         </div>
@@ -381,20 +421,39 @@
                 </td>
             </tr>
             {% endif %}
-            <tr class="collapse" id="coachingDetails{{ coaching.id }}">
+            <tr class="collapse coaching-detail-row" id="coachingDetails{{ coaching.id }}">
                 <td colspan="{{ 13 if can_leave_review else 11 }}">
                     <div class="detail-card">
                         <div class="detail-section">
                             <div class="detail-section-title">Basis-Informationen</div>
-                            <div class="detail-grid">
-                                <div class="detail-item"><strong>Stil:</strong> <span>{{ coaching.coaching_style if coaching.coaching_style else '-'}}</span></div>
+                            <div class="detail-kv" role="group" aria-label="Basis-Informationen">
+                                <span class="detail-kv-k">Stil</span>
+                                <span class="detail-kv-v">{{ coaching.coaching_style if coaching.coaching_style else '–' }}</span>
                                 {% if coaching.coaching_style == 'TCAP' and coaching.tcap_id %}
-                                <div class="detail-item"><strong>T-CAP ID:</strong> <span>{{ coaching.tcap_id }}</span></div>
+                                <span class="detail-kv-k">T-CAP</span>
+                                <span class="detail-kv-v">{{ coaching.tcap_id }}</span>
                                 {% endif %}
-                                <div class="detail-item"><strong>Thema:</strong> <span>{{ coaching.coaching_subject if coaching.coaching_subject else '-' }}</span></div>
-                                <div class="detail-item"><strong>Performance Note:</strong> <span>{{ coaching.performance_mark }}/10</span></div>
-                                <div class="detail-item"><strong>Zeitaufwand:</strong> <span>{{ coaching.time_spent }} Min.</span></div>
-                                <div class="detail-item detail-item-full"><strong>Leitfaden Erfüllung:</strong> <span>{{ coaching.leitfaden_erfuellung_display }}</span></div>
+                                <span class="detail-kv-k">Thema</span>
+                                <span class="detail-kv-v">{{ coaching.coaching_subject if coaching.coaching_subject else '–' }}</span>
+                                <span class="detail-kv-k">Note</span>
+                                <span class="detail-kv-v">{{ coaching.performance_mark }}/10</span>
+                                <span class="detail-kv-k">Zeit</span>
+                                <span class="detail-kv-v">{% if coaching.time_spent is not none %}{{ coaching.time_spent }} Min.{% else %}–{% endif %}</span>
+                                <span class="detail-kv-k">Leitfaden</span>
+                                <span class="detail-kv-v">
+                                    {% set lf = coaching.leitfaden_erfuellung_stats %}
+                                    {% if lf %}
+                                    <div class="detail-leitfaden-wrap">
+                                        <div class="detail-leitfaden-line">
+                                            <strong>{{ lf[0] }}%</strong>
+                                            <span class="detail-leitfaden-frac">({{ lf[1] }}/{{ lf[2] }} erfüllt)</span>
+                                        </div>
+                                        <div class="detail-leitfaden-bar" title="{{ lf[0] }}%"><span class="detail-leitfaden-bar-fill" style="width: {{ lf[0] }}%;"></span></div>
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted">k. A.</span>
+                                    {% endif %}
+                                </span>
                             </div>
                         </div>
                         <div class="detail-section">
