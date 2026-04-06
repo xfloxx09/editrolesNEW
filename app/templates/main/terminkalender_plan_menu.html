@@ -1,43 +1,167 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="container mt-4" style="max-width: 480px;">
-    <h2 class="mb-3" style="color:#e20074;">Termin wählen</h2>
-    <p class="text-muted mb-4">Datum: <strong>{{ plan_date.strftime('%d.%m.%Y') }}</strong></p>
+{% block head_extra %}
+<style>
+.plan-menu-root {
+    max-width: 560px;
+    margin: 0 auto;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+}
+.plan-menu-header {
+    margin-bottom: 1.35rem;
+}
+.plan-menu-title {
+    color: #e20074;
+    font-weight: 700;
+    font-size: 1.75rem;
+    margin: 0 0 0.35rem 0;
+    line-height: 1.2;
+}
+.plan-menu-sub {
+    color: #9a9a9a;
+    font-size: 0.9rem;
+    margin: 0;
+}
+.plan-menu-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid #3d3d3d;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: #e0e0e0;
+}
+.plan-menu-date strong {
+    color: #fff;
+    font-weight: 600;
+}
+.plan-menu-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.plan-menu-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.15rem;
+    background: linear-gradient(165deg, #2a2a2a 0%, #232323 100%);
+    border: 1px solid #3d3d3d;
+    border-radius: 12px;
+    color: #f0f0f0 !important;
+    text-decoration: none !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+}
+.plan-menu-card:hover {
+    border-color: #e20074;
+    box-shadow: 0 0 0 1px rgba(226, 0, 116, 0.35);
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+.plan-menu-card:active {
+    transform: translateY(0);
+}
+.plan-menu-icon {
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    color: #fff !important;
+}
+.plan-menu-icon--capture { background: #e20074; }
+.plan-menu-icon--plan { background: #20c997; }
+.plan-menu-icon--workshop { background: #6f42c1; }
+.plan-menu-card-body {
+    flex: 1;
+    min-width: 0;
+}
+.plan-menu-card-title {
+    font-weight: 600;
+    font-size: 1.02rem;
+    color: #fff;
+    margin: 0 0 0.2rem 0;
+    line-height: 1.25;
+}
+.plan-menu-card-desc {
+    font-size: 0.82rem;
+    color: #9a9a9a;
+    margin: 0;
+    line-height: 1.35;
+}
+.plan-menu-card:hover .plan-menu-card-desc {
+    color: #c8c8c8;
+}
+.plan-menu-chev {
+    flex-shrink: 0;
+    color: #6a6a6a;
+    font-size: 0.85rem;
+    transition: color 0.15s ease;
+}
+.plan-menu-card:hover .plan-menu-chev {
+    color: #e20074;
+}
+.plan-menu-footer {
+    margin-top: 1.5rem;
+}
+</style>
+{% endblock %}
 
-    <div class="list-group">
+{% block content %}
+<div class="container-fluid plan-menu-root py-3 px-2 px-md-3">
+    <div class="plan-menu-header">
+        <h1 class="plan-menu-title"><i class="fas fa-calendar-plus" aria-hidden="true"></i> Termin anlegen</h1>
+        <p class="plan-menu-sub">Was möchten Sie für diesen Tag eintragen?</p>
+        <div class="plan-menu-date">
+            <i class="far fa-calendar-alt" aria-hidden="true"></i>
+            <span>Datum: <strong>{{ plan_date.strftime('%d.%m.%Y') }}</strong></span>
+        </div>
+    </div>
+
+    <div class="plan-menu-actions">
         {% if can_capture_today %}
-        <a class="list-group-item list-group-item-action list-group-item-light d-flex align-items-center py-3"
-           href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">
-            <i class="fas fa-user-check fa-lg text-primary mr-3"></i>
-            <div>
-                <strong>Coaching erfassen</strong>
-                <div class="small text-muted">Einzelcoaching für heute eintragen</div>
+        <a class="plan-menu-card" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">
+            <span class="plan-menu-icon plan-menu-icon--capture" aria-hidden="true"><i class="fas fa-user-check"></i></span>
+            <div class="plan-menu-card-body">
+                <p class="plan-menu-card-title">Coaching erfassen</p>
+                <p class="plan-menu-card-desc">Einzelcoaching für heute eintragen</p>
             </div>
+            <i class="fas fa-chevron-right plan-menu-chev" aria-hidden="true"></i>
         </a>
         {% endif %}
         {% if can_plan_coaching %}
-        <a class="list-group-item list-group-item-action list-group-item-light d-flex align-items-center py-3"
-           href="{{ url_for('main.terminkalender_plan', day=plan_date.isoformat()) }}">
-            <i class="fas fa-calendar-alt fa-lg mr-3" style="color:#20c997;"></i>
-            <div>
-                <strong>Geplantes Coaching</strong>
-                <div class="small text-muted">Termin mit Teammitglied planen</div>
+        <a class="plan-menu-card" href="{{ url_for('main.terminkalender_plan', day=plan_date.isoformat()) }}">
+            <span class="plan-menu-icon plan-menu-icon--plan" aria-hidden="true"><i class="fas fa-calendar-alt"></i></span>
+            <div class="plan-menu-card-body">
+                <p class="plan-menu-card-title">Geplantes Coaching</p>
+                <p class="plan-menu-card-desc">Termin mit Teammitglied planen</p>
             </div>
+            <i class="fas fa-chevron-right plan-menu-chev" aria-hidden="true"></i>
         </a>
         {% endif %}
         {% if can_plan_workshop %}
-        <a class="list-group-item list-group-item-action list-group-item-light d-flex align-items-center py-3"
-           href="{{ url_for('main.terminkalender_plan_workshop', day=plan_date.isoformat()) }}">
-            <i class="fas fa-users fa-lg mr-3" style="color:#fd7e14;"></i>
-            <div>
-                <strong>Geplanten Workshop</strong>
-                <div class="small text-muted">Workshop-Termin vormerken</div>
+        <a class="plan-menu-card" href="{{ url_for('main.terminkalender_plan_workshop', day=plan_date.isoformat()) }}">
+            <span class="plan-menu-icon plan-menu-icon--workshop" aria-hidden="true"><i class="fas fa-users"></i></span>
+            <div class="plan-menu-card-body">
+                <p class="plan-menu-card-title">Geplanten Workshop</p>
+                <p class="plan-menu-card-desc">Workshop-Termin vormerken</p>
             </div>
+            <i class="fas fa-chevron-right plan-menu-chev" aria-hidden="true"></i>
         </a>
         {% endif %}
     </div>
 
-    <a href="{{ url_for('main.terminkalender', year=plan_date.year, month=plan_date.month) }}" class="btn btn-outline-secondary btn-block mt-4">Abbrechen</a>
+    <p class="plan-menu-footer mb-0">
+        <a href="{{ url_for('main.terminkalender', year=plan_date.year, month=plan_date.month) }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i> Zurück zum Terminkalender
+        </a>
+    </p>
 </div>
 {% endblock %}
