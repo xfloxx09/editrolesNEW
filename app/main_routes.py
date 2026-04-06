@@ -161,6 +161,37 @@ def _coaching_has_fulfilled_planned_row(coaching_id):
     )
 
 
+def _user_may_view_fulfilled_plan_bericht(coaching):
+    """Bericht lesen: eigener Coach, Admin/BL, oder PL/QM/Zuweiser im selben Projektbereich wie das Coaching-Dashboard."""
+    if coaching is None:
+        return False
+    if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+        return True
+    if coaching.coach_id == current_user.id:
+        return True
+    if not (
+        current_user.has_permission('view_coaching_dashboard')
+        or current_user.has_permission('view_pl_qm_dashboard')
+        or current_user.has_permission('assign_coachings')
+    ):
+        return False
+    acc = get_accessible_project_ids()
+    if acc is not None:
+        if len(acc) == 0:
+            return False
+        pid = coaching.project_id
+        if not pid or pid not in acc:
+            return False
+    if _user_sees_all_teams_coaching_dashboard():
+        return True
+    if current_user.has_permission('view_pl_qm_dashboard') or current_user.has_permission('assign_coachings'):
+        return True
+    tm = coaching.team_member
+    if not tm or not tm.team_id:
+        return False
+    return tm.team_id in set(_dashboard_my_team_ids())
+
+
 def _user_may_edit_planned_coaching(pc):
     """Coach owns the row, still open, and project is in scope (same rules as list)."""
     if pc is None or pc.coach_id != current_user.id or pc.status != 'open':
@@ -2216,7 +2247,13 @@ def add_coaching():
 # --- Read-only Bericht (abgeschlossenes geplantes Coaching) ---
 @bp.route('/coaching-bericht/<int:coaching_id>')
 @login_required
-@permission_required('edit_coaching')
+@any_permission_required(
+    'edit_coaching',
+    'add_coaching',
+    'view_coaching_dashboard',
+    'view_pl_qm_dashboard',
+    'assign_coachings',
+)
 def view_fulfilled_plan_bericht(coaching_id):
     coaching = (
         Coaching.query.options(
@@ -2228,12 +2265,16 @@ def view_fulfilled_plan_bericht(coaching_id):
     )
     if coaching is None:
         abort(404)
-    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
+    if not _user_may_view_fulfilled_plan_bericht(coaching):
         flash('Sie haben keine Berechtigung, diesen Bericht einzusehen.', 'danger')
-        return redirect(url_for('main.coaching_dashboard'))
+        if current_user.has_permission('view_coaching_dashboard'):
+            return redirect(url_for('main.coaching_dashboard'))
+        return redirect(url_for('main.index'))
     if not _coaching_has_fulfilled_planned_row(coaching_id):
         flash('Dieses Coaching ist kein abgeschlossenes geplantes Coaching.', 'warning')
-        return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
+        if current_user.has_permission('edit_coaching'):
+            return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
+        return redirect(url_for('main.index'))
 
     planned_ctx = (
         PlannedCoaching.query.filter_by(
