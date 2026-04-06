@@ -36,7 +36,7 @@
     {% include 'main/_assigned_coachings_main_tabs.html' %}
 
     <h2 class="h5 mb-3 text-light"><i class="fas fa-chart-bar text-info"></i> {{ title }}</h2>
-    <p class="text-muted small">Übersicht über alle zugewiesenen Coachings, die Ihre Rolle im sichtbaren Projektbereich erlaubt. Mit „Tabelle“ wählen Sie laufende oder abgeschlossene Aufträge; optional Projekte und Filter einschränken.</p>
+    <p class="text-muted small">Übersicht über alle zugewiesenen Coachings, die Ihre Rolle im sichtbaren Projektbereich erlaubt. Standard: <strong class="text-light">alle</strong> Aufträge; unter „Tabelle“ optional nur Laufende oder Abgeschlossene &amp; Archiv.</p>
 
     <div class="row mb-4">
         <div class="col-md-6 mb-2">
@@ -61,6 +61,7 @@
                 <div class="form-group col-md-2">
                     <label class="small text-muted mb-0">Tabelle</label>
                     <select name="status" class="form-control form-control-sm bg-dark text-light border-secondary" onchange="this.form.submit()">
+                        <option value="all" {% if tab_active == 'all' %}selected{% endif %}>Alle zugewiesenen Coachings</option>
                         <option value="current" {% if tab_active == 'current' %}selected{% endif %}>Laufende Aufträge</option>
                         <option value="completed" {% if tab_active == 'completed' %}selected{% endif %}>Abgeschlossene &amp; Archiv</option>
                     </select>
@@ -118,7 +119,7 @@
                 </div>
                 <div class="form-group col-md-6 text-md-right mb-0 mt-2 mt-md-0">
                     <button type="submit" class="btn btn-sm gesamt-action-primary">Filtern</button>
-                    <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active) }}" class="btn btn-sm gesamt-action-secondary">Filter zurücksetzen</a>
+                    <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status='all') }}" class="btn btn-sm gesamt-action-secondary">Filter zurücksetzen</a>
                 </div>
             </div>
         </div>

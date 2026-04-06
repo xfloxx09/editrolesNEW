@@ -19,7 +19,7 @@
         {% if ac_project_id %}
             {% if ac_report %}
             <a class="nav-link {% if ac_is_gesamt_page or (not ac_is_gesamt_page and ac_tab_active == 'completed') %}active{% endif %}"
-               href="{{ url_for('main.assigned_coachings_gesamtbericht', status='completed', project=gesamt_url_project, project_leader=ac_gesamt_default_pl, team=team_filter or none, coach=(coach_filter or ac_gesamt_default_coach), member=member_filter or none, search=(search_term if search_term else none), sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene &amp; Archiv</a>
+               href="{{ url_for('main.assigned_coachings_gesamtbericht', status='all', project=gesamt_url_project, project_leader=ac_gesamt_default_pl, team=team_filter or none, coach=(coach_filter or ac_gesamt_default_coach), member=member_filter or none, search=(search_term if search_term else none), sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene &amp; Archiv</a>
             {% else %}
             <a class="nav-link {% if not ac_is_gesamt_page and ac_tab_active == 'completed' %}active{% endif %}"
                href="{{ url_for('main.assigned_coachings', project=ac_project_id, status='completed', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene &amp; Archivierte</a>

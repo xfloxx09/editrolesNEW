@@ -2240,9 +2240,9 @@ def get_member_current_score():
 @permission_required('view_assigned_coaching_report')
 def assigned_coachings_gesamtbericht():
     _apply_query_project_to_session()
-    tab_active = request.args.get('status', 'current')
-    if tab_active not in ('current', 'completed'):
-        tab_active = 'current'
+    tab_active = request.args.get('status', 'all')
+    if tab_active not in ('all', 'current', 'completed'):
+        tab_active = 'all'
     page = request.args.get('page', 1, type=int)
     team_filter = request.args.get('team', type=int)
     coach_filter = request.args.get('coach', type=int)
@@ -2345,8 +2345,9 @@ def assigned_coachings_gesamtbericht():
 
     if tab_active == 'completed':
         q = q.filter(AssignedCoaching.status.in_(['completed', 'expired', 'rejected', 'cancelled']))
-    else:
+    elif tab_active == 'current':
         q = q.filter(AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']))
+    # tab_active == 'all': alle Status
 
     if team_filter:
         q = q.filter(TeamMember.team_id == team_filter)
