@@ -94,15 +94,19 @@
                                 {% if assignment.is_overdue and assignment.status not in ['completed','expired','cancelled'] %}
                                     <span class="deadline-overdue">Überfällig!</span>
                                 {% endif %}
+                                {% if assignment.status == 'rejected' and assignment.rejection_reason %}
+                                <div class="small mt-2 pt-2 border-top border-secondary text-left" style="max-width: 22rem;">
+                                    <strong>Ablehnungsgrund:</strong><br>
+                                    <span style="white-space: pre-wrap;">{{ assignment.rejection_reason }}</span>
+                                </div>
+                                {% endif %}
                             </td>
                             <td>
                                 {% if view_type == 'coach' and assignment.status == 'pending' %}
                                     <form action="{{ url_for('main.accept_assigned_coaching', assignment_id=assignment.id) }}" method="POST" style="display: inline;">
                                         <button type="submit" class="btn btn-sm btn-success">Annehmen</button>
                                     </form>
-                                    <form action="{{ url_for('main.reject_assigned_coaching', assignment_id=assignment.id) }}" method="POST" style="display: inline;">
-                                        <button type="submit" class="btn btn-sm btn-danger">Ablehnen</button>
-                                    </form>
+                                    <button type="button" class="btn btn-sm btn-danger" data-toggle="modal" data-target="#rejectAssignedModal" data-reject-url="{{ url_for('main.reject_assigned_coaching', assignment_id=assignment.id) }}">Ablehnen</button>
                                 {% endif %}
                                 {% if view_type == 'pl' and assignment.status in ['pending', 'accepted', 'in_progress'] %}
                                     <form action="{{ url_for('main.cancel_assigned_coaching', assignment_id=assignment.id) }}" method="POST" style="display: inline;">
@@ -144,3 +148,44 @@
         {% endif %}
     </div>
 </div>
+
+{% if view_type == 'coach' %}
+<div class="modal fade" id="rejectAssignedModal" tabindex="-1" role="dialog" aria-labelledby="rejectAssignedModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content" style="background:#2b2b2b;border-color:#444;color:#eee;">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title" id="rejectAssignedModalLabel">Aufgabe ablehnen</h5>
+                <button type="button" class="close text-light" data-dismiss="modal" aria-label="Schließen">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form method="post" id="rejectAssignedForm" action="#">
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">Ihr Text wird dem Zuweiser bei dieser Aufgabe angezeigt.</p>
+                    <div class="form-group mb-0">
+                        <label for="rejection_reason">Ablehnungsgrund <span class="text-danger">*</span></label>
+                        <textarea class="form-control bg-dark text-light border-secondary" id="rejection_reason" name="rejection_reason" rows="4" required minlength="3" maxlength="2000" placeholder="z. B. aktuelle Auslastung, thematische Passung …"></textarea>
+                        <small class="form-text text-muted">Mindestens 3 Zeichen, maximal 2000.</small>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Abbrechen</button>
+                    <button type="submit" class="btn btn-danger">Ablehnen bestätigen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof jQuery !== 'undefined') {
+        jQuery('#rejectAssignedModal').on('show.bs.modal', function(event) {
+            var btn = jQuery(event.relatedTarget);
+            var url = btn.data('reject-url');
+            jQuery('#rejectAssignedForm').attr('action', url || '#');
+            jQuery('#rejection_reason').val('').removeClass('is-invalid');
+        });
+    }
+});
+</script>
+{% endif %}

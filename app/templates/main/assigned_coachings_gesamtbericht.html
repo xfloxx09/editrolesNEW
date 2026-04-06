@@ -162,6 +162,12 @@
                         {% if assignment.is_overdue and assignment.status not in ['completed','expired','cancelled','rejected'] %}
                         <span class="deadline-overdue d-block small">Überfällig</span>
                         {% endif %}
+                        {% if assignment.status == 'rejected' and assignment.rejection_reason %}
+                        <div class="small mt-2 pt-2 border-top border-secondary text-left">
+                            <strong>Ablehnungsgrund:</strong><br>
+                            <span style="white-space: pre-wrap;">{{ assignment.rejection_reason }}</span>
+                        </div>
+                        {% endif %}
                     </td>
                     <td>
                         {% if assignment.status == 'completed' %}

@@ -411,6 +411,8 @@ class AssignedCoaching(db.Model):
     desired_performance_note = db.Column(db.Integer)
     current_performance_note_at_assign = db.Column(db.Float)
     status = db.Column(db.String(20), nullable=False, default='pending')
+    # Von Coach bei Ablehnung (pending → rejected); sichtbar für Zuweiser / Übersichten
+    rejection_reason = db.Column(db.Text)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

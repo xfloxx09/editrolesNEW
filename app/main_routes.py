@@ -3474,9 +3474,14 @@ def reject_assigned_coaching(assignment_id):
         flash('Nicht autorisiert.', 'danger')
         return redirect(url_for('main.assigned_coachings', project=list_pid))
     if assignment.status == 'pending':
+        reason = (request.form.get('rejection_reason') or '').strip()
+        if len(reason) < 3:
+            flash('Bitte geben Sie einen Ablehnungsgrund an (mindestens 3 Zeichen).', 'warning')
+            return redirect(url_for('main.assigned_coachings', project=list_pid))
         assignment.status = 'rejected'
+        assignment.rejection_reason = reason[:2000]
         db.session.commit()
-        flash('Aufgabe abgelehnt.', 'success')
+        flash('Aufgabe abgelehnt. Der Zuweiser sieht Ihren Ablehnungsgrund.', 'success')
     else:
         flash('Aufgabe kann nicht abgelehnt werden.', 'warning')
     return redirect(url_for('main.assigned_coachings', project=list_pid))

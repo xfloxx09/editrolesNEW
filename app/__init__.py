@@ -98,6 +98,11 @@ def create_app(config_class=Config):
             '''))
             conn.commit()
             print("✅ Auto-increment für assigned_coachings.id sichergestellt.")
+            cols_ac = [col['name'] for col in inspector.get_columns('assigned_coachings')]
+            if 'rejection_reason' not in cols_ac:
+                conn.execute(text('ALTER TABLE assigned_coachings ADD COLUMN rejection_reason TEXT'))
+                conn.commit()
+                print("✅ Spalte 'rejection_reason' in assigned_coachings hinzugefügt.")
 
         # 4. assigned_coaching_id in coachings
         if 'coachings' in inspector.get_table_names():
