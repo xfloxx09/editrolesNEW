@@ -38,9 +38,13 @@
             {{ form.project_ids.label }} {{ form.project_ids(class="form-control") }}
             <small class="form-text text-muted d-block">Oder Abteilung wählen, wenn die Rolle „Abteilung einsehen“ hat.</small>
         </div>
-        <div class="form-group" id="abteilung_block" style="display:none;">
+        <div class="form-group" id="abteilung_block">
             {{ form.abteilung_id.label }} {{ form.abteilung_id(class="form-control custom-select") }}
-            <small class="form-text text-muted">Alle Projekte dieser Abteilung werden freigeschaltet.</small>
+            <small class="form-text text-muted d-block">
+                Wirkt nur, wenn die Rolle die Berechtigung <strong>„Abteilung einsehen“</strong> (<code>view_abteilung</code>) hat — z.&nbsp;B. Projektleiter, Qualitätsmanager, Abteilungsleiter.
+                Dann erscheinen alle Projekte dieser Abteilung im Zugriff (Hauptprojekt = erstes Projekt der Abteilung).
+                Abteilungen legen Sie unter <a href="{{ url_for('admin.manage_abteilungen') }}">Admin → Abteilungen</a> an und weisen dort Projekte zu.
+            </small>
         </div>
 
         <hr>
@@ -118,7 +122,6 @@
             extraProjectsField.style.display = 'block';
         }
         toggleMemberTeamMode();
-        toggleAbteilungField();
     }
     roleSelect.addEventListener('change', toggleRoleFields);
     toggleRoleFields();
