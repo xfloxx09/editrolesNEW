@@ -1,7 +1,7 @@
-{# Ein gemeinsamer Tab-Streifen: Standard-Ansicht (Projekt) + Gesamtbericht #}
-{# Kontext: ac_is_gesamt_page, ac_project_id, ac_tab_active, ac_show_gesamt_tab, #}
-{# team_filter, coach_filter, member_filter, search_term, sort_by, sort_dir, #}
-{# gesamt_table_status (current|completed), gesamt_url_project (optional int) #}
+{# Zwei Tabs: Aktuelle (Projekt) + Archiv. Mit view_assigned_coaching_report führt Tab 2 zur Bereichstabelle (ehem. Gesamtbericht). #}
+{# Kontext: ac_is_gesamt_page, ac_project_id, ac_tab_active, gesamt_url_project, #}
+{# team_filter, coach_filter, member_filter, search_term, sort_by, sort_dir #}
+{% set ac_report = has_perm('view_assigned_coaching_report') %}
 <ul class="nav nav-tabs assigned-main-tabs mb-3" role="tablist" id="assignedMainTabs">
     <li class="nav-item">
         {% if ac_project_id %}
@@ -13,16 +13,15 @@
     </li>
     <li class="nav-item">
         {% if ac_project_id %}
-        <a class="nav-link {% if not ac_is_gesamt_page and ac_tab_active == 'completed' %}active{% endif %}"
-           href="{{ url_for('main.assigned_coachings', project=ac_project_id, status='completed', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene &amp; Archivierte</a>
+            {% if ac_report %}
+            <a class="nav-link {% if ac_is_gesamt_page or (not ac_is_gesamt_page and ac_tab_active == 'completed') %}active{% endif %}"
+               href="{{ url_for('main.assigned_coachings_gesamtbericht', status='completed', project=gesamt_url_project, team=team_filter or none, coach=coach_filter or none, member=member_filter or none, search=(search_term if search_term else none), sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene, Archiv &amp; Bereich</a>
+            {% else %}
+            <a class="nav-link {% if not ac_is_gesamt_page and ac_tab_active == 'completed' %}active{% endif %}"
+               href="{{ url_for('main.assigned_coachings', project=ac_project_id, status='completed', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene &amp; Archivierte</a>
+            {% endif %}
         {% else %}
-        <span class="nav-link disabled">Abgeschlossene &amp; Archivierte</span>
+        <span class="nav-link disabled">{% if ac_report %}Abgeschlossene, Archiv &amp; Bereich{% else %}Abgeschlossene &amp; Archivierte{% endif %}</span>
         {% endif %}
     </li>
-    {% if ac_show_gesamt_tab %}
-    <li class="nav-item">
-        <a class="nav-link {% if ac_is_gesamt_page %}active{% endif %}"
-           href="{{ url_for('main.assigned_coachings_gesamtbericht', status=gesamt_table_status, project=gesamt_url_project) }}">Gesamtbericht (Bereich)</a>
-    </li>
-    {% endif %}
 </ul>

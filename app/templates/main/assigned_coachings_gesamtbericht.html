@@ -34,13 +34,11 @@
     {% set ac_is_gesamt_page = true %}
     {% set ac_project_id = assigned_tabs_project_id %}
     {% set ac_tab_active = tab_active %}
-    {% set ac_show_gesamt_tab = true %}
-    {% set gesamt_table_status = tab_active %}
     {% set gesamt_url_project = project_filter %}
     {% include 'main/_assigned_coachings_main_tabs.html' %}
 
     <h2 class="h5 mb-3 text-light"><i class="fas fa-chart-bar text-info"></i> {{ title }}</h2>
-    <p class="text-muted small">Übersicht über alle zugewiesenen Coachings in Ihrem sichtbaren Projektbereich. Projektwechsel oben; Tabelle optional über „Tabelle:“ und Filter einschränken.</p>
+    <p class="text-muted small">Übersicht über alle zugewiesenen Coachings, die Ihre Rolle im sichtbaren Projektbereich erlaubt. Mit „Tabelle“ wählen Sie laufende oder abgeschlossene Aufträge; optional Projekte und Filter einschränken.</p>
 
     <div class="row mb-4">
         <div class="col-md-6 mb-2">

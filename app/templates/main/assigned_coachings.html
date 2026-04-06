@@ -182,8 +182,6 @@
     {% set ac_is_gesamt_page = false %}
     {% set ac_project_id = active_project_id %}
     {% set ac_tab_active = tab_active %}
-    {% set ac_show_gesamt_tab = has_perm('view_assigned_coaching_report') %}
-    {% set gesamt_table_status = tab_active %}
     {% set gesamt_url_project = active_project_id %}
     {% include 'main/_assigned_coachings_main_tabs.html' %}
 

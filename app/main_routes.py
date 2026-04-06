@@ -2025,6 +2025,20 @@ def assigned_coachings():
     if sort_dir not in ('asc', 'desc'):
         sort_dir = 'asc'
 
+    if tab_active == 'completed' and current_user.has_permission('view_assigned_coaching_report'):
+        rp = {'status': 'completed', 'project': project_id, 'sort_by': sort_by, 'sort_dir': sort_dir}
+        if team_filter:
+            rp['team'] = team_filter
+        if coach_filter:
+            rp['coach'] = coach_filter
+        if member_filter:
+            rp['member'] = member_filter
+        if search_term:
+            rp['search'] = search_term
+        if page and page != 1:
+            rp['page'] = page
+        return redirect(url_for('main.assigned_coachings_gesamtbericht', **rp))
+
     q = AssignedCoaching.query.options(
         joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team),
         joinedload(AssignedCoaching.coach),
