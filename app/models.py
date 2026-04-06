@@ -68,6 +68,12 @@ class User(UserMixin, db.Model):
         return False
 
     @property
+    def is_active(self):
+        """Flask-Login: inactive when the account exists only as archived team member(s)."""
+        from app.utils import user_is_archived_only_for_login
+        return not user_is_archived_only_for_login(self)
+
+    @property
     def coach_display_name(self):
         """Vor-/Nachname aus verknüpftem Teammitglied (Import), sonst Benutzername."""
         try:

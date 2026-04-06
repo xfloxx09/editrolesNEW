@@ -18,6 +18,26 @@ ROLE_MITARBEITER = 'Mitarbeiter'
 ARCHIV_TEAM_NAME = "ARCHIV"
 
 
+def user_is_archived_only_for_login(user):
+    """
+    True if this user must not log in: every linked TeamMember row sits on the ARCHIV team
+    (Konto deaktiviert). Users without TeamMember rows (z. B. reine Coach-/Admin-Konten) are not blocked.
+    """
+    if not user:
+        return False
+    try:
+        members = list(iter_relationship(user.team_members))
+    except (TypeError, AttributeError):
+        members = []
+    if not members:
+        return False
+    archiv_team = Team.query.filter_by(name=ARCHIV_TEAM_NAME).first()
+    if not archiv_team:
+        return False
+    aid = archiv_team.id
+    return all(getattr(tm, 'team_id', None) == aid for tm in members)
+
+
 def team_member_eligible_for_new_coaching(team_member):
     """True if this member may be selected for a new coaching, workshop, or assignment."""
     if not team_member or not team_member.team:

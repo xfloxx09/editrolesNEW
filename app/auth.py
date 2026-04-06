@@ -18,7 +18,12 @@ def login():
         if user is None or not user.check_password(form.password.data):
             flash('Ungültiger Benutzername oder Passwort.', 'danger')
             return redirect(url_for('auth.login'))
-        login_user(user, remember=form.remember_me.data)
+        if not login_user(user, remember=form.remember_me.data):
+            flash(
+                'Dieses Konto wurde deaktiviert. Bitte wenden Sie sich an den Administrator.',
+                'warning',
+            )
+            return redirect(url_for('auth.login'))
         flash(f'Willkommen zurück, {user.username}!', 'success')
         
         next_page = request.args.get('next')
