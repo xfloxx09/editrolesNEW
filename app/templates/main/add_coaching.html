@@ -168,7 +168,7 @@
     </form>
     {% endif %}
 
-    <form method="POST" action="{% if is_edit_mode %}{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.args.get('next')) }}{% else %}{{ url_for('main.add_coaching') }}{% endif %}" novalidate>
+    <form id="coachingEinzelForm" method="POST" action="{% if is_edit_mode %}{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.args.get('next')) }}{% else %}{{ url_for('main.add_coaching') }}{% endif %}" novalidate>
         {{ form.hidden_tag() }}
         {% if not is_edit_mode|default(false) and selected_coaching_project_id is defined %}
         <input type="hidden" name="project_id" value="{{ selected_coaching_project_id }}">
@@ -242,6 +242,21 @@
             <h4 class="section-title"><i class="fas fa-calendar-check"></i> Geplantes Folgecoaching</h4>
             <p class="text-muted small mb-2">Optional: Dieses Coaching als Erfüllung eines geplanten Termins speichern (nur ab dem geplanten Kalendertag).</p>
             <div id="plannedCoachingRadioWrap"></div>
+            <div id="plannedVerabredungWrap" class="mt-3 p-3 border border-secondary rounded" style="display: none;">
+                <p class="small mb-2"><strong>Vereinbarung aus dem geplanten Termin</strong></p>
+                <p class="small text-muted mb-2" id="plannedVerabredungTextPreview"></p>
+                <div class="form-group mb-0">
+                    <span class="d-block small mb-1">Wurde die Vereinbarung erfüllt?</span>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="planned_verabredung_erfuellt" id="planned_verabredung_yes" value="1">
+                        <label class="form-check-label" for="planned_verabredung_yes">Erfüllt</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="planned_verabredung_erfuellt" id="planned_verabredung_no" value="0">
+                        <label class="form-check-label" for="planned_verabredung_no">Nicht erfüllt</label>
+                    </div>
+                </div>
+            </div>
             <div id="plannedCoachingPendingWrap" class="mt-2 small text-muted"></div>
         </div>
 
@@ -466,18 +481,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function escapeHtml(str) {
+        if (!str) return '';
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
     function syncPlannedCoachingPickers(data) {
         const wrap = document.getElementById('plannedCoachingRadioWrap');
         const pendingWrap = document.getElementById('plannedCoachingPendingWrap');
         const section = document.getElementById('plannedCoachingTaskSection');
         const fulfillHidden = document.getElementById('fulfill_planned_id');
+        const verWrap = document.getElementById('plannedVerabredungWrap');
+        const verPreview = document.getElementById('plannedVerabredungTextPreview');
         if (!wrap || !section) return;
         const plans = (data && data.plans) ? data.plans : [];
+        window.__plannedPlansById = {};
+        plans.forEach(function(p) {
+            window.__plannedPlansById[String(p.id)] = p;
+        });
         wrap.innerHTML = '';
         if (pendingWrap) pendingWrap.innerHTML = '';
         if (!plans.length) {
             section.style.display = 'none';
             if (fulfillHidden) fulfillHidden.value = '';
+            if (verWrap) verWrap.style.display = 'none';
+            document.querySelectorAll('input[name="planned_verabredung_erfuellt"]').forEach(function(x) { x.checked = false; });
             return;
         }
         section.style.display = '';
@@ -497,9 +527,30 @@ document.addEventListener('DOMContentLoaded', function() {
             pendingWrap.innerHTML = '<p class="mb-0"><strong>Noch nicht fällig (Verknüpfung ab Kalendertag):</strong> ' + pendingLines.join('; ') + '</p>';
         }
 
+        function updatePlannedVerabredungBlock() {
+            if (!verWrap || !verPreview) return;
+            const sel = document.querySelector('input[name="fulfill_planned_pick"]:checked');
+            const pid = sel && sel.value ? String(sel.value) : '';
+            document.querySelectorAll('input[name="planned_verabredung_erfuellt"]').forEach(function(x) { x.checked = false; });
+            if (!pid || !window.__plannedPlansById[pid]) {
+                verWrap.style.display = 'none';
+                return;
+            }
+            const pl = window.__plannedPlansById[pid];
+            if (!pl.can_start || !pl.has_verabredung) {
+                verWrap.style.display = 'none';
+                return;
+            }
+            verPreview.innerHTML = pl.verabredung_text
+                ? escapeHtml(pl.verabredung_text)
+                : '<span class="text-muted">(Kein Text hinterlegt — bitte trotzdem den Erfüllungsstatus wählen.)</span>';
+            verWrap.style.display = '';
+        }
+
         function syncFulfillFromRadio() {
             const sel = document.querySelector('input[name="fulfill_planned_pick"]:checked');
             if (sel && fulfillHidden) fulfillHidden.value = sel.value || '';
+            updatePlannedVerabredungBlock();
         }
         document.querySelectorAll('input[name="fulfill_planned_pick"]').forEach(function(r) {
             r.addEventListener('change', syncFulfillFromRadio);
@@ -591,6 +642,22 @@ document.addEventListener('DOMContentLoaded', function() {
             loadPlannedForMember();
         });
         loadPlannedForMember();
+    }
+
+    const coachingEinzelForm = document.getElementById('coachingEinzelForm');
+    if (coachingEinzelForm && coachingEinzelForm.action.indexOf('add-coaching') !== -1) {
+        coachingEinzelForm.addEventListener('submit', function(ev) {
+            const fid = document.getElementById('fulfill_planned_id');
+            const pid = fid && fid.value ? String(fid.value) : '';
+            if (!pid || !window.__plannedPlansById || !window.__plannedPlansById[pid]) return;
+            const pl = window.__plannedPlansById[pid];
+            if (!pl.has_verabredung) return;
+            const checked = document.querySelector('input[name="planned_verabredung_erfuellt"]:checked');
+            if (!checked) {
+                ev.preventDefault();
+                alert('Bitte wählen Sie, ob die Vereinbarung erfüllt wurde oder nicht.');
+            }
+        });
     }
 });
 </script>

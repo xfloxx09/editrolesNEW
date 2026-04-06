@@ -6,7 +6,7 @@
     <p class="text-muted">Termine, die Sie beim Speichern eines Coachings geplant haben.</p>
 
     {% if not items %}
-    <div class="alert alert-secondary">Sie haben keine offenen geplanten Coachings.</div>
+    <div class="alert alert-secondary mb-4">Sie haben keine offenen geplanten Coachings.</div>
     {% else %}
     <div class="list-group">
         {% for it in items %}
@@ -62,6 +62,61 @@
                     </form>
                 </div>
             </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <h3 class="mt-5 mb-3"><i class="fas fa-check-double text-success"></i> Abgeschlossene geplante Coachings</h3>
+    <p class="text-muted small">Erfüllte Termine mit Vereinbarung und Link zum gespeicherten Coaching-Bericht.</p>
+
+    {% if not fulfilled_plans %}
+    <div class="alert alert-secondary">Noch keine erfüllten geplanten Coachings.</div>
+    {% else %}
+    <div class="list-group mb-4">
+        {% for it in fulfilled_plans %}
+        <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
+            <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
+                <div class="mb-2 mb-md-0">
+                    <strong>{{ it.team_member.name }}</strong>
+                    {% if it.team and it.team.name %}
+                    <span class="text-muted">({{ it.team.name }})</span>
+                    {% endif %}
+                    <span class="badge badge-secondary ml-2">geplant: {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                    {% if it.fulfilled_coaching and it.fulfilled_coaching.coaching_date %}
+                    <span class="badge badge-light text-dark ml-1">Coaching: {{ it.fulfilled_coaching.coaching_date.strftime('%d.%m.%Y %H:%M') }}</span>
+                    {% endif %}
+                    {% if it.project %}
+                    <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                    {% if it.fulfilled_coaching_id %}
+                    <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.edit_coaching', coaching_id=it.fulfilled_coaching_id) }}">
+                        <i class="fas fa-file-alt"></i> Bericht / Bearbeiten
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% if it.has_verabredung %}
+            <p class="mb-1 mt-2 small">
+                <strong>Vereinbarung:</strong>
+                {% if it.verabredung_text %}
+                {{ it.verabredung_text[:400] }}{% if it.verabredung_text|length > 400 %}…{% endif %}
+                {% else %}
+                <span class="text-muted">(ohne Text)</span>
+                {% endif %}
+            </p>
+            <p class="mb-0 small">
+                {% if it.verabredung_erfuellt is sameas true %}
+                <span class="badge badge-success">Vereinbarung erfüllt</span>
+                {% elif it.verabredung_erfuellt is sameas false %}
+                <span class="badge badge-warning text-dark">Vereinbarung nicht erfüllt</span>
+                {% else %}
+                <span class="badge badge-secondary">Vereinbarung — k. Angabe</span>
+                {% endif %}
+            </p>
+            {% endif %}
         </div>
         {% endfor %}
     </div>

@@ -330,6 +330,8 @@ class PlannedCoaching(db.Model):
     notes = db.Column(db.Text)
     has_verabredung = db.Column(db.Boolean, nullable=False, default=False)
     verabredung_text = db.Column(db.Text)
+    # Wenn erfüllt und has_verabredung: True/False; sonst NULL
+    verabredung_erfuellt = db.Column(db.Boolean, nullable=True)
     source_coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=True)
     status = db.Column(db.String(20), nullable=False, default='open')
     fulfilled_coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=True)
@@ -339,6 +341,7 @@ class PlannedCoaching(db.Model):
     coach = db.relationship('User', foreign_keys=[coach_id])
     project = db.relationship('Project')
     team = db.relationship('Team', foreign_keys=[team_id])
+    fulfilled_coaching = db.relationship('Coaching', foreign_keys=[fulfilled_coaching_id])
 
 
 class CoachingReview(db.Model):

@@ -73,7 +73,46 @@ def _try_create_planned_followup_from_request(coaching):
     return 'created'
 
 
-def _maybe_fulfill_planned_coaching(coaching, fulfill_planned_id):
+def _effective_planned_coaching_for_fulfill(team_member_id, project_id, fulfill_planned_id):
+    """Planned row if submission may fulfill it (same rules as persist step)."""
+    if not fulfill_planned_id:
+        return None
+    pc = PlannedCoaching.query.get(fulfill_planned_id)
+    if not pc or pc.coach_id != current_user.id or pc.status != 'open':
+        return None
+    if not planned_coaching_can_start_today(pc.planned_for_date):
+        return None
+    if pc.team_member_id != team_member_id:
+        return None
+    acc = get_accessible_project_ids()
+    if acc is not None and pc.project_id and pc.project_id not in acc:
+        return None
+    return pc
+
+
+def _parse_fulfill_planned_submission(team_member_id, project_id):
+    """
+    Returns (fulfill_planned_id, verabredung_erfuellt, error_message).
+    verabredung_erfuellt: True/False if plan has agreement and will be fulfilled; else None.
+    """
+    raw = (request.form.get('fulfill_planned_id') or '').strip()
+    fulfill_pid = int(raw) if raw.isdigit() else None
+    if not fulfill_pid:
+        return None, None, None
+    pc = _effective_planned_coaching_for_fulfill(team_member_id, project_id, fulfill_pid)
+    if not pc:
+        return fulfill_pid, None, None
+    if pc.has_verabredung:
+        raw_ve = (request.form.get('planned_verabredung_erfuellt') or '').strip()
+        if raw_ve == '1':
+            return fulfill_pid, True, None
+        if raw_ve == '0':
+            return fulfill_pid, False, None
+        return fulfill_pid, None, 'Bitte wählen Sie, ob die Vereinbarung erfüllt wurde oder nicht.'
+    return fulfill_pid, None, None
+
+
+def _maybe_fulfill_planned_coaching(coaching, fulfill_planned_id, verabredung_erfuellt=None):
     if not fulfill_planned_id:
         return
     pc = PlannedCoaching.query.get(fulfill_planned_id)
@@ -88,6 +127,10 @@ def _maybe_fulfill_planned_coaching(coaching, fulfill_planned_id):
         return
     pc.fulfilled_coaching_id = coaching.id
     pc.status = 'fulfilled'
+    if pc.has_verabredung:
+        pc.verabredung_erfuellt = verabredung_erfuellt
+    else:
+        pc.verabredung_erfuellt = None
 
 
 def _user_may_edit_planned_coaching(pc):
@@ -1342,6 +1385,17 @@ def add_coaching():
             flash('Dieses Team ist für neue Coachings deaktiviert. Wählen Sie ein anderes Teammitglied.', 'danger')
             return redirect(url_for('main.add_coaching', project=project_id))
 
+        fulfill_pid, verab_erfuellt, fulfill_err = _parse_fulfill_planned_submission(
+            form.team_member_id.data, project_id
+        )
+        if fulfill_err:
+            flash(fulfill_err, 'warning')
+            if fulfill_pid:
+                return redirect(url_for(
+                    'main.add_coaching', project=project_id, planned_id=fulfill_pid,
+                ))
+            return redirect(url_for('main.add_coaching', project=project_id))
+
         if form.coaching_style.data == 'TCAP' and not getattr(bogen_layout, 'allow_tcap', True):
             flash('TCAP ist für dieses Projekt nicht freigegeben.', 'danger')
             return redirect(url_for('main.add_coaching', project=project_id))
@@ -1384,9 +1438,7 @@ def add_coaching():
             ))
         if linked_assignment:
             _sync_assigned_coaching_status_from_progress(linked_assignment)
-        raw_fulfill = (request.form.get('fulfill_planned_id') or '').strip()
-        fulfill_pid = int(raw_fulfill) if raw_fulfill.isdigit() else None
-        _maybe_fulfill_planned_coaching(coaching, fulfill_pid)
+        _maybe_fulfill_planned_coaching(coaching, fulfill_pid, verab_erfuellt)
         plan_result = _try_create_planned_followup_from_request(coaching)
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
@@ -1954,10 +2006,33 @@ def planned_coachings_list():
     if acc is not None:
         q = q.filter(PlannedCoaching.project_id.in_(acc))
     items = q.order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id).all()
+
+    q_done = PlannedCoaching.query.filter(
+        PlannedCoaching.coach_id == current_user.id,
+        PlannedCoaching.status == 'fulfilled',
+    ).options(
+        joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
+        joinedload(PlannedCoaching.project),
+        joinedload(PlannedCoaching.team),
+        joinedload(PlannedCoaching.fulfilled_coaching),
+    )
+    if acc is not None:
+        q_done = q_done.filter(PlannedCoaching.project_id.in_(acc))
+    fulfilled_plans = q_done.all()
+    fulfilled_plans.sort(
+        key=lambda p: (
+            p.fulfilled_coaching.coaching_date if p.fulfilled_coaching else datetime.min,
+            p.id,
+        ),
+        reverse=True,
+    )
+    fulfilled_plans = fulfilled_plans[:100]
+
     return render_template(
         'main/planned_coachings.html',
         title='Geplante Coachings',
         items=items,
+        fulfilled_plans=fulfilled_plans,
         today_d=today_athens_date(),
         config=current_app.config,
     )
