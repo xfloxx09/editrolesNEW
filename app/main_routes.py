@@ -214,6 +214,35 @@ def _safe_internal_path(path_val):
     return s
 
 
+def _may_view_assigned_rejection_bericht(assignment):
+    """Zuweiser, QM/Scope-Bericht, Coach der abgelehnt hat, Admin/BL."""
+    if not assignment or assignment.status != 'rejected':
+        return False
+    if not (assignment.rejection_reason or '').strip():
+        return False
+    tm = assignment.team_member
+    if not tm or not tm.team:
+        return False
+    project_id = tm.team.project_id
+    acc = get_accessible_project_ids()
+    if acc is not None:
+        if len(acc) == 0 or project_id not in acc:
+            return False
+    if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+        return True
+    if assignment.coach_id == current_user.id:
+        return True
+    is_pl_owner = assignment.project_leader_id == current_user.id
+    if is_pl_owner and (
+        current_user.has_permission('assign_coachings')
+        or current_user.has_permission('view_pl_qm_dashboard')
+    ):
+        return True
+    if current_user.has_permission('view_assigned_coaching_report'):
+        return True
+    return False
+
+
 def _redirect_after_coaching_review(form, my_coachings_query_args):
     target = _safe_internal_path((form.next.data or '').strip()) if getattr(form, 'next', None) else None
     if target:
@@ -3416,6 +3445,27 @@ def assigned_coaching_report(assignment_id):
     return render_template(
         'main/assigned_coaching_report.html',
         report=report,
+        assigned_report_project_id=project_id,
+        config=current_app.config,
+    )
+
+
+@bp.route('/assigned-coaching-rejection/<int:assignment_id>')
+@login_required
+def assigned_coaching_rejection_bericht(assignment_id):
+    assignment = AssignedCoaching.query.options(
+        joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team).joinedload(Team.project),
+        joinedload(AssignedCoaching.coach),
+        joinedload(AssignedCoaching.project_leader),
+    ).get_or_404(assignment_id)
+    if not _may_view_assigned_rejection_bericht(assignment):
+        flash('Keine Berechtigung oder kein Ablehnungsgrund vorhanden.', 'danger')
+        return redirect(url_for('main.index'))
+    tm = assignment.team_member
+    project_id = tm.team.project_id if tm and tm.team else get_visible_project_id()
+    return render_template(
+        'main/assigned_coaching_rejection_bericht.html',
+        assignment=assignment,
         assigned_report_project_id=project_id,
         config=current_app.config,
     )

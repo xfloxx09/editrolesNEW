@@ -89,13 +89,11 @@
                         <td>{{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}</td>
                         <td>{{ assignment.expected_coaching_count }}</td>
                         <td>{{ assignment.progress }}%</td>
+                        <td><span class="assignment-status status-{{ assignment.status }}">{{ assignment.status|status_de }}</span></td>
                         <td>
-                            <span class="assignment-status status-{{ assignment.status }}">{{ assignment.status|status_de }}</span>
                             {% if assignment.status == 'rejected' and assignment.rejection_reason %}
-                            <div class="small mt-1 text-muted" style="max-width:14rem;white-space:pre-wrap;">{{ assignment.rejection_reason }}</div>
+                            <a href="{{ url_for('main.assigned_coaching_rejection_bericht', assignment_id=assignment.id) }}" class="btn btn-sm btn-info mb-1">Bericht</a>
                             {% endif %}
-                        </td>
-                        <td>
                             <a href="{{ url_for('admin.edit_assigned_coaching', assignment_id=assignment.id) }}" class="btn btn-sm btn-primary">Bearbeiten</a>
                             <form action="{{ url_for('admin.delete_assigned_coaching', assignment_id=assignment.id) }}" method="POST" style="display: inline;" onsubmit="return confirm('Diese Aufgabe wirklich löschen?');">
                                 <button type="submit" class="btn btn-sm btn-danger">Löschen</button>

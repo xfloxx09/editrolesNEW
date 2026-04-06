@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block head_extra %}
+<style>
+.rejection-bericht-body {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    color: #eee;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    min-height: 8rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-3"><i class="fas fa-file-alt text-danger"></i> Ablehnungsgrund — Aufgabe #{{ assignment.id }}</h2>
+
+    <div class="card mb-4" style="background:#2b2b2b;border-color:#444;color:#eee;">
+        <div class="card-header border-secondary" style="background:#333;color:#e20074;font-weight:600;">Kontext</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <strong>Coach:</strong> {{ assignment.coach.coach_display_name if assignment.coach else '—' }}<br>
+                    <strong>Teammitglied:</strong> {{ assignment.team_member.name }} ({{ assignment.team_member.team.name }})<br>
+                    <strong>Deadline:</strong> {{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}
+                </div>
+                <div class="col-md-6">
+                    <strong>Zuweiser:</strong> {{ assignment.project_leader.coach_display_name if assignment.project_leader else '—' }}<br>
+                    <strong>Status:</strong> {{ assignment.status|status_de }}<br>
+                    {% if assignment.team_member.team and assignment.team_member.team.project %}
+                    <strong>Projekt:</strong> {{ assignment.team_member.team.project.name }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4" style="background:#2b2b2b;border-color:#444;">
+        <div class="card-header telekom-bg-magenta text-white border-0">
+            Ablehnungsgrund (vom Coach)
+        </div>
+        <div class="card-body p-0">
+            <div class="rejection-bericht-body border-0">{{ assignment.rejection_reason }}</div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        {% if has_perm('view_assigned_coaching_report') %}
+        <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status='all', project=assigned_report_project_id, project_leader=(current_user.id if (has_perm('assign_coachings') and current_user.role_name not in ['Admin', 'Betriebsleiter']) else none), coach=(current_user.id if (not has_perm('assign_coachings') and has_perm('view_assigned_coachings') and current_user.role_name not in ['Admin', 'Betriebsleiter']) else none)) }}" class="btn btn-secondary">Zurück zu Abgeschlossene &amp; Archiv</a>
+        {% endif %}
+        <a href="{{ url_for('main.assigned_coachings', project=assigned_report_project_id) }}" class="btn btn-outline-secondary">Zurück zu zugewiesenen Coachings</a>
+    </div>
+</div>
+{% endblock %}

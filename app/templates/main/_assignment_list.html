@@ -94,12 +94,6 @@
                                 {% if assignment.is_overdue and assignment.status not in ['completed','expired','cancelled'] %}
                                     <span class="deadline-overdue">Überfällig!</span>
                                 {% endif %}
-                                {% if assignment.status == 'rejected' and assignment.rejection_reason %}
-                                <div class="small mt-2 pt-2 border-top border-secondary text-left" style="max-width: 22rem;">
-                                    <strong>Ablehnungsgrund:</strong><br>
-                                    <span style="white-space: pre-wrap;">{{ assignment.rejection_reason }}</span>
-                                </div>
-                                {% endif %}
                             </td>
                             <td>
                                 {% if view_type == 'coach' and assignment.status == 'pending' %}
@@ -107,6 +101,9 @@
                                         <button type="submit" class="btn btn-sm btn-success">Annehmen</button>
                                     </form>
                                     <button type="button" class="btn btn-sm btn-danger" data-toggle="modal" data-target="#rejectAssignedModal" data-reject-url="{{ url_for('main.reject_assigned_coaching', assignment_id=assignment.id) }}">Ablehnen</button>
+                                {% endif %}
+                                {% if assignment.status == 'rejected' and assignment.rejection_reason %}
+                                <a href="{{ url_for('main.assigned_coaching_rejection_bericht', assignment_id=assignment.id) }}" class="btn btn-sm btn-info" title="Ablehnungsgrund lesen">Bericht</a>
                                 {% endif %}
                                 {% if view_type == 'pl' and assignment.status in ['pending', 'accepted', 'in_progress'] %}
                                     <form action="{{ url_for('main.cancel_assigned_coaching', assignment_id=assignment.id) }}" method="POST" style="display: inline;">
