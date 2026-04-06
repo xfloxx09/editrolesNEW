@@ -2284,7 +2284,10 @@ def assigned_coachings_gesamtbericht():
         lid_rows = leaders_scope.with_entities(AssignedCoaching.project_leader_id).distinct().all()
         leader_ids = [r[0] for r in lid_rows if r[0]]
         if leader_ids:
-            all_project_leaders = User.query.filter(User.id.in_(leader_ids)).order_by(User.username).all()
+            all_project_leaders = list(User.query.filter(User.id.in_(leader_ids)).all())
+            all_project_leaders.sort(
+                key=lambda u: (u.coach_display_name or u.username or '').lower()
+            )
 
     snapshot = _assigned_coachings_scope_query(project_filter_id=project_filter)
     if snapshot is not None and project_leader_filter:
