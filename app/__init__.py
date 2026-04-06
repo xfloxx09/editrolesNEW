@@ -39,6 +39,8 @@ def create_app(config_class=Config):
     # --- Migration: ensure necessary columns and tables exist ---
     with app.app_context():
         print("--- Running automatic migrations ---")
+        import app.models  # noqa: F401 — alle Modelle registrieren (z. B. planned_workshops)
+
         inspector = inspect(db.engine)
         conn = db.engine.connect()
 
