@@ -627,7 +627,6 @@ def index():
             or u.has_permission('assign_coachings')
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
-        1 if u.has_permission('view_assigned_coaching_report') else 0,
         1 if u.has_permission('planned_coachings') else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
@@ -2211,6 +2210,7 @@ def get_member_current_score():
 @login_required
 @permission_required('view_assigned_coaching_report')
 def assigned_coachings_gesamtbericht():
+    _apply_query_project_to_session()
     tab_active = request.args.get('status', 'current')
     if tab_active not in ('current', 'completed'):
         tab_active = 'current'
@@ -2225,6 +2225,13 @@ def assigned_coachings_gesamtbericht():
         sort_dir = 'asc'
 
     acc = get_accessible_project_ids()
+    assigned_tabs_project_id = get_visible_project_id()
+    if not assigned_tabs_project_id:
+        if acc is None:
+            _fp0 = Project.query.order_by(Project.name).first()
+            assigned_tabs_project_id = _fp0.id if _fp0 else None
+        elif acc:
+            assigned_tabs_project_id = acc[0]
     project_filter = request.args.get('project', type=int)
     if project_filter and acc is not None and project_filter not in acc:
         project_filter = None
@@ -2265,6 +2272,7 @@ def assigned_coachings_gesamtbericht():
             all_members=[],
             report_count_current=0,
             report_count_completed=0,
+            assigned_tabs_project_id=assigned_tabs_project_id,
             config=current_app.config,
         )
 
@@ -2367,6 +2375,7 @@ def assigned_coachings_gesamtbericht():
         all_members=all_members,
         report_count_current=report_count_current,
         report_count_completed=report_count_completed,
+        assigned_tabs_project_id=assigned_tabs_project_id,
         config=current_app.config,
     )
 

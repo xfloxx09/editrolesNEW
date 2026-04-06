@@ -79,15 +79,6 @@
             </a>
         </div>
         {% endif %}
-        {% if has_perm('view_assigned_coaching_report') %}
-        <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.assigned_coachings_gesamtbericht') }}" class="btn btn-lg btn-block p-4" style="background-color: #6610f2; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                <i class="fas fa-chart-pie fa-3x mb-2"></i>
-                <h4 class="mb-1">Zuweisungs-Gesamtbericht</h4>
-                <p class="mb-0 small text-white-50">Zugewiesene Coachings im Projektbereich</p>
-            </a>
-        </div>
-        {% endif %}
         {% if has_perm('planned_coachings') %}
         <div class="col-md-4 mb-3">
             <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4 planned-tile-link" style="background-color: #20c997; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">

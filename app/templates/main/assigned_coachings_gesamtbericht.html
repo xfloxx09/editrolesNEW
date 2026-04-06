@@ -26,11 +26,28 @@
 
 {% block content %}
 <div class="container-fluid mt-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
-        <h2 class="mb-0"><i class="fas fa-chart-bar text-info"></i> {{ title }}</h2>
-        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary btn-sm">Zurück zum Dashboard</a>
-    </div>
-    <p class="text-muted">Alle zugewiesenen Coachings in Ihrem Projektbereich (gemäß Benutzerkontext und Abteilung). Schließen Sie mit den Filtern einzelne Projekte ein.</p>
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item">
+            {% if assigned_tabs_project_id %}
+            <a class="nav-link" href="{{ url_for('main.assigned_coachings', project=assigned_tabs_project_id, status='current') }}">Aktuelle Aufträge</a>
+            {% else %}
+            <span class="nav-link disabled">Aktuelle Aufträge</span>
+            {% endif %}
+        </li>
+        <li class="nav-item">
+            {% if assigned_tabs_project_id %}
+            <a class="nav-link" href="{{ url_for('main.assigned_coachings', project=assigned_tabs_project_id, status='completed') }}">Abgeschlossene &amp; Archivierte</a>
+            {% else %}
+            <span class="nav-link disabled">Abgeschlossene &amp; Archivierte</span>
+            {% endif %}
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None) }}">Gesamtbericht (Bereich)</a>
+        </li>
+    </ul>
+
+    <h2 class="h4 mb-3"><i class="fas fa-chart-bar text-info"></i> {{ title }}</h2>
+    <p class="text-muted">Alle zugewiesenen Coachings in Ihrem Projektbereich (gemäß Benutzerkontext und Abteilung). Mit dem Projektfilter oben schränken Sie die Tabelle ein.</p>
 
     <div class="row mb-4">
         <div class="col-md-6 mb-2">

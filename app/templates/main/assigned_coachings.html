@@ -287,6 +287,11 @@
         <li class="nav-item">
             <a class="nav-link {% if tab_active == 'completed' %}active{% endif %}" href="{{ url_for('main.assigned_coachings', project=active_project_id, status='completed', team=team_filter, coach=coach_filter, member=member_filter, search=search_term, sort_by=sort_by, sort_dir=sort_dir) }}">Abgeschlossene & Archivierte</a>
         </li>
+        {% if has_perm('view_assigned_coaching_report') %}
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('main.assigned_coachings_gesamtbericht') }}">Gesamtbericht (Bereich)</a>
+        </li>
+        {% endif %}
     </ul>
 
     <!-- Assignment list (the same for both tabs, the route filters accordingly) -->
