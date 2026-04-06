@@ -8,7 +8,15 @@
 <div class="container-fluid">
     <h2>{{ title }}</h2>
 
+    {% if cal_date_filter %}
+    <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between">
+        <span>Ansicht vom Terminkalender: Workshops am <strong>{{ cal_day_label }}</strong></span>
+        <a href="{{ url_for('main.workshop_dashboard', period=current_period_filter) }}" class="btn btn-sm btn-outline-secondary">Kalenderfilter aufheben</a>
+    </div>
+    {% endif %}
+
     <form method="GET" action="{{ url_for('main.workshop_dashboard') }}" class="mb-4">
+        {% if cal_date_filter %}<input type="hidden" name="cal_date" value="{{ cal_date_filter }}">{% endif %}
         <div class="form-row align-items-end">
             <div class="col-md-3">
                 <div class="form-group">
@@ -128,19 +136,19 @@
         <nav aria-label="Workshop-Navigation">
             <ul class="pagination justify-content-center">
                 {% if workshops_paginated.has_prev %}
-                    <li class="page-item"><a class="page-link" href="{{ url_for('main.workshop_dashboard', page=workshops_paginated.prev_num, period=current_period_filter) }}">Vorherige</a></li>
+                    <li class="page-item"><a class="page-link" href="{{ url_for('main.workshop_dashboard', page=workshops_paginated.prev_num, period=current_period_filter, cal_date=cal_date_filter or none) }}">Vorherige</a></li>
                 {% endif %}
                 {% for page_num in workshops_paginated.iter_pages() %}
                     {% if page_num %}
                         <li class="page-item {% if workshops_paginated.page == page_num %}active{% endif %}">
-                            <a class="page-link" href="{{ url_for('main.workshop_dashboard', page=page_num, period=current_period_filter) }}">{{ page_num }}</a>
+                            <a class="page-link" href="{{ url_for('main.workshop_dashboard', page=page_num, period=current_period_filter, cal_date=cal_date_filter or none) }}">{{ page_num }}</a>
                         </li>
                     {% else %}
                         <li class="page-item disabled"><span class="page-link">...</span></li>
                     {% endif %}
                 {% endfor %}
                 {% if workshops_paginated.has_next %}
-                    <li class="page-item"><a class="page-link" href="{{ url_for('main.workshop_dashboard', page=workshops_paginated.next_num, period=current_period_filter) }}">Nächste</a></li>
+                    <li class="page-item"><a class="page-link" href="{{ url_for('main.workshop_dashboard', page=workshops_paginated.next_num, period=current_period_filter, cal_date=cal_date_filter or none) }}">Nächste</a></li>
                 {% endif %}
             </ul>
         </nav>

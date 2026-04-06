@@ -5,7 +5,21 @@ from sqlalchemy import desc, or_, false, exists
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, CoachingLeitfadenResponse, CoachingReview, PlannedCoaching
+from app.models import (
+    User,
+    Team,
+    TeamMember,
+    Coaching,
+    Workshop,
+    workshop_participants,
+    Project,
+    Role,
+    AssignedCoaching,
+    CoachingLeitfadenResponse,
+    CoachingReview,
+    PlannedCoaching,
+    PlannedWorkshop,
+)
 from app.forms import CoachingForm, WorkshopForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
 from app.utils import (
     bogen_layout_for_project,
@@ -1174,15 +1188,28 @@ def terminkalender():
     lo, _ = athens_calendar_day_utc_naive_bounds(first)
     _, hi = athens_calendar_day_utc_naive_bounds(last)
 
-    counts = defaultdict(lambda: {'done_me': 0, 'done_others': 0, 'planned': 0, 'assigned': 0})
+    empty_bucket = {
+        'done_me': 0,
+        'done_others': 0,
+        'planned': 0,
+        'assigned': 0,
+        'ws_me': 0,
+        'ws_others': 0,
+        'planned_ws': 0,
+    }
+    counts = defaultdict(lambda: {k: v for k, v in empty_bucket.items()})
     cal_show_own_coachings = current_user.has_permission('add_coaching') or current_user.has_permission(
         'coach'
     )
+    cal_show_own_workshops = current_user.has_permission('add_workshop') or current_user.has_permission(
+        'coach'
+    )
+
+    archiv_team = get_or_create_archiv_team()
+    sees_all_teams = _user_sees_all_teams_coaching_dashboard()
+    my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else None
 
     if current_user.has_permission('view_coaching_dashboard'):
-        archiv_team = get_or_create_archiv_team()
-        sees_all_teams = _user_sees_all_teams_coaching_dashboard()
-        my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else None
         q_done = (
             Coaching.query.filter(
                 Coaching.coaching_date >= lo,
@@ -1208,6 +1235,50 @@ def terminkalender():
                 counts[d]['done_me'] += 1
             else:
                 counts[d]['done_others'] += 1
+
+    if current_user.has_permission('view_workshop_dashboard'):
+        q_ws = Workshop.query.filter(
+            Workshop.workshop_date >= lo,
+            Workshop.workshop_date <= hi,
+        )
+        if acc is not None:
+            if acc:
+                q_ws = q_ws.filter(Workshop.project_id.in_(acc))
+            else:
+                q_ws = q_ws.filter(false())
+        if not sees_all_teams:
+            if my_dash_team_ids:
+                q_ws = (
+                    q_ws.join(workshop_participants, workshop_participants.c.workshop_id == Workshop.id)
+                    .join(TeamMember, TeamMember.id == workshop_participants.c.team_member_id)
+                    .filter(TeamMember.team_id.in_(my_dash_team_ids))
+                    .distinct()
+                )
+            else:
+                q_ws = q_ws.filter(false())
+        for wrow in q_ws.all():
+            wd = utc_naive_or_aware_to_athens_date(wrow.workshop_date)
+            if cal_show_own_workshops and wrow.coach_id == current_user.id:
+                counts[wd]['ws_me'] += 1
+            else:
+                counts[wd]['ws_others'] += 1
+
+    if current_user.has_permission('add_workshop'):
+        q_pws = PlannedWorkshop.query.filter(
+            PlannedWorkshop.coach_id == current_user.id,
+            PlannedWorkshop.status == 'open',
+            PlannedWorkshop.planned_for_date >= first,
+            PlannedWorkshop.planned_for_date <= last,
+        )
+        if acc is not None:
+            if acc:
+                q_pws = q_pws.filter(
+                    or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None))
+                )
+            else:
+                q_pws = q_pws.filter(false())
+        for pwr in q_pws.all():
+            counts[pwr.planned_for_date]['planned_ws'] += 1
 
     if current_user.has_permission('planned_coachings'):
         q_pl = PlannedCoaching.query.filter(
@@ -1247,22 +1318,32 @@ def terminkalender():
             if first <= ad <= last:
                 counts[ad]['assigned'] += 1
 
+    can_plan_c = current_user.has_permission('planned_coachings')
+    can_plan_w = current_user.has_permission('add_workshop')
+
     def enrich_day(d):
-        c = counts.get(d, {'done_me': 0, 'done_others': 0, 'planned': 0, 'assigned': 0})
+        z = counts[d]
         is_past = d < today
         is_future = d > today
-        can_plan = current_user.has_permission('planned_coachings')
         return {
             'date': d,
             'in_month': d.month == month,
             'is_today': d == today,
             'is_past': is_past,
             'is_future': is_future,
-            'done_me': c['done_me'],
-            'done_others': c['done_others'],
-            'planned': c['planned'],
-            'assigned': c['assigned'],
-            'show_add': not is_past and can_plan,
+            'done_me': z['done_me'],
+            'done_others': z['done_others'],
+            'planned': z['planned'],
+            'assigned': z['assigned'],
+            'ws_me': z['ws_me'],
+            'ws_others': z['ws_others'],
+            'planned_ws': z['planned_ws'],
+            'show_add': not is_past
+            and (
+                can_plan_c
+                or can_plan_w
+                or (d == today and current_user.has_permission('add_coaching'))
+            ),
         }
 
     cal = calendar.Calendar(firstweekday=calendar.MONDAY)
@@ -1296,7 +1377,13 @@ def terminkalender():
     week_next_start = week_start + timedelta(days=7)
     week_end = week_start + timedelta(days=6)
 
-    month_total_done_me = month_total_done_others = month_total_planned = month_total_assigned = 0
+    month_total_done_me = 0
+    month_total_done_others = 0
+    month_total_planned = 0
+    month_total_assigned = 0
+    month_total_ws_me = 0
+    month_total_ws_others = 0
+    month_total_planned_ws = 0
     d_agg = first
     while d_agg <= last:
         bucket = counts.get(d_agg, {})
@@ -1304,6 +1391,9 @@ def terminkalender():
         month_total_done_others += bucket.get('done_others', 0)
         month_total_planned += bucket.get('planned', 0)
         month_total_assigned += bucket.get('assigned', 0)
+        month_total_ws_me += bucket.get('ws_me', 0)
+        month_total_ws_others += bucket.get('ws_others', 0)
+        month_total_planned_ws += bucket.get('planned_ws', 0)
         d_agg += timedelta(days=1)
 
     return render_template(
@@ -1325,18 +1415,133 @@ def terminkalender():
         today=today,
         dash_kw=dash_kw,
         proj_query=proj_raw,
-        can_plan=current_user.has_permission('planned_coachings'),
+        can_plan=can_plan_c,
+        can_plan_workshop=can_plan_w,
         can_add_coaching=current_user.has_permission('add_coaching'),
         add_coaching_project_id=add_coaching_project_id,
-        has_perm_planned=current_user.has_permission('planned_coachings'),
+        has_perm_planned=can_plan_c,
         has_perm_assigned=current_user.has_permission('view_assigned_coachings'),
         has_perm_dash=current_user.has_permission('view_coaching_dashboard'),
+        has_perm_workshop=current_user.has_permission('view_workshop_dashboard'),
         calendar_dash_project=dash_kw.get('project'),
         month_total_done_me=month_total_done_me,
         month_total_done_others=month_total_done_others,
         month_total_planned=month_total_planned,
         month_total_assigned=month_total_assigned,
+        month_total_ws_me=month_total_ws_me,
+        month_total_ws_others=month_total_ws_others,
+        month_total_planned_ws=month_total_planned_ws,
         cal_show_own_coachings=cal_show_own_coachings,
+        cal_show_own_workshops=cal_show_own_workshops,
+        config=current_app.config,
+    )
+
+
+@bp.route('/terminkalender/plan-menu')
+@login_required
+def terminkalender_plan_menu():
+    today = today_athens_date()
+    day_str = (request.args.get('day') or '').strip()
+    try:
+        plan_date = datetime.strptime(day_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash('Ungültiges Datum.', 'warning')
+        return redirect(url_for('main.terminkalender'))
+
+    if plan_date < today:
+        flash('Ein Termin kann nicht in der Vergangenheit liegen.', 'warning')
+        return redirect(url_for('main.terminkalender'))
+
+    can_plan_c = current_user.has_permission('planned_coachings')
+    can_plan_w = current_user.has_permission('add_workshop')
+    add_coaching_project_id = None
+    if current_user.has_permission('add_coaching'):
+        add_coaching_project_id = _resolve_coaching_workshop_project_id()
+    acc = get_accessible_project_ids()
+    proj_raw = (request.args.get('project') or '').strip()
+    if not add_coaching_project_id and proj_raw.isdigit():
+        add_coaching_project_id = int(proj_raw) if (acc is None or int(proj_raw) in acc) else None
+
+    can_capture_today = (
+        plan_date == today
+        and current_user.has_permission('add_coaching')
+        and bool(add_coaching_project_id)
+    )
+
+    if not (can_plan_c or can_plan_w or can_capture_today):
+        flash('Keine passende Berechtigung für diese Aktion.', 'danger')
+        return redirect(url_for('main.terminkalender'))
+
+    return render_template(
+        'main/terminkalender_plan_menu.html',
+        title='Termin anlegen',
+        plan_date=plan_date,
+        can_plan_coaching=can_plan_c,
+        can_plan_workshop=can_plan_w,
+        can_capture_today=can_capture_today,
+        add_coaching_project_id=add_coaching_project_id,
+        config=current_app.config,
+    )
+
+
+@bp.route('/terminkalender/plan-workshop', methods=['GET', 'POST'])
+@login_required
+@permission_required('add_workshop')
+def terminkalender_plan_workshop():
+    today = today_athens_date()
+    plan_date_str = (request.args.get('day') if request.method == 'GET' else request.form.get('plan_date')) or ''
+    try:
+        plan_date = datetime.strptime(plan_date_str.strip(), '%Y-%m-%d').date()
+    except ValueError:
+        flash('Ungültiges Datum.', 'warning')
+        return redirect(url_for('main.terminkalender'))
+
+    if plan_date < today:
+        flash('Ein Termin kann nicht in der Vergangenheit liegen.', 'warning')
+        return redirect(url_for('main.terminkalender'))
+
+    accessible = get_accessible_project_ids()
+    if request.method == 'POST':
+        project_id = request.form.get('project_id', type=int)
+    else:
+        project_id = _resolve_coaching_workshop_project_id()
+
+    if accessible is not None:
+        if not project_id or project_id not in accessible:
+            project_id = get_visible_project_id()
+        if not project_id or project_id not in accessible:
+            flash('Bitte ein gültiges Projekt wählen.', 'danger')
+            return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+    elif not project_id:
+        flash('Kein Projekt ausgewählt.', 'danger')
+        return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+
+    if request.method == 'POST':
+        title = (request.form.get('title') or '').strip()
+        if not title:
+            flash('Bitte einen Workshop-Titel angeben.', 'warning')
+            return redirect(url_for('main.terminkalender_plan_workshop', day=plan_date.isoformat()))
+        notes = (request.form.get('notes') or '').strip()
+        db.session.add(
+            PlannedWorkshop(
+                coach_id=current_user.id,
+                project_id=project_id,
+                title=title,
+                planned_for_date=plan_date,
+                notes=notes or None,
+                status='open',
+            )
+        )
+        db.session.commit()
+        flash('Geplanter Workshop wurde angelegt.', 'success')
+        return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+
+    return render_template(
+        'main/terminkalender_plan_workshop.html',
+        title='Geplanten Workshop anlegen',
+        plan_date=plan_date,
+        project_id=project_id,
+        today=today,
         config=current_app.config,
     )
 
@@ -2048,11 +2253,23 @@ def workshop_dashboard():
     search_arg = request.args.get('search', default="", type=str).strip()
     project_filter = get_visible_project_id()
 
+    cal_date_str = (request.args.get('cal_date') or '').strip()
+    cal_date_active = None
+    if cal_date_str:
+        try:
+            cal_date_active = datetime.strptime(cal_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            cal_date_active = None
+            cal_date_str = ''
+
     # Build reusable filter conditions
     ws_filters = []
     if project_filter:
         ws_filters.append(Workshop.project_id == project_filter)
-    start_date, end_date = calculate_date_range(period_arg)
+    if cal_date_active:
+        start_date, end_date = athens_calendar_day_utc_naive_bounds(cal_date_active)
+    else:
+        start_date, end_date = calculate_date_range(period_arg)
     if start_date:
         ws_filters.append(Workshop.workshop_date >= start_date)
     if end_date:
@@ -2093,6 +2310,10 @@ def workshop_dashboard():
     for m in range(now.month, 0, -1):
         month_options.append({'value': f"{current_year}-{m:02d}", 'text': f"{get_month_name_german(m)} {current_year}"})
 
+    cal_day_label = ''
+    if cal_date_active:
+        cal_day_label = cal_date_active.strftime('%d.%m.%Y')
+
     return render_template('main/workshop_dashboard.html',
                            title='Workshop Dashboard',
                            workshops_paginated=workshops_paginated,
@@ -2102,6 +2323,8 @@ def workshop_dashboard():
                            current_search=search_arg,
                            current_period_filter=period_arg,
                            month_options=month_options,
+                           cal_date_filter=cal_date_str if cal_date_active else None,
+                           cal_day_label=cal_day_label,
                            config=current_app.config,
                            db=db,
                            workshop_participants=workshop_participants)

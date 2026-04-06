@@ -90,6 +90,9 @@
 .term-cal-stat.done-others { background: #5c7cfa; }
 .term-cal-stat.planned { background: #20c997; }
 .term-cal-stat.assigned { background: #28a745; }
+.term-cal-stat.ws-done { background: #fd7e14; }
+.term-cal-stat.ws-others { background: #ff922b; }
+.term-cal-stat.planned-ws { background: #6f42c1; }
 .term-cal-stat.muted { opacity: 0.45; pointer-events: none; }
 .term-cal-add {
     display: inline-flex;
@@ -175,7 +178,7 @@
     <div class="terminkal-header">
         <div>
             <h1 class="terminkal-title"><i class="fas fa-calendar-alt"></i> {{ title }}</h1>
-            <p class="text-muted small mb-0">Ihre Termine, Coachings &amp; Zuweisungen</p>
+            <p class="text-muted small mb-0">Termine · Coachings · Workshops · Zuweisungen</p>
         </div>
         <div class="terminkal-nav-month d-flex align-items-center flex-wrap" style="gap: 8px;">
             <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('main.terminkalender', year=prev_y, month=prev_m) }}" title="Vorheriger Monat">&laquo;</a>
@@ -196,6 +199,24 @@
         <span class="terminkal-legend-item" title="{% if cal_show_own_coachings %}Coachings anderer Coaches{% else %}Coachings{% endif %} in Ihrem Dashboard-Sichtbereich">
             <span class="term-cal-stat done-others" aria-label="{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %} im Monat: {{ month_total_done_others }}">{{ month_total_done_others }}</span>
             <span class="terminkal-legend-label">{% if cal_show_own_coachings %}Andere Coaches{% else %}Coachings{% endif %}</span>
+        </span>
+        {% endif %}
+        {% if has_perm_workshop %}
+        {% if cal_show_own_workshops %}
+        <span class="terminkal-legend-item" title="Eigene Workshops in diesem Kalendermonat">
+            <span class="term-cal-stat ws-done" aria-label="Eigene Workshops im Monat: {{ month_total_ws_me }}">{{ month_total_ws_me }}</span>
+            <span class="terminkal-legend-label">Eigene Workshops</span>
+        </span>
+        {% endif %}
+        <span class="terminkal-legend-item" title="{% if cal_show_own_workshops %}Workshops anderer Coaches{% else %}Workshops{% endif %} in Ihrem Sichtbereich">
+            <span class="term-cal-stat ws-others" aria-label="{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %} im Monat: {{ month_total_ws_others }}">{{ month_total_ws_others }}</span>
+            <span class="terminkal-legend-label">{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %}</span>
+        </span>
+        {% endif %}
+        {% if can_plan_workshop %}
+        <span class="terminkal-legend-item" title="Offen geplante Workshops in diesem Monat">
+            <span class="term-cal-stat planned-ws" aria-label="Geplant Workshop im Monat: {{ month_total_planned_ws }}">{{ month_total_planned_ws }}</span>
+            <span class="terminkal-legend-label">Gepl. Workshop</span>
         </span>
         {% endif %}
         {% if has_perm_planned %}
@@ -241,13 +262,22 @@
                             {% if has_perm_assigned and cell.assigned > 0 %}
                             <a class="term-cal-stat assigned" title="Zugewiesene Coachings" href="{{ url_for('main.assigned_coachings') }}">{{ cell.assigned }}</a>
                             {% endif %}
+                            {% if has_perm_workshop and cal_show_own_workshops and cell.ws_me > 0 %}
+                            <a class="term-cal-stat ws-done" title="Eigene Workshops — Dashboard (Tag)"
+                               href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_me }}</a>
+                            {% endif %}
+                            {% if has_perm_workshop and cell.ws_others > 0 %}
+                            <a class="term-cal-stat ws-others" title="{% if cal_show_own_workshops %}Workshops anderer{% else %}Workshops{% endif %} — Dashboard (Tag)"
+                               href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_others }}</a>
+                            {% endif %}
+                            {% if can_plan_workshop and cell.planned_ws > 0 %}
+                            <a class="term-cal-stat planned-ws" title="Geplante Workshops" href="{{ url_for('main.workshop_dashboard') }}">{{ cell.planned_ws }}</a>
+                            {% endif %}
                             {% if cell.show_add %}
-                                {% if cell.is_today and can_add_coaching and add_coaching_project_id %}
+                                {% if cell.is_today and can_add_coaching and add_coaching_project_id and not can_plan and not can_plan_workshop %}
                                 <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
-                                {% elif cell.is_today and can_plan %}
-                                <a class="term-cal-add" title="Geplant / Termin heute" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
-                                {% elif cell.is_future and can_plan %}
-                                <a class="term-cal-add" title="Geplant anlegen" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
+                                {% else %}
+                                <a class="term-cal-add" title="Termin anlegen" href="{{ url_for('main.terminkalender_plan_menu', day=cell.date.isoformat()) }}">+</a>
                                 {% endif %}
                             {% endif %}
                         </div>
@@ -288,13 +318,22 @@
                     {% if has_perm_assigned and cell.assigned > 0 %}
                     <a class="term-cal-stat assigned" title="Zuweisungen" href="{{ url_for('main.assigned_coachings') }}">{{ cell.assigned }}</a>
                     {% endif %}
+                    {% if has_perm_workshop and cal_show_own_workshops and cell.ws_me > 0 %}
+                    <a class="term-cal-stat ws-done" title="Eigene Workshops"
+                       href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_me }}</a>
+                    {% endif %}
+                    {% if has_perm_workshop and cell.ws_others > 0 %}
+                    <a class="term-cal-stat ws-others" title="{% if cal_show_own_workshops %}Andere Workshops{% else %}Workshops{% endif %}"
+                       href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_others }}</a>
+                    {% endif %}
+                    {% if can_plan_workshop and cell.planned_ws > 0 %}
+                    <a class="term-cal-stat planned-ws" title="Gepl. Workshop" href="{{ url_for('main.workshop_dashboard') }}">{{ cell.planned_ws }}</a>
+                    {% endif %}
                     {% if cell.show_add %}
-                        {% if cell.is_today and can_add_coaching and add_coaching_project_id %}
+                        {% if cell.is_today and can_add_coaching and add_coaching_project_id and not can_plan and not can_plan_workshop %}
                         <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
-                        {% elif cell.is_today and can_plan %}
-                        <a class="term-cal-add" title="Geplant" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
-                        {% elif cell.is_future and can_plan %}
-                        <a class="term-cal-add" title="Geplant anlegen" href="{{ url_for('main.terminkalender_plan', day=cell.date.isoformat()) }}">+</a>
+                        {% else %}
+                        <a class="term-cal-add" title="Termin anlegen" href="{{ url_for('main.terminkalender_plan_menu', day=cell.date.isoformat()) }}">+</a>
                         {% endif %}
                     {% endif %}
                 </div>

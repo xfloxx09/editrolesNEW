@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 480px;">
+    <h2 class="mb-3" style="color:#e20074;">Termin wählen</h2>
+    <p class="text-muted mb-4">Datum: <strong>{{ plan_date.strftime('%d.%m.%Y') }}</strong></p>
+
+    <div class="list-group">
+        {% if can_capture_today %}
+        <a class="list-group-item list-group-item-action list-group-item-light d-flex align-items-center py-3"
+           href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">
+            <i class="fas fa-user-check fa-lg text-primary mr-3"></i>
+            <div>
+                <strong>Coaching erfassen</strong>
+                <div class="small text-muted">Einzelcoaching für heute eintragen</div>
+            </div>
+        </a>
+        {% endif %}
+        {% if can_plan_coaching %}
+        <a class="list-group-item list-group-item-action list-group-item-light d-flex align-items-center py-3"
+           href="{{ url_for('main.terminkalender_plan', day=plan_date.isoformat()) }}">
+            <i class="fas fa-calendar-alt fa-lg mr-3" style="color:#20c997;"></i>
+            <div>
+                <strong>Geplantes Coaching</strong>
+                <div class="small text-muted">Termin mit Teammitglied planen</div>
+            </div>
+        </a>
+        {% endif %}
+        {% if can_plan_workshop %}
+        <a class="list-group-item list-group-item-action list-group-item-light d-flex align-items-center py-3"
+           href="{{ url_for('main.terminkalender_plan_workshop', day=plan_date.isoformat()) }}">
+            <i class="fas fa-users fa-lg mr-3" style="color:#fd7e14;"></i>
+            <div>
+                <strong>Geplanten Workshop</strong>
+                <div class="small text-muted">Workshop-Termin vormerken</div>
+            </div>
+        </a>
+        {% endif %}
+    </div>
+
+    <a href="{{ url_for('main.terminkalender', year=plan_date.year, month=plan_date.month) }}" class="btn btn-outline-secondary btn-block mt-4">Abbrechen</a>
+</div>
+{% endblock %}

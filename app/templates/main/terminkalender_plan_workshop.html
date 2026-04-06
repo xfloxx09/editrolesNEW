@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 560px;">
+    <h2 class="mb-3" style="color:#fd7e14;">Geplanter Workshop</h2>
+    <p class="text-muted">Termin: <strong>{{ plan_date.strftime('%d.%m.%Y') }}</strong></p>
+
+    <form method="post" class="card card-body bg-dark border-secondary text-light">
+        <input type="hidden" name="plan_date" value="{{ plan_date.isoformat() }}">
+        <input type="hidden" name="project_id" value="{{ project_id }}">
+
+        <div class="form-group">
+            <label for="title">Thema / Titel</label>
+            <input type="text" name="title" id="title" class="form-control" required maxlength="200" placeholder="z. B. Verkaufstraining">
+        </div>
+        <div class="form-group">
+            <label for="notes">Notizen</label>
+            <textarea name="notes" id="notes" class="form-control" rows="2" placeholder="Optional"></textarea>
+        </div>
+        <button type="submit" class="btn telekom-button btn-block">Speichern</button>
+        <a href="{{ url_for('main.terminkalender', year=plan_date.year, month=plan_date.month) }}" class="btn btn-outline-secondary btn-block mt-2">Abbrechen</a>
+    </form>
+</div>
+{% endblock %}

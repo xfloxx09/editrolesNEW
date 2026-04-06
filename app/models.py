@@ -344,6 +344,26 @@ class PlannedCoaching(db.Model):
     fulfilled_coaching = db.relationship('Coaching', foreign_keys=[fulfilled_coaching_id])
 
 
+class PlannedWorkshop(db.Model):
+    """Geplanter Workshop-Termin bis zur Erfassung im Workshop-Formular."""
+
+    __tablename__ = 'planned_workshops'
+
+    id = db.Column(db.Integer, primary_key=True)
+    coach_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
+    title = db.Column(db.String(200), nullable=False)
+    planned_for_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(20), nullable=False, default='open')
+    fulfilled_workshop_id = db.Column(db.Integer, db.ForeignKey('workshops.id'), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    coach = db.relationship('User', foreign_keys=[coach_id])
+    project = db.relationship('Project')
+    fulfilled_workshop = db.relationship('Workshop', foreign_keys=[fulfilled_workshop_id])
+
+
 class CoachingReview(db.Model):
     """Employee review of the coach for a specific Einzel-Coaching (one per coaching)."""
     __tablename__ = 'coaching_reviews'
