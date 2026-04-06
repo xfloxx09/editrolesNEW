@@ -133,6 +133,17 @@ def _maybe_fulfill_planned_coaching(coaching, fulfill_planned_id, verabredung_er
         pc.verabredung_erfuellt = None
 
 
+def _coaching_has_fulfilled_planned_row(coaching_id):
+    """True if this coaching closed a planned slot (Bericht ist archiviert / nicht mehr editierbar)."""
+    return (
+        PlannedCoaching.query.filter(
+            PlannedCoaching.fulfilled_coaching_id == coaching_id,
+            PlannedCoaching.status == 'fulfilled',
+        ).first()
+        is not None
+    )
+
+
 def _user_may_edit_planned_coaching(pc):
     """Coach owns the row, still open, and project is in scope (same rules as list)."""
     if pc is None or pc.coach_id != current_user.id or pc.status != 'open':
@@ -1481,6 +1492,55 @@ def add_coaching():
     )
 
 
+# --- Read-only Bericht (abgeschlossenes geplantes Coaching) ---
+@bp.route('/coaching-bericht/<int:coaching_id>')
+@login_required
+@permission_required('edit_coaching')
+def view_fulfilled_plan_bericht(coaching_id):
+    coaching = Coaching.query.get_or_404(coaching_id)
+    if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
+        flash('Sie haben keine Berechtigung, diesen Bericht einzusehen.', 'danger')
+        return redirect(url_for('main.coaching_dashboard'))
+    if not _coaching_has_fulfilled_planned_row(coaching_id):
+        flash('Dieses Coaching ist kein abgeschlossenes geplantes Coaching.', 'warning')
+        return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
+
+    cut = (
+        sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
+        if current_user.role_name == ROLE_TEAMLEITER else []
+    )
+    form = CoachingForm(obj=coaching, current_user_role=current_user.role_name, current_user_team_ids=cut)
+    form.update_team_member_choices(
+        exclude_archiv=True,
+        project_id=coaching.project_id,
+        include_member_ids=[coaching.team_member_id],
+    )
+    form.apply_bogen(coaching.project_id, coaching=coaching)
+    bogen_layout = bogen_layout_for_project(coaching.project_id)
+    leitfaden_items = leitfaden_items_for_coaching_edit(coaching)
+    selected_leitfaden_values = {}
+    if leitfaden_items:
+        try:
+            selected_leitfaden_values = {response.item_id: response.value for response in coaching.leitfaden_responses}
+        except SQLAlchemyError:
+            db.session.rollback()
+            selected_leitfaden_values = {}
+
+    return render_template(
+        'main/add_coaching.html',
+        title='Coaching-Bericht',
+        form=form,
+        is_edit_mode=True,
+        coaching_readonly=True,
+        coaching=coaching,
+        leitfaden_items=leitfaden_items,
+        selected_leitfaden_values=selected_leitfaden_values,
+        bogen_layout=bogen_layout,
+        config=current_app.config,
+        initial_fulfill_planned_id=None,
+    )
+
+
 # --- Edit Coaching ---
 @bp.route('/edit-coaching/<int:coaching_id>', methods=['GET', 'POST'])
 @login_required
@@ -1490,6 +1550,14 @@ def edit_coaching(coaching_id):
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Sie haben keine Berechtigung, dieses Coaching zu bearbeiten.', 'danger')
         return redirect(url_for('main.coaching_dashboard'))
+
+    if _coaching_has_fulfilled_planned_row(coaching_id):
+        if request.method == 'POST':
+            flash(
+                'Abgeschlossene geplante Coachings sind nur als Bericht einsehbar und können nicht geändert werden.',
+                'info',
+            )
+        return redirect(url_for('main.view_fulfilled_plan_bericht', coaching_id=coaching_id))
 
     cut = (
         sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
@@ -1551,6 +1619,7 @@ def edit_coaching(coaching_id):
         title='Coaching bearbeiten',
         form=form,
         is_edit_mode=True,
+        coaching_readonly=False,
         coaching=coaching,
         leitfaden_items=leitfaden_items,
         selected_leitfaden_values=selected_leitfaden_values,
@@ -1569,6 +1638,12 @@ def delete_coaching(coaching_id):
     if current_user.role_name not in [ROLE_ADMIN, ROLE_BETRIEBSLEITER] and coaching.coach_id != current_user.id:
         flash('Keine Berechtigung.', 'danger')
         return redirect(url_for('main.coaching_dashboard'))
+    if _coaching_has_fulfilled_planned_row(coaching_id):
+        flash(
+            'Dieses Coaching gehört zu einem abgeschlossenen geplanten Coaching und kann nicht gelöscht werden.',
+            'warning',
+        )
+        return redirect(url_for('main.view_fulfilled_plan_bericht', coaching_id=coaching_id))
     assigned_ref = coaching.assigned_coaching_id
     db.session.delete(coaching)
     db.session.flush()

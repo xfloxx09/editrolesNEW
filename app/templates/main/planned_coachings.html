@@ -92,8 +92,8 @@
                 </div>
                 <div>
                     {% if it.fulfilled_coaching_id %}
-                    <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.edit_coaching', coaching_id=it.fulfilled_coaching_id) }}">
-                        <i class="fas fa-file-alt"></i> Bericht / Bearbeiten
+                    <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.view_fulfilled_plan_bericht', coaching_id=it.fulfilled_coaching_id) }}">
+                        <i class="fas fa-file-alt"></i> Bericht anzeigen
                     </a>
                     {% endif %}
                 </div>
