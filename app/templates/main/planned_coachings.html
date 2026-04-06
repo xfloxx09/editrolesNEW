@@ -1,214 +1,303 @@
 {% extends "base.html" %}
 
+{% block head_extra %}
+<style>
+.planned-page-tabs.card {
+    background: #2b2b2b;
+    border: 1px solid #444;
+}
+.planned-page-tabs .nav-tabs {
+    border-bottom-color: #555;
+    background: #262626;
+    padding: 0.35rem 0.75rem 0 0.75rem;
+    border-radius: 8px 8px 0 0;
+}
+.planned-page-tabs .nav-link {
+    color: #ccc;
+    border: 1px solid transparent;
+    margin-bottom: -1px;
+}
+.planned-page-tabs .nav-link:hover {
+    color: #fff;
+    border-color: #555 #555 transparent;
+    background: #333;
+}
+.planned-page-tabs .nav-link.active {
+    color: #fff;
+    background: #2b2b2b;
+    border-color: #555 #555 #2b2b2b;
+    font-weight: 600;
+}
+.planned-page-tabs .tab-content {
+    background: #2b2b2b;
+    border: 1px solid #444;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 1.25rem 1.25rem 1.5rem;
+}
+.planned-page-tabs .tab-content h3 {
+    color: #e0e0e0;
+}
+</style>
+{% endblock %}
+
 {% block content %}
+{% set n_open = (items|length if has_perm('planned_coachings') else 0) + (workshop_items|length if has_perm('add_workshop') else 0) %}
+{% set n_done = (fulfilled_plans|length if has_perm('planned_coachings') else 0) + (fulfilled_workshop_plans|length if has_perm('add_workshop') else 0) %}
 <div class="container mt-4">
     <h2 class="mb-2"><i class="fas fa-calendar-alt text-info"></i> Geplante Coachings / Workshops</h2>
     <p class="text-muted">Offene Termine aus dem Kalender („+“ planen) und Folgetermine aus dem Coaching-Bogen. Workshops vormerken Sie im Terminkalender; hier sehen Sie die Liste und können sie als echten Workshop erfassen.</p>
 
-    {% if has_perm('planned_coachings') %}
-    <h3 class="mt-4 mb-3 h5 text-light"><i class="fas fa-user-check" style="color:#20c997;"></i> Geplante Coachings (offen)</h3>
-    {% if not items %}
-    <div class="alert alert-secondary mb-4">Sie haben keine offenen geplanten Coachings.</div>
-    {% else %}
-    <div class="list-group mb-4">
-        {% for it in items %}
-        {% set can_start = it.planned_for_date <= today_d %}
-        <div class="list-group-item flex-column align-items-start" style="background: #2b2b2b; border-color: #444; color: #eee;">
-            <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
-                <div class="mb-2 mb-md-0">
-                    <strong>{{ it.team_member.name }}</strong>
-                    {% if it.team and it.team.name %}
-                    <span class="text-muted">({{ it.team.name }})</span>
-                    {% endif %}
-                    <span class="badge badge-info ml-2">{{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
-                    {% if it.project %}
-                    <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
-                    {% endif %}
-                </div>
-                <div>
-                    {% if can_start %}
-                    <a class="btn btn-sm telekom-button" style="background-color: #e20074; color: white; border-radius: 16px;"
-                       href="{{ url_for('main.add_coaching', project=it.project_id, planned_id=it.id) }}">
-                        <i class="fas fa-chalkboard-teacher"></i> Jetzt coachen
-                    </a>
-                    {% else %}
-                    <span class="badge badge-warning text-dark"><i class="fas fa-pause"></i> Ab {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
-                    {% endif %}
-                </div>
-            </div>
-            {% if it.has_verabredung and it.verabredung_text %}
-            <p class="mb-1 mt-2 small"><strong>Vereinbarung:</strong> {{ it.verabredung_text[:200] }}{% if it.verabredung_text|length > 200 %}…{% endif %}</p>
-            {% elif it.has_verabredung %}
-            <p class="mb-1 mt-2 small text-muted"><strong>Vereinbarung</strong> (ohne Text)</p>
-            {% endif %}
-            {% if it.notes %}
-            <div class="mt-2">
-                <a class="small text-info collapsed" data-toggle="collapse" href="#plan-notes-{{ it.id }}" role="button" aria-expanded="false" aria-controls="plan-notes-{{ it.id }}">
-                    Notizen anzeigen
+    <div class="card planned-page-tabs mb-4 border-0 shadow-none">
+        <ul class="nav nav-tabs nav-justified" id="plannedMainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <a class="nav-link active" id="tab-offen-link" data-toggle="tab" href="#tab-offen" role="tab" aria-controls="tab-offen" aria-selected="true">
+                    Offen {% if n_open %}<span class="badge badge-info ml-1">{{ n_open }}</span>{% endif %}
                 </a>
-                <div class="collapse mt-1" id="plan-notes-{{ it.id }}">
-                    <div class="small border-left border-info pl-2" style="white-space: pre-wrap;">{{ it.notes }}</div>
-                </div>
-            </div>
-            {% endif %}
-            <div class="mt-3 pt-3 border-top border-secondary w-100">
-                <p class="small text-muted mb-2 mb-md-1">Termin anpassen oder Planung aufheben</p>
-                <div class="d-flex flex-wrap align-items-center">
-                    <form method="post" action="{{ url_for('main.planned_coaching_update_date', planned_id=it.id) }}" class="form-inline d-flex flex-wrap align-items-center mr-md-3 mb-2 mb-md-0">
-                        <label class="sr-only" for="plan-date-{{ it.id }}">Geplanter Tag</label>
-                        <input type="date" class="form-control form-control-sm bg-dark text-light border-secondary" id="plan-date-{{ it.id }}" name="planned_for_date" value="{{ it.planned_for_date.strftime('%Y-%m-%d') }}" required>
-                        <button type="submit" class="btn btn-sm btn-outline-info ml-2">Datum speichern</button>
-                    </form>
-                    <form method="post" action="{{ url_for('main.planned_coaching_delete', planned_id=it.id) }}" class="mb-0" onsubmit="return confirm('Dieses geplante Coaching wirklich entfernen?');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt"></i> Entfernen</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endif %}
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link" id="tab-geschlossen-link" data-toggle="tab" href="#tab-geschlossen" role="tab" aria-controls="tab-geschlossen" aria-selected="false">
+                    Abgeschlossen {% if n_done %}<span class="badge badge-secondary ml-1">{{ n_done }}</span>{% endif %}
+                </a>
+            </li>
+        </ul>
+        <div class="tab-content" id="plannedMainTabContent">
+            <div class="tab-pane fade show active" id="tab-offen" role="tabpanel" aria-labelledby="tab-offen-link">
 
-    {% if has_perm('add_workshop') %}
-    <h3 class="mt-4 mb-3 h5 text-light"><i class="fas fa-users" style="color:#6f42c1;"></i> Geplante Workshops (offen)</h3>
-    {% if not workshop_items %}
-    <div class="alert alert-secondary mb-4">Sie haben keine offenen geplanten Workshops. Im <a href="{{ url_for('main.terminkalender') }}" class="alert-link">Terminkalender</a> auf einen Tag tippen und „Geplanten Workshop“ wählen.</div>
-    {% else %}
-    <div class="list-group mb-4">
-        {% for it in workshop_items %}
-        {% set can_start = it.planned_for_date <= today_d %}
-        <div class="list-group-item flex-column align-items-start" style="background: #2b2b2b; border-color: #444; color: #eee;">
-            <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
-                <div class="mb-2 mb-md-0">
-                    <strong>{{ it.title }}</strong>
-                    <span class="badge ml-2" style="background:#6f42c1;color:#fff;">{{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
-                    {% if it.project %}
-                    <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
-                    {% endif %}
-                </div>
-                <div>
-                    {% if can_start %}
-                    <a class="btn btn-sm telekom-button" style="background-color: #6f42c1; color: white; border-radius: 16px;"
-                       href="{% if it.project_id %}{{ url_for('main.add_workshop', project=it.project_id, planned_workshop=it.id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=it.id) }}{% endif %}">
-                        <i class="fas fa-users"></i> Workshop erfassen
-                    </a>
-                    {% else %}
-                    <span class="badge badge-warning text-dark"><i class="fas fa-pause"></i> Ab {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
-                    {% endif %}
-                </div>
-            </div>
-            {% if it.notes %}
-            <p class="mb-0 mt-2 small text-muted" style="white-space: pre-wrap;">{{ it.notes }}</p>
-            {% endif %}
-            <div class="mt-3 pt-3 border-top border-secondary w-100">
-                <p class="small text-muted mb-2 mb-md-1">Termin anpassen oder Vormerkung löschen</p>
-                <div class="d-flex flex-wrap align-items-center">
-                    <form method="post" action="{{ url_for('main.planned_workshop_update_date', planned_w_id=it.id) }}" class="form-inline d-flex flex-wrap align-items-center mr-md-3 mb-2 mb-md-0">
-                        <label class="sr-only" for="plan-w-date-{{ it.id }}">Geplanter Tag</label>
-                        <input type="date" class="form-control form-control-sm bg-dark text-light border-secondary" id="plan-w-date-{{ it.id }}" name="planned_for_date" value="{{ it.planned_for_date.strftime('%Y-%m-%d') }}" required>
-                        <button type="submit" class="btn btn-sm btn-outline-info ml-2">Datum speichern</button>
-                    </form>
-                    <form method="post" action="{{ url_for('main.planned_workshop_delete', planned_w_id=it.id) }}" class="mb-0" onsubmit="return confirm('Diese Workshop-Planung wirklich entfernen?');">
-                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt"></i> Entfernen</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endif %}
-
-    {% if has_perm('planned_coachings') %}
-    <h3 class="mt-5 mb-3"><i class="fas fa-check-double text-success"></i> Abgeschlossene geplante Coachings</h3>
-    <p class="text-muted small">Erfüllte Termine mit Vereinbarung und Link zum gespeicherten Coaching-Bericht.</p>
-
-    {% if not fulfilled_plans %}
-    <div class="alert alert-secondary mb-4">Noch keine erfüllten geplanten Coachings.</div>
-    {% else %}
-    <div class="list-group mb-4">
-        {% for it in fulfilled_plans %}
-        <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
-            <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
-                <div class="mb-2 mb-md-0">
-                    <strong>{{ it.team_member.name }}</strong>
-                    {% if it.team and it.team.name %}
-                    <span class="text-muted">({{ it.team.name }})</span>
-                    {% endif %}
-                    <span class="badge badge-secondary ml-2">geplant: {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
-                    {% if it.fulfilled_coaching and it.fulfilled_coaching.coaching_date %}
-                    <span class="badge badge-light text-dark ml-1">Coaching: {{ it.fulfilled_coaching.coaching_date.strftime('%d.%m.%Y %H:%M') }}</span>
-                    {% endif %}
-                    {% if it.project %}
-                    <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
-                    {% endif %}
-                </div>
-                <div>
-                    {% if it.fulfilled_coaching_id %}
-                    <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.view_fulfilled_plan_bericht', coaching_id=it.fulfilled_coaching_id) }}">
-                        <i class="fas fa-file-alt"></i> Bericht anzeigen
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-            {% if it.has_verabredung %}
-            <p class="mb-1 mt-2 small">
-                <strong>Vereinbarung:</strong>
-                {% if it.verabredung_text %}
-                {{ it.verabredung_text[:400] }}{% if it.verabredung_text|length > 400 %}…{% endif %}
+                {% if has_perm('planned_coachings') %}
+                <h3 class="mb-3 h5"><i class="fas fa-user-check" style="color:#20c997;"></i> Geplante Coachings (offen)</h3>
+                {% if not items %}
+                <div class="alert alert-secondary mb-4">Sie haben keine offenen geplanten Coachings.</div>
                 {% else %}
-                <span class="text-muted">(ohne Text)</span>
+                <div class="list-group mb-4">
+                    {% for it in items %}
+                    {% set can_start = it.planned_for_date <= today_d %}
+                    <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
+                        <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
+                            <div class="mb-2 mb-md-0">
+                                <strong>{{ it.team_member.name }}</strong>
+                                {% if it.team and it.team.name %}
+                                <span class="text-muted">({{ it.team.name }})</span>
+                                {% endif %}
+                                <span class="badge badge-info ml-2">{{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                                {% if it.project %}
+                                <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if can_start %}
+                                <a class="btn btn-sm telekom-button" style="background-color: #e20074; color: white; border-radius: 16px;"
+                                   href="{{ url_for('main.add_coaching', project=it.project_id, planned_id=it.id) }}">
+                                    <i class="fas fa-chalkboard-teacher"></i> Jetzt coachen
+                                </a>
+                                {% else %}
+                                <span class="badge badge-warning text-dark"><i class="fas fa-pause"></i> Ab {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if it.has_verabredung and it.verabredung_text %}
+                        <p class="mb-1 mt-2 small"><strong>Vereinbarung:</strong> {{ it.verabredung_text[:200] }}{% if it.verabredung_text|length > 200 %}…{% endif %}</p>
+                        {% elif it.has_verabredung %}
+                        <p class="mb-1 mt-2 small text-muted"><strong>Vereinbarung</strong> (ohne Text)</p>
+                        {% endif %}
+                        {% if it.notes %}
+                        <div class="mt-2">
+                            <a class="small text-info collapsed" data-toggle="collapse" href="#plan-notes-{{ it.id }}" role="button" aria-expanded="false" aria-controls="plan-notes-{{ it.id }}">
+                                Notizen anzeigen
+                            </a>
+                            <div class="collapse mt-1" id="plan-notes-{{ it.id }}">
+                                <div class="small border-left border-info pl-2" style="white-space: pre-wrap;">{{ it.notes }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="mt-3 pt-3 border-top border-secondary w-100">
+                            <p class="small text-muted mb-2 mb-md-1">Termin anpassen oder Planung aufheben</p>
+                            <div class="d-flex flex-wrap align-items-center">
+                                <form method="post" action="{{ url_for('main.planned_coaching_update_date', planned_id=it.id) }}" class="form-inline d-flex flex-wrap align-items-center mr-md-3 mb-2 mb-md-0">
+                                    <label class="sr-only" for="plan-date-{{ it.id }}">Geplanter Tag</label>
+                                    <input type="date" class="form-control form-control-sm bg-dark text-light border-secondary" id="plan-date-{{ it.id }}" name="planned_for_date" value="{{ it.planned_for_date.strftime('%Y-%m-%d') }}" required>
+                                    <button type="submit" class="btn btn-sm btn-outline-info ml-2">Datum speichern</button>
+                                </form>
+                                <form method="post" action="{{ url_for('main.planned_coaching_delete', planned_id=it.id) }}" class="mb-0" onsubmit="return confirm('Dieses geplante Coaching wirklich entfernen?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt"></i> Entfernen</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
                 {% endif %}
-            </p>
-            <p class="mb-0 small">
-                {% if it.verabredung_erfuellt is sameas true %}
-                <span class="badge badge-success">Vereinbarung erfüllt</span>
-                {% elif it.verabredung_erfuellt is sameas false %}
-                <span class="badge badge-warning text-dark">Vereinbarung nicht erfüllt</span>
-                {% else %}
-                <span class="badge badge-secondary">Vereinbarung — k. Angabe</span>
                 {% endif %}
-            </p>
-            {% endif %}
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endif %}
 
-    {% if has_perm('add_workshop') %}
-    <h3 class="mt-5 mb-3"><i class="fas fa-check-double text-success"></i> Abgeschlossene geplante Workshops</h3>
-    <p class="text-muted small">Nach dem Speichern im Workshop-Formular erscheint der Eintrag hier.</p>
-    {% if not fulfilled_workshop_plans %}
-    <div class="alert alert-secondary mb-4">Noch keine erfüllten Planungen.</div>
-    {% else %}
-    <div class="list-group mb-4">
-        {% for it in fulfilled_workshop_plans %}
-        <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
-            <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
-                <div class="mb-2 mb-md-0">
-                    <strong>{{ it.title }}</strong>
-                    <span class="badge badge-secondary ml-2">geplant: {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
-                    {% if it.fulfilled_workshop and it.fulfilled_workshop.workshop_date %}
-                    <span class="badge badge-light text-dark ml-1">Workshop: {{ it.fulfilled_workshop.workshop_date.strftime('%d.%m.%Y %H:%M') }}</span>
-                    {% endif %}
-                    {% if it.project %}
-                    <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
-                    {% endif %}
+                {% if has_perm('add_workshop') %}
+                <h3 class="mt-4 mb-3 h5"><i class="fas fa-users" style="color:#6f42c1;"></i> Geplante Workshops (offen)</h3>
+                {% if not workshop_items %}
+                <div class="alert alert-secondary mb-0">Sie haben keine offenen geplanten Workshops. Im <a href="{{ url_for('main.terminkalender') }}" class="alert-link">Terminkalender</a> auf einen Tag tippen und „Geplanten Workshop“ wählen.</div>
+                {% else %}
+                <div class="list-group mb-0">
+                    {% for it in workshop_items %}
+                    {% set can_start = it.planned_for_date <= today_d %}
+                    <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
+                        <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
+                            <div class="mb-2 mb-md-0">
+                                <strong>{{ it.title }}</strong>
+                                <span class="badge ml-2" style="background:#6f42c1;color:#fff;">{{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                                {% if it.project %}
+                                <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if can_start %}
+                                <a class="btn btn-sm telekom-button" style="background-color: #6f42c1; color: white; border-radius: 16px;"
+                                   href="{% if it.project_id %}{{ url_for('main.add_workshop', project=it.project_id, planned_workshop=it.id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=it.id) }}{% endif %}">
+                                    <i class="fas fa-users"></i> Workshop erfassen
+                                </a>
+                                {% else %}
+                                <span class="badge badge-warning text-dark"><i class="fas fa-pause"></i> Ab {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if it.notes %}
+                        <p class="mb-0 mt-2 small text-muted" style="white-space: pre-wrap;">{{ it.notes }}</p>
+                        {% endif %}
+                        <div class="mt-3 pt-3 border-top border-secondary w-100">
+                            <p class="small text-muted mb-2 mb-md-1">Termin anpassen oder Vormerkung löschen</p>
+                            <div class="d-flex flex-wrap align-items-center">
+                                <form method="post" action="{{ url_for('main.planned_workshop_update_date', planned_w_id=it.id) }}" class="form-inline d-flex flex-wrap align-items-center mr-md-3 mb-2 mb-md-0">
+                                    <label class="sr-only" for="plan-w-date-{{ it.id }}">Geplanter Tag</label>
+                                    <input type="date" class="form-control form-control-sm bg-dark text-light border-secondary" id="plan-w-date-{{ it.id }}" name="planned_for_date" value="{{ it.planned_for_date.strftime('%Y-%m-%d') }}" required>
+                                    <button type="submit" class="btn btn-sm btn-outline-info ml-2">Datum speichern</button>
+                                </form>
+                                <form method="post" action="{{ url_for('main.planned_workshop_delete', planned_w_id=it.id) }}" class="mb-0" onsubmit="return confirm('Diese Workshop-Planung wirklich entfernen?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash-alt"></i> Entfernen</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
-                <div>
-                    <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.workshop_dashboard') }}">
-                        <i class="fas fa-list"></i> Workshop-Übersicht
-                    </a>
+                {% endif %}
+                {% endif %}
+
+            </div>
+
+            <div class="tab-pane fade" id="tab-geschlossen" role="tabpanel" aria-labelledby="tab-geschlossen-link">
+
+                {% if has_perm('planned_coachings') %}
+                <h3 class="mb-2 h5"><i class="fas fa-check-double text-success"></i> Abgeschlossene geplante Coachings</h3>
+                <p class="text-muted small">Erfüllte Termine mit Vereinbarung und Link zum gespeicherten Coaching-Bericht.</p>
+
+                {% if not fulfilled_plans %}
+                <div class="alert alert-secondary mb-4">Noch keine erfüllten geplanten Coachings.</div>
+                {% else %}
+                <div class="list-group mb-4">
+                    {% for it in fulfilled_plans %}
+                    <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
+                        <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
+                            <div class="mb-2 mb-md-0">
+                                <strong>{{ it.team_member.name }}</strong>
+                                {% if it.team and it.team.name %}
+                                <span class="text-muted">({{ it.team.name }})</span>
+                                {% endif %}
+                                <span class="badge badge-secondary ml-2">geplant: {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                                {% if it.fulfilled_coaching and it.fulfilled_coaching.coaching_date %}
+                                <span class="badge badge-light text-dark ml-1">Coaching: {{ it.fulfilled_coaching.coaching_date.strftime('%d.%m.%Y %H:%M') }}</span>
+                                {% endif %}
+                                {% if it.project %}
+                                <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if it.fulfilled_coaching_id %}
+                                <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.view_fulfilled_plan_bericht', coaching_id=it.fulfilled_coaching_id) }}">
+                                    <i class="fas fa-file-alt"></i> Bericht anzeigen
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if it.has_verabredung %}
+                        <p class="mb-1 mt-2 small">
+                            <strong>Vereinbarung:</strong>
+                            {% if it.verabredung_text %}
+                            {{ it.verabredung_text[:400] }}{% if it.verabredung_text|length > 400 %}…{% endif %}
+                            {% else %}
+                            <span class="text-muted">(ohne Text)</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-0 small">
+                            {% if it.verabredung_erfuellt is sameas true %}
+                            <span class="badge badge-success">Vereinbarung erfüllt</span>
+                            {% elif it.verabredung_erfuellt is sameas false %}
+                            <span class="badge badge-warning text-dark">Vereinbarung nicht erfüllt</span>
+                            {% else %}
+                            <span class="badge badge-secondary">Vereinbarung — k. Angabe</span>
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
+                {% endif %}
+                {% endif %}
+
+                {% if has_perm('add_workshop') %}
+                <h3 class="mt-4 mb-2 h5"><i class="fas fa-check-double text-success"></i> Abgeschlossene geplante Workshops</h3>
+                <p class="text-muted small">Nach dem Speichern im Workshop-Formular erscheint der Eintrag hier.</p>
+                {% if not fulfilled_workshop_plans %}
+                <div class="alert alert-secondary mb-0">Noch keine erfüllten Planungen.</div>
+                {% else %}
+                <div class="list-group mb-0">
+                    {% for it in fulfilled_workshop_plans %}
+                    <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
+                        <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
+                            <div class="mb-2 mb-md-0">
+                                <strong>{{ it.title }}</strong>
+                                <span class="badge badge-secondary ml-2">geplant: {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                                {% if it.fulfilled_workshop and it.fulfilled_workshop.workshop_date %}
+                                <span class="badge badge-light text-dark ml-1">Workshop: {{ it.fulfilled_workshop.workshop_date.strftime('%d.%m.%Y %H:%M') }}</span>
+                                {% endif %}
+                                {% if it.project %}
+                                <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <a class="btn btn-sm btn-outline-info" href="{{ url_for('main.workshop_dashboard') }}">
+                                    <i class="fas fa-list"></i> Workshop-Übersicht
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+
             </div>
         </div>
-        {% endfor %}
     </div>
-    {% endif %}
-    {% endif %}
 
     <p class="mt-4"><a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Zurück</a></p>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function() {
+    function activateFromHash() {
+        var h = (window.location.hash || '').replace(/^#/, '');
+        if (h === 'geschlossen' || h === 'abgeschlossen') {
+            if (typeof jQuery !== 'undefined') {
+                jQuery('#tab-geschlossen-link').tab('show');
+            }
+        } else if (h === 'offen') {
+            if (typeof jQuery !== 'undefined') {
+                jQuery('#tab-offen-link').tab('show');
+            }
+        }
+    }
+    document.addEventListener('DOMContentLoaded', activateFromHash);
+    window.addEventListener('hashchange', activateFromHash);
+})();
+</script>
 {% endblock %}

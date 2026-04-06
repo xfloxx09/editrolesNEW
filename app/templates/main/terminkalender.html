@@ -270,10 +270,12 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
                                href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_others }}</a>
                             {% endif %}
                             {% if can_plan_workshop and cell.planned_ws > 0 %}
-                            <a class="term-cal-stat planned-ws" title="Geplante Workshops (Liste)" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned_ws }}</a>
+                            <a class="term-cal-stat planned-ws" title="{% if cell.planned_workshop_capture_id %}Geplanten Workshop erfassen{% else %}Geplante Workshops (Liste){% endif %}" href="{% if cell.planned_workshop_capture_id %}{% if cell.planned_workshop_capture_project_id %}{{ url_for('main.add_workshop', project=cell.planned_workshop_capture_project_id, planned_workshop=cell.planned_workshop_capture_id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=cell.planned_workshop_capture_id) }}{% endif %}{% else %}{{ url_for('main.planned_coachings_list') }}{% endif %}">{{ cell.planned_ws }}</a>
                             {% endif %}
                             {% if cell.show_add %}
-                                {% if cell.is_today and can_add_coaching and add_coaching_project_id and not can_plan and not can_plan_workshop %}
+                                {% if can_plan_workshop and cell.planned_workshop_capture_id %}
+                                <a class="term-cal-add" title="Geplanten Workshop erfassen" href="{% if cell.planned_workshop_capture_project_id %}{{ url_for('main.add_workshop', project=cell.planned_workshop_capture_project_id, planned_workshop=cell.planned_workshop_capture_id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=cell.planned_workshop_capture_id) }}{% endif %}">+</a>
+                                {% elif cell.is_today and can_add_coaching and add_coaching_project_id and not can_plan and not can_plan_workshop %}
                                 <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
                                 {% else %}
                                 <a class="term-cal-add" title="Termin anlegen" href="{{ url_for('main.terminkalender_plan_menu', day=cell.date.isoformat()) }}">+</a>
@@ -326,10 +328,12 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
                        href="{{ url_for('main.workshop_dashboard', cal_date=cell.date.isoformat(), period='30days') }}">{{ cell.ws_others }}</a>
                     {% endif %}
                     {% if can_plan_workshop and cell.planned_ws > 0 %}
-                    <a class="term-cal-stat planned-ws" title="Gepl. Workshop (Liste)" href="{{ url_for('main.planned_coachings_list') }}">{{ cell.planned_ws }}</a>
+                    <a class="term-cal-stat planned-ws" title="{% if cell.planned_workshop_capture_id %}Workshop erfassen{% else %}Gepl. Workshop (Liste){% endif %}" href="{% if cell.planned_workshop_capture_id %}{% if cell.planned_workshop_capture_project_id %}{{ url_for('main.add_workshop', project=cell.planned_workshop_capture_project_id, planned_workshop=cell.planned_workshop_capture_id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=cell.planned_workshop_capture_id) }}{% endif %}{% else %}{{ url_for('main.planned_coachings_list') }}{% endif %}">{{ cell.planned_ws }}</a>
                     {% endif %}
                     {% if cell.show_add %}
-                        {% if cell.is_today and can_add_coaching and add_coaching_project_id and not can_plan and not can_plan_workshop %}
+                        {% if can_plan_workshop and cell.planned_workshop_capture_id %}
+                        <a class="term-cal-add" title="Geplanten Workshop erfassen" href="{% if cell.planned_workshop_capture_project_id %}{{ url_for('main.add_workshop', project=cell.planned_workshop_capture_project_id, planned_workshop=cell.planned_workshop_capture_id) }}{% else %}{{ url_for('main.add_workshop', planned_workshop=cell.planned_workshop_capture_id) }}{% endif %}">+</a>
+                        {% elif cell.is_today and can_add_coaching and add_coaching_project_id and not can_plan and not can_plan_workshop %}
                         <a class="term-cal-add" title="Coaching erfassen" href="{{ url_for('main.add_coaching', project=add_coaching_project_id) }}">+</a>
                         {% else %}
                         <a class="term-cal-add" title="Termin anlegen" href="{{ url_for('main.terminkalender_plan_menu', day=cell.date.isoformat()) }}">+</a>

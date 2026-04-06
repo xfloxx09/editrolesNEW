@@ -1331,6 +1331,7 @@ def terminkalender():
             else:
                 counts[wd]['ws_others'] += 1
 
+    planned_ws_capture_by_date = {}
     if current_user.has_permission('add_workshop'):
         q_pws = PlannedWorkshop.query.filter(
             PlannedWorkshop.coach_id == current_user.id,
@@ -1345,8 +1346,11 @@ def terminkalender():
                 )
             else:
                 q_pws = q_pws.filter(false())
-        for pwr in q_pws.all():
+        pws_rows = q_pws.order_by(PlannedWorkshop.planned_for_date, PlannedWorkshop.id).all()
+        for pwr in pws_rows:
             counts[pwr.planned_for_date]['planned_ws'] += 1
+            if pwr.planned_for_date <= today and pwr.planned_for_date not in planned_ws_capture_by_date:
+                planned_ws_capture_by_date[pwr.planned_for_date] = (pwr.id, pwr.project_id)
 
     if current_user.has_permission('planned_coachings'):
         q_pl = PlannedCoaching.query.filter(
@@ -1393,6 +1397,7 @@ def terminkalender():
         z = counts[d]
         is_past = d < today
         is_future = d > today
+        cap = planned_ws_capture_by_date.get(d)
         return {
             'date': d,
             'in_month': d.month == month,
@@ -1406,6 +1411,8 @@ def terminkalender():
             'ws_me': z['ws_me'],
             'ws_others': z['ws_others'],
             'planned_ws': z['planned_ws'],
+            'planned_workshop_capture_id': cap[0] if cap else None,
+            'planned_workshop_capture_project_id': cap[1] if cap else None,
             'show_add': not is_past
             and (
                 can_plan_c
