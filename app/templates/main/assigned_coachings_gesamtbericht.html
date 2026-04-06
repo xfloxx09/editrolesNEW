@@ -77,6 +77,15 @@
                     </select>
                 </div>
                 <div class="form-group col-md-2">
+                    <label class="small text-muted mb-0">Zuweiser</label>
+                    <select name="project_leader" class="form-control form-control-sm bg-dark text-light border-secondary">
+                        <option value="">Alle im Bereich</option>
+                        {% for z in all_project_leaders %}
+                        <option value="{{ z.id }}" {% if project_leader_filter == z.id %}selected{% endif %}>{{ z.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group col-md-2">
                     <label class="small text-muted mb-0">Team</label>
                     <select name="team" class="form-control form-control-sm bg-dark text-light border-secondary">
                         <option value="">Alle Teams</option>
@@ -103,14 +112,16 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="form-group col-md-2">
+            </div>
+            <div class="form-row align-items-end">
+                <div class="form-group col-md-6">
                     <label class="small text-muted mb-0">Suche</label>
                     <input type="text" name="search" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Name / Coach" value="{{ search_term }}">
                 </div>
-            </div>
-            <div class="mt-2">
-                <button type="submit" class="btn btn-sm gesamt-action-primary">Filtern</button>
-                <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active) }}" class="btn btn-sm gesamt-action-secondary">Filter zurücksetzen</a>
+                <div class="form-group col-md-6 text-md-right mb-0 mt-2 mt-md-0">
+                    <button type="submit" class="btn btn-sm gesamt-action-primary">Filtern</button>
+                    <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active) }}" class="btn btn-sm gesamt-action-secondary">Filter zurücksetzen</a>
+                </div>
             </div>
         </div>
     </form>
@@ -120,10 +131,10 @@
         <table class="table table-striped table-dark table-hover mb-0">
             <thead>
                 <tr>
-                    <th>Deadline <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='deadline', sort_dir='asc' if sort_by != 'deadline' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
-                    <th>Projekt <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='project_name', sort_dir='asc' if sort_by != 'project_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
-                    <th>Mitglied <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='member_name', sort_dir='asc' if sort_by != 'member_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
-                    <th>Coach <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='coach_name', sort_dir='asc' if sort_by != 'coach_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Deadline <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='deadline', sort_dir='asc' if sort_by != 'deadline' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Projekt <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='project_name', sort_dir='asc' if sort_by != 'project_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Mitglied <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='member_name', sort_dir='asc' if sort_by != 'member_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
+                    <th>Coach <a class="sort-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by='coach_name', sort_dir='asc' if sort_by != 'coach_name' or sort_dir == 'desc' else 'desc') }}"><i class="fas fa-sort"></i></a></th>
                     <th>Zuweiser</th>
                     <th>Erwartet</th>
                     <th>Fortschritt</th>
@@ -168,19 +179,19 @@
     <nav aria-label="Pagination" class="mt-3">
         <ul class="pagination justify-content-center gesamt-pagination mb-0">
             {% if assignments.has_prev %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=assignments.prev_num, status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Vorherige</a></li>
+            <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=assignments.prev_num, status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Vorherige</a></li>
             {% endif %}
             {% for page_num in assignments.iter_pages() %}
                 {% if page_num %}
                 <li class="page-item {% if assignments.page == page_num %}active{% endif %}">
-                    <a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=page_num, status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">{{ page_num }}</a>
+                    <a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=page_num, status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">{{ page_num }}</a>
                 </li>
                 {% else %}
                 <li class="page-item disabled"><span class="page-link">…</span></li>
                 {% endif %}
             {% endfor %}
             {% if assignments.has_next %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=assignments.next_num, status=tab_active, project=project_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Nächste</a></li>
+            <li class="page-item"><a class="page-link" href="{{ url_for('main.assigned_coachings_gesamtbericht', page=assignments.next_num, status=tab_active, project=project_filter or None, project_leader=project_leader_filter or None, team=team_filter or None, coach=coach_filter or None, member=member_filter or None, search=search_term or None, sort_by=sort_by, sort_dir=sort_dir) }}">Nächste</a></li>
             {% endif %}
         </ul>
     </nav>

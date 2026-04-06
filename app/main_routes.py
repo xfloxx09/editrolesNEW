@@ -616,7 +616,14 @@ def _assigned_coachings_scope_query(project_filter_id=None):
 
 
 def _gesamtbericht_project_bar_extra(
-    tab_active, team_filter, coach_filter, member_filter, search_term, sort_by, sort_dir
+    tab_active,
+    team_filter,
+    coach_filter,
+    member_filter,
+    search_term,
+    sort_by,
+    sort_dir,
+    project_leader_filter=None,
 ):
     """Hidden Felder für Projektwechsel-Leiste auf dem Gesamtbericht."""
     d = {'status': tab_active}
@@ -628,6 +635,8 @@ def _gesamtbericht_project_bar_extra(
         d['member'] = member_filter
     if search_term:
         d['search'] = search_term
+    if project_leader_filter:
+        d['project_leader'] = project_leader_filter
     if sort_by != 'deadline':
         d['sort_by'] = sort_by
     if sort_dir != 'asc':
@@ -2025,20 +2034,6 @@ def assigned_coachings():
     if sort_dir not in ('asc', 'desc'):
         sort_dir = 'asc'
 
-    if tab_active == 'completed' and current_user.has_permission('view_assigned_coaching_report'):
-        rp = {'status': 'completed', 'project': project_id, 'sort_by': sort_by, 'sort_dir': sort_dir}
-        if team_filter:
-            rp['team'] = team_filter
-        if coach_filter:
-            rp['coach'] = coach_filter
-        if member_filter:
-            rp['member'] = member_filter
-        if search_term:
-            rp['search'] = search_term
-        if page and page != 1:
-            rp['page'] = page
-        return redirect(url_for('main.assigned_coachings_gesamtbericht', **rp))
-
     q = AssignedCoaching.query.options(
         joinedload(AssignedCoaching.team_member).joinedload(TeamMember.team),
         joinedload(AssignedCoaching.coach),
@@ -2270,11 +2265,30 @@ def assigned_coachings_gesamtbericht():
     if project_filter and acc is not None and project_filter not in acc:
         project_filter = None
 
+    project_leader_filter = request.args.get('project_leader', type=int)
+
     gesamt_pbe = _gesamtbericht_project_bar_extra(
-        tab_active, team_filter, coach_filter, member_filter, search_term, sort_by, sort_dir
+        tab_active,
+        team_filter,
+        coach_filter,
+        member_filter,
+        search_term,
+        sort_by,
+        sort_dir,
+        project_leader_filter=project_leader_filter,
     )
 
+    leaders_scope = _assigned_coachings_scope_query(project_filter_id=project_filter)
+    all_project_leaders = []
+    if leaders_scope is not None:
+        lid_rows = leaders_scope.with_entities(AssignedCoaching.project_leader_id).distinct().all()
+        leader_ids = [r[0] for r in lid_rows if r[0]]
+        if leader_ids:
+            all_project_leaders = User.query.filter(User.id.in_(leader_ids)).order_by(User.username).all()
+
     snapshot = _assigned_coachings_scope_query(project_filter_id=project_filter)
+    if snapshot is not None and project_leader_filter:
+        snapshot = snapshot.filter(AssignedCoaching.project_leader_id == project_leader_filter)
     report_count_current = 0
     report_count_completed = 0
     if snapshot is not None:
@@ -2286,6 +2300,8 @@ def assigned_coachings_gesamtbericht():
         ).count()
 
     base_q = _assigned_coachings_scope_query(project_filter_id=project_filter)
+    if base_q is not None and project_leader_filter:
+        base_q = base_q.filter(AssignedCoaching.project_leader_id == project_leader_filter)
     if base_q is None:
         empty_page = AssignedCoaching.query.filter(false()).paginate(page=page, per_page=20, error_out=False)
         if acc is None:
@@ -2313,6 +2329,8 @@ def assigned_coachings_gesamtbericht():
             assigned_tabs_project_id=assigned_tabs_project_id,
             project_bar_endpoint='main.assigned_coachings_gesamtbericht',
             project_bar_extra_hidden=gesamt_pbe,
+            project_leader_filter=project_leader_filter,
+            all_project_leaders=all_project_leaders,
             config=current_app.config,
         )
 
@@ -2418,6 +2436,8 @@ def assigned_coachings_gesamtbericht():
         assigned_tabs_project_id=assigned_tabs_project_id,
         project_bar_endpoint='main.assigned_coachings_gesamtbericht',
         project_bar_extra_hidden=gesamt_pbe,
+        project_leader_filter=project_leader_filter,
+        all_project_leaders=all_project_leaders,
         config=current_app.config,
     )
 

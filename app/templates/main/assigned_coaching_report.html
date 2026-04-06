@@ -93,7 +93,7 @@
 
     <div class="mt-3">
         {% if has_perm('view_assigned_coaching_report') %}
-        <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status='completed', project=assigned_report_project_id) }}" class="btn btn-secondary">Zurück zu Abgeschlossene &amp; Archiv</a>
+        <a href="{{ url_for('main.assigned_coachings_gesamtbericht', status='completed', project=assigned_report_project_id, project_leader=(current_user.id if (has_perm('assign_coachings') and current_user.role_name not in ['Admin', 'Betriebsleiter']) else none)) }}" class="btn btn-secondary">Zurück zu Abgeschlossene &amp; Archiv</a>
         {% endif %}
         <a href="{{ url_for('main.assigned_coachings', project=assigned_report_project_id) }}" class="btn btn-outline-secondary">Zurück zu zugewiesenen Coachings</a>
     </div>
