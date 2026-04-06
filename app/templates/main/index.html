@@ -150,9 +150,17 @@
 .coaching-dashboard-fixed-table td.cdt-mitglied,
 .coaching-dashboard-fixed-table td.cdt-coach,
 .coaching-dashboard-fixed-table td.cdt-thema,
-.coaching-dashboard-fixed-table td.cdt-team,
 .coaching-dashboard-fixed-table td.cdt-stil {
     min-width: 0;
+}
+/* Team-Code immer eine Zeile; mittig wenn Nachbarzellen mehrzeilig */
+.coaching-dashboard-fixed-table th.cdt-team,
+.coaching-dashboard-fixed-table td.cdt-team {
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+.coaching-dashboard-fixed-table tbody tr:not(.coaching-detail-row) > td.cdt-team {
+    vertical-align: middle;
 }
 .coaching-dashboard-fixed-table th.cdt-note,
 .coaching-dashboard-fixed-table td.cdt-note,
@@ -447,11 +455,11 @@
     <table class="table table-striped table-hover table-sm coaching-dashboard-fixed-table">
         {% if can_leave_review %}
         <colgroup>
-            <col style="width:8%">
-            <col style="width:11%">
-            <col style="width:6%">
-            <col style="width:10%">
-            <col style="width:21%">
+            <col style="width:7%">
+            <col style="width:13%">
+            <col style="width:9%">
+            <col style="width:12%">
+            <col style="width:15%">
             <col style="width:8%">
             <col style="width:4%">
             <col style="width:4%">
@@ -464,10 +472,10 @@
         {% else %}
         <colgroup>
             <col style="width:9%">
-            <col style="width:12%">
-            <col style="width:7%">
-            <col style="width:11%">
-            <col style="width:23%">
+            <col style="width:14%">
+            <col style="width:9%">
+            <col style="width:13%">
+            <col style="width:17%">
             <col style="width:9%">
             <col style="width:4%">
             <col style="width:4%">
