@@ -317,6 +317,30 @@ class CoachingLeitfadenResponse(db.Model):
     )
 
 
+class PlannedCoaching(db.Model):
+    """Nachfolge-Termin aus dem Coaching-Bogen; Coach sieht Liste bis zur Durchführung."""
+    __tablename__ = 'planned_coachings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_member_id = db.Column(db.Integer, db.ForeignKey('team_members.id'), nullable=False)
+    coach_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=True)
+    planned_for_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    has_verabredung = db.Column(db.Boolean, nullable=False, default=False)
+    verabredung_text = db.Column(db.Text)
+    source_coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='open')
+    fulfilled_coaching_id = db.Column(db.Integer, db.ForeignKey('coachings.id'), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    team_member = db.relationship('TeamMember', foreign_keys=[team_member_id])
+    coach = db.relationship('User', foreign_keys=[coach_id])
+    project = db.relationship('Project')
+    team = db.relationship('Team', foreign_keys=[team_id])
+
+
 class CoachingReview(db.Model):
     """Employee review of the coach for a specific Einzel-Coaching (one per coaching)."""
     __tablename__ = 'coaching_reviews'

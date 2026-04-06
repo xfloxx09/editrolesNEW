@@ -1200,7 +1200,8 @@ def edit_coaching_entry(coaching_id):
                             selected_leitfaden_values=selected_leitfaden_values,
                             bogen_layout=bogen_layout,
                             tcap_js=tcap_js_for_edit,
-                            config=current_app.config)
+                            config=current_app.config,
+                            initial_fulfill_planned_id=None)
 
 
 @bp.route('/coaching/<int:coaching_id>/delete', methods=['POST'])

@@ -5,7 +5,7 @@ from sqlalchemy import desc, or_, false, exists
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, CoachingLeitfadenResponse, CoachingReview
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, CoachingLeitfadenResponse, CoachingReview, PlannedCoaching
 from app.forms import CoachingForm, WorkshopForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
 from app.utils import (
     bogen_layout_for_project,
@@ -30,12 +30,66 @@ from app.utils import (
     workshop_individual_rating_from_request,
     leitfaden_items_for_project,
     leitfaden_items_for_coaching_edit,
+    today_athens_date,
+    planned_coaching_can_start_today,
+    create_planned_coaching_from_coaching_form,
 )
 from datetime import datetime, timezone, timedelta, date
 import calendar
 
 bp = Blueprint('main', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
+
+
+def _try_create_planned_followup_from_request(coaching):
+    """
+    If the coaching form included „Nächstes Coaching planen“, create PlannedCoaching.
+    Returns: None (skip), 'bad_date', or 'created'.
+    """
+    if not current_user.has_permission('planned_coachings'):
+        return None
+    if request.form.get('plan_next_enabled') != '1':
+        return None
+    raw = (request.form.get('plan_next_date') or '').strip()
+    if not raw:
+        return 'bad_date'
+    try:
+        pdate = datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        return 'bad_date'
+    notes = request.form.get('plan_next_notes', '')
+    has_v = request.form.get('plan_next_verabredung') == '1'
+    vtext = request.form.get('plan_next_verabredung_text', '')
+    tm = TeamMember.query.get(coaching.team_member_id)
+    create_planned_coaching_from_coaching_form(
+        current_user.id,
+        coaching.team_member_id,
+        pdate,
+        coaching.project_id,
+        tm.team_id if tm else None,
+        notes,
+        has_v,
+        vtext,
+        coaching.id,
+    )
+    return 'created'
+
+
+def _maybe_fulfill_planned_coaching(coaching, fulfill_planned_id):
+    if not fulfill_planned_id:
+        return
+    pc = PlannedCoaching.query.get(fulfill_planned_id)
+    if not pc or pc.coach_id != current_user.id or pc.status != 'open':
+        return
+    if not planned_coaching_can_start_today(pc.planned_for_date):
+        return
+    if pc.team_member_id != coaching.team_member_id:
+        return
+    acc = get_accessible_project_ids()
+    if acc is not None and pc.project_id and pc.project_id not in acc:
+        return
+    pc.fulfilled_coaching_id = coaching.id
+    pc.status = 'fulfilled'
 
 
 def _safe_internal_path(path_val):
@@ -510,6 +564,7 @@ def index():
             or u.has_permission('assign_coachings')
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
+        1 if u.has_permission('planned_coachings') else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
         1 if u.has_permission('view_all_reviews') else 0,
@@ -1088,6 +1143,26 @@ def add_coaching():
     leitfaden_items = leitfaden_items_for_project(project_id)
     bogen_layout = bogen_layout_for_project(project_id)
 
+    initial_fulfill_planned_id = None
+    if request.method == 'GET':
+        planned_id_arg = request.args.get('planned_id', type=int)
+        if planned_id_arg:
+            pc = PlannedCoaching.query.get(planned_id_arg)
+            if pc and pc.coach_id == current_user.id and pc.status == 'open':
+                acc = get_accessible_project_ids()
+                if acc is None or not pc.project_id or pc.project_id in acc:
+                    tm_pc = TeamMember.query.get(pc.team_member_id)
+                    if tm_pc and team_member_eligible_for_new_coaching(tm_pc):
+                        if pc.project_id and pc.project_id != project_id:
+                            return redirect(url_for(
+                                'main.add_coaching',
+                                project=pc.project_id,
+                                planned_id=planned_id_arg,
+                            ))
+                        form.team_member_id.data = pc.team_member_id
+                        if planned_coaching_can_start_today(pc.planned_for_date):
+                            initial_fulfill_planned_id = pc.id
+
     if form.validate_on_submit():
         team_member = TeamMember.query.get(form.team_member_id.data)
         if not team_member:
@@ -1142,8 +1217,16 @@ def add_coaching():
             ))
         if linked_assignment:
             _sync_assigned_coaching_status_from_progress(linked_assignment)
+        raw_fulfill = (request.form.get('fulfill_planned_id') or '').strip()
+        fulfill_pid = int(raw_fulfill) if raw_fulfill.isdigit() else None
+        _maybe_fulfill_planned_coaching(coaching, fulfill_pid)
+        plan_result = _try_create_planned_followup_from_request(coaching)
         db.session.commit()
         flash('Coaching erfolgreich gespeichert!', 'success')
+        if plan_result == 'bad_date':
+            flash('Geplantes Folgecoaching: bitte ein gültiges Datum wählen.', 'warning')
+        elif plan_result == 'created':
+            flash('Folgetermin wurde gespeichert.', 'info')
         return redirect(url_for('main.coaching_dashboard'))
 
     assigned_id = request.args.get('assigned_id', type=int)
@@ -1166,6 +1249,7 @@ def add_coaching():
 
     return render_template(
         'main/add_coaching.html',
+        title='Coaching erfassen',
         form=form,
         leitfaden_items=leitfaden_items,
         selected_leitfaden_values={},
@@ -1173,7 +1257,8 @@ def add_coaching():
         selected_coaching_project_id=project_id,
         show_coaching_project_picker=show_coaching_project_picker,
         bogen_layout=bogen_layout,
-        config=current_app.config
+        config=current_app.config,
+        initial_fulfill_planned_id=initial_fulfill_planned_id,
     )
 
 
@@ -1233,19 +1318,26 @@ def edit_coaching(coaching_id):
         db.session.flush()
         for aid in {a for a in (prev_assigned_id, coaching.assigned_coaching_id) if a}:
             _sync_assigned_coaching_status_from_progress(AssignedCoaching.query.get(aid))
+        plan_result = _try_create_planned_followup_from_request(coaching)
         db.session.commit()
         flash('Coaching erfolgreich aktualisiert.', 'success')
+        if plan_result == 'bad_date':
+            flash('Geplantes Folgecoaching: bitte ein gültiges Datum wählen.', 'warning')
+        elif plan_result == 'created':
+            flash('Folgetermin wurde gespeichert.', 'info')
         return redirect(url_for('main.coaching_dashboard'))
 
     return render_template(
         'main/add_coaching.html',
+        title='Coaching bearbeiten',
         form=form,
         is_edit_mode=True,
         coaching=coaching,
         leitfaden_items=leitfaden_items,
         selected_leitfaden_values=selected_leitfaden_values,
         bogen_layout=bogen_layout,
-        config=current_app.config
+        config=current_app.config,
+        initial_fulfill_planned_id=None,
     )
 
 
@@ -1646,6 +1738,62 @@ def available_assignments():
             })
 
     return jsonify({'assignments': out})
+
+
+@bp.route('/api/open_planned_coachings')
+@login_required
+@permission_required('add_coaching')
+def open_planned_coachings_for_member():
+    """Offene geplante Coachings Coach + Mitglied (Auswahl im Bogen)."""
+    member_id = request.args.get('member_id', type=int)
+    if not member_id:
+        return jsonify({'plans': []})
+    today = today_athens_date()
+    q = PlannedCoaching.query.filter(
+        PlannedCoaching.team_member_id == member_id,
+        PlannedCoaching.coach_id == current_user.id,
+        PlannedCoaching.status == 'open',
+    ).order_by(PlannedCoaching.planned_for_date)
+    plans = []
+    for p in q.all():
+        plans.append({
+            'id': p.id,
+            'date': p.planned_for_date.strftime('%d.%m.%Y'),
+            'date_iso': p.planned_for_date.isoformat(),
+            'can_start': p.planned_for_date <= today,
+            'notes': p.notes or '',
+            'has_verabredung': p.has_verabredung,
+            'verabredung_text': p.verabredung_text or '',
+        })
+    return jsonify({'plans': plans})
+
+
+@bp.route('/geplante-coachings')
+@login_required
+@permission_required('planned_coachings')
+def planned_coachings_list():
+    q = (
+        PlannedCoaching.query.filter(
+            PlannedCoaching.coach_id == current_user.id,
+            PlannedCoaching.status == 'open',
+        )
+        .options(
+            joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
+            joinedload(PlannedCoaching.project),
+            joinedload(PlannedCoaching.team),
+        )
+    )
+    acc = get_accessible_project_ids()
+    if acc is not None:
+        q = q.filter(PlannedCoaching.project_id.in_(acc))
+    items = q.order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id).all()
+    return render_template(
+        'main/planned_coachings.html',
+        title='Geplante Coachings',
+        items=items,
+        today_d=today_athens_date(),
+        config=current_app.config,
+    )
 
 
 @bp.route('/api/member-coaching-trend')

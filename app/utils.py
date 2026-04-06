@@ -1,4 +1,6 @@
 from functools import wraps
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask_login import current_user
 from flask import flash, redirect, url_for
 from sqlalchemy.exc import SQLAlchemyError
@@ -475,3 +477,44 @@ def get_or_create_role(role_name):
         db.session.flush()
         print(f"✅ Auto-created role '{role_name}'")
     return role
+
+
+def today_athens_date():
+    """Calendar date in Europe/Athens for 'Jetzt coachen' / planned-day gating."""
+    return datetime.now(ZoneInfo('Europe/Athens')).date()
+
+
+def planned_coaching_can_start_today(planned_for_date):
+    if not planned_for_date:
+        return False
+    return planned_for_date <= today_athens_date()
+
+
+def create_planned_coaching_from_coaching_form(
+    coach_user_id,
+    team_member_id,
+    planned_for_date,
+    project_id,
+    team_id,
+    notes,
+    has_verabredung,
+    verabredung_text,
+    source_coaching_id,
+):
+    from app.models import PlannedCoaching
+    vraw = (verabredung_text or '').strip()
+    has_v = bool(has_verabredung)
+    planned = PlannedCoaching(
+        coach_id=coach_user_id,
+        team_member_id=team_member_id,
+        planned_for_date=planned_for_date,
+        project_id=project_id,
+        team_id=team_id,
+        notes=(notes or '').strip() or None,
+        has_verabredung=has_v,
+        verabredung_text=(vraw or None) if has_v else None,
+        source_coaching_id=source_coaching_id,
+        status='open',
+    )
+    db.session.add(planned)
+    return planned

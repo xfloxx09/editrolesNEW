@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4"><i class="fas fa-calendar-alt text-info"></i> Geplante Coachings</h2>
+    <p class="text-muted">Termine, die Sie beim Speichern eines Coachings geplant haben. „Jetzt coachen“ ist ab dem eingetragenen Kalendertag verfügbar.</p>
+
+    {% if not items %}
+    <div class="alert alert-secondary">Sie haben keine offenen geplanten Coachings.</div>
+    {% else %}
+    <div class="list-group">
+        {% for it in items %}
+        {% set can_start = it.planned_for_date <= today_d %}
+        <div class="list-group-item list-group-item-action flex-column align-items-start" style="background: #2b2b2b; border-color: #444; color: #eee;">
+            <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
+                <div class="mb-2 mb-md-0">
+                    <strong>{{ it.team_member.name }}</strong>
+                    {% if it.team and it.team.name %}
+                    <span class="text-muted">({{ it.team.name }})</span>
+                    {% endif %}
+                    <span class="badge badge-info ml-2">{{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                    {% if it.project %}
+                    <span class="badge badge-secondary ml-1">{{ it.project.name }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                    {% if can_start %}
+                    <a class="btn btn-sm telekom-button" style="background-color: #e20074; color: white; border-radius: 16px;"
+                       href="{{ url_for('main.add_coaching', project=it.project_id, planned_id=it.id) }}">
+                        <i class="fas fa-chalkboard-teacher"></i> Jetzt coachen
+                    </a>
+                    {% else %}
+                    <span class="badge badge-warning text-dark"><i class="fas fa-pause"></i> Ab {{ it.planned_for_date.strftime('%d.%m.%Y') }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if it.has_verabredung and it.verabredung_text %}
+            <p class="mb-1 mt-2 small"><strong>Vereinbarung:</strong> {{ it.verabredung_text[:200] }}{% if it.verabredung_text|length > 200 %}…{% endif %}</p>
+            {% elif it.has_verabredung %}
+            <p class="mb-1 mt-2 small text-muted"><strong>Vereinbarung</strong> (ohne Text)</p>
+            {% endif %}
+            {% if it.notes %}
+            <div class="mt-2">
+                <a class="small text-info collapsed" data-toggle="collapse" href="#plan-notes-{{ it.id }}" role="button" aria-expanded="false" aria-controls="plan-notes-{{ it.id }}">
+                    Notizen anzeigen
+                </a>
+                <div class="collapse mt-1" id="plan-notes-{{ it.id }}">
+                    <div class="small border-left border-info pl-2" style="white-space: pre-wrap;">{{ it.notes }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <p class="mt-4"><a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Zurück</a></p>
+</div>
+{% endblock %}

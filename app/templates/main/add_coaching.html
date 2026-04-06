@@ -153,6 +153,9 @@
         {% if request.args.get('assigned_id') %}
         <input type="hidden" name="assigned_id" value="{{ request.args.get('assigned_id') }}">
         {% endif %}
+        {% if request.args.get('planned_id') %}
+        <input type="hidden" name="planned_id" value="{{ request.args.get('planned_id') }}">
+        {% endif %}
         <div class="form-group mr-3 mb-2 mb-md-0">
             <label for="pick_coaching_project" class="mr-2 font-weight-bold">Projekt</label>
             <select name="project" id="pick_coaching_project" class="form-control" onchange="this.form.submit()">
@@ -170,6 +173,7 @@
         {% if not is_edit_mode|default(false) and selected_coaching_project_id is defined %}
         <input type="hidden" name="project_id" value="{{ selected_coaching_project_id }}">
         {% endif %}
+        <input type="hidden" name="fulfill_planned_id" id="fulfill_planned_id" value="{{ initial_fulfill_planned_id or '' }}">
 
         <!-- Abschnitt 1: Teammitglied & Coaching-Art -->
         <div class="form-section">
@@ -232,6 +236,13 @@
                 {{ form.assigned_coaching_id(class="form-control custom-select") }}
                 <small class="form-text text-muted">Wenn Sie eine zugewiesene Aufgabe erfüllen, wählen Sie diese hier aus. Der Fortschritt wird automatisch aktualisiert.</small>
             </div>
+        </div>
+
+        <div class="form-section" id="plannedCoachingTaskSection" style="display: none;">
+            <h4 class="section-title"><i class="fas fa-calendar-check"></i> Geplantes Folgecoaching</h4>
+            <p class="text-muted small mb-2">Optional: Dieses Coaching als Erfüllung eines geplanten Termins speichern (nur ab dem geplanten Kalendertag).</p>
+            <div id="plannedCoachingRadioWrap"></div>
+            <div id="plannedCoachingPendingWrap" class="mt-2 small text-muted"></div>
         </div>
 
         <!-- Abschnitt 3: Leitfaden-Checkliste -->
@@ -315,6 +326,38 @@
         <input type="hidden" name="coach_notes" value="{{ form.coach_notes.data or '' }}">
         {% endif %}
 
+        {% if has_perm('planned_coachings') %}
+        <div class="form-section">
+            <button type="button" class="btn btn-outline-info btn-block mb-0" data-toggle="collapse" data-target="#planNextPanel" aria-expanded="false" aria-controls="planNextPanel">
+                <i class="fas fa-calendar-plus"></i> Nächstes Coaching planen
+            </button>
+            <div class="collapse mt-3" id="planNextPanel">
+                <div class="border border-secondary rounded p-3" style="background: #333;">
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="plan_next_enabled_cb" name="plan_next_enabled" value="1">
+                        <label class="form-check-label" for="plan_next_enabled_cb">Beim Speichern Folgetermin anlegen</label>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="form-control-label text-light" for="plan_next_date">Geplanter Tag</label>
+                        <input type="date" name="plan_next_date" id="plan_next_date" class="form-control">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label class="text-light" for="plan_next_notes">Zusätzliche Notizen</label>
+                        <textarea name="plan_next_notes" id="plan_next_notes" class="form-control" rows="2" placeholder="Optional"></textarea>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input type="checkbox" class="form-check-input" id="plan_next_verabredung" name="plan_next_verabredung" value="1">
+                        <label class="form-check-label" for="plan_next_verabredung">Vereinbarung fürs nächste Mal</label>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="text-light" for="plan_next_verabredung_text">Text der Vereinbarung</label>
+                        <textarea name="plan_next_verabredung_text" id="plan_next_verabredung_text" class="form-control" rows="2" placeholder="Optional"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Buttons -->
         <div class="form-group text-center">
             <button type="submit" class="btn telekom-button btn-lg px-5">
@@ -333,6 +376,7 @@
 <script>
 window.__coachingEditAssignedId = {% if is_edit_mode and coaching and coaching.assigned_coaching_id %}{{ coaching.assigned_coaching_id }}{% else %}null{% endif %};
 window.__coachingEditMemberId = {% if is_edit_mode and coaching %}{{ coaching.team_member_id }}{% else %}null{% endif %};
+window.__initialFulfillPlannedId = {% if initial_fulfill_planned_id %}{{ initial_fulfill_planned_id }}{% else %}null{% endif %};
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -413,7 +457,73 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 5. Zugewiesene Aufgaben nur bei Bedarf; Abschnitt sonst ausblenden ---
+    function syncPlannedCoachingPickers(data) {
+        const wrap = document.getElementById('plannedCoachingRadioWrap');
+        const pendingWrap = document.getElementById('plannedCoachingPendingWrap');
+        const section = document.getElementById('plannedCoachingTaskSection');
+        const fulfillHidden = document.getElementById('fulfill_planned_id');
+        if (!wrap || !section) return;
+        const plans = (data && data.plans) ? data.plans : [];
+        wrap.innerHTML = '';
+        if (pendingWrap) pendingWrap.innerHTML = '';
+        if (!plans.length) {
+            section.style.display = 'none';
+            if (fulfillHidden) fulfillHidden.value = '';
+            return;
+        }
+        section.style.display = '';
+        let html = '<div class="form-check"><input class="form-check-input" type="radio" name="fulfill_planned_pick" id="fulfill_planned_none" value=""><label class="form-check-label" for="fulfill_planned_none">Kein geplantes Coaching verknüpfen</label></div>';
+        const pendingLines = [];
+        plans.forEach(function(p) {
+            if (p.can_start) {
+                html += '<div class="form-check"><input class="form-check-input" type="radio" name="fulfill_planned_pick" id="fulfill_planned_' + p.id + '" value="' + p.id + '"><label class="form-check-label" for="fulfill_planned_' + p.id + '">Termin ' + p.date;
+                if (p.has_verabredung) html += ' <span class="badge badge-info">Vereinbarung</span>';
+                html += '</label></div>';
+            } else {
+                pendingLines.push(p.date + (p.has_verabredung ? ' (Vereinbarung)' : ''));
+            }
+        });
+        wrap.innerHTML = html;
+        if (pendingWrap && pendingLines.length) {
+            pendingWrap.innerHTML = '<p class="mb-0"><strong>Noch nicht fällig (Verknüpfung ab Kalendertag):</strong> ' + pendingLines.join('; ') + '</p>';
+        }
+
+        function syncFulfillFromRadio() {
+            const sel = document.querySelector('input[name="fulfill_planned_pick"]:checked');
+            if (sel && fulfillHidden) fulfillHidden.value = sel.value || '';
+        }
+        document.querySelectorAll('input[name="fulfill_planned_pick"]').forEach(function(r) {
+            r.addEventListener('change', syncFulfillFromRadio);
+        });
+        const initId = window.__initialFulfillPlannedId;
+        const noneEl = document.getElementById('fulfill_planned_none');
+        if (initId) {
+            const r = document.getElementById('fulfill_planned_' + initId);
+            if (r) {
+                r.checked = true;
+                if (noneEl) noneEl.checked = false;
+            }
+        } else if (noneEl) {
+            noneEl.checked = true;
+        }
+        syncFulfillFromRadio();
+    }
+
+    function loadPlannedForMember() {
+        const sel = document.getElementById('team_member_id');
+        const memberId = sel ? sel.value : '';
+        const plannedSection = document.getElementById('plannedCoachingTaskSection');
+        if (!memberId || !plannedSection) {
+            syncPlannedCoachingPickers({ plans: [] });
+            return;
+        }
+        fetch('/api/open_planned_coachings?member_id=' + encodeURIComponent(memberId))
+            .then(function(r) { return r.json(); })
+            .then(syncPlannedCoachingPickers)
+            .catch(function() { syncPlannedCoachingPickers({ plans: [] }); });
+    }
+
+    // --- 5. Zugewiesene Aufgaben + geplante Folgetermine (Mitglied) ---
     const memberSelect = document.getElementById('team_member_id');
     const assignmentSelect = document.getElementById('assigned_coaching_id');
     const assignedSection = document.getElementById('assignedCoachingSection');
@@ -426,6 +536,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!memberId) {
                 assignmentSelect.innerHTML = '<option value="0">--- Keine zugewiesene Aufgabe ---</option>';
                 setAssignedSectionVisible(false);
+                loadPlannedForMember();
                 return;
             }
             const ensureId = (
@@ -452,14 +563,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     const hasReal = list.length > 0;
                     setAssignedSectionVisible(hasReal || !!ensureId);
+                    loadPlannedForMember();
                 })
                 .catch(function () {
                     assignmentSelect.innerHTML = '<option value="0">--- Keine zugewiesene Aufgabe ---</option>';
                     setAssignedSectionVisible(!!ensureId);
+                    loadPlannedForMember();
                 });
         }
-        memberSelect.addEventListener('change', loadAssignments);
+        memberSelect.addEventListener('change', function() {
+            window.__initialFulfillPlannedId = null;
+            loadAssignments();
+        });
         loadAssignments();
+    } else if (memberSelect) {
+        memberSelect.addEventListener('change', function() {
+            window.__initialFulfillPlannedId = null;
+            loadPlannedForMember();
+        });
+        loadPlannedForMember();
     }
 });
 </script>

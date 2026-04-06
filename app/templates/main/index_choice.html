@@ -30,6 +30,15 @@
             </a>
         </div>
         {% endif %}
+        {% if has_perm('planned_coachings') %}
+        <div class="col-md-4 mb-3">
+            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4" style="background-color: #20c997; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                <i class="fas fa-calendar-alt fa-3x mb-2"></i>
+                <h4>Geplante Coachings</h4>
+                <p>Folgetermine vom Coaching-Bogen</p>
+            </a>
+        </div>
+        {% endif %}
         {% if has_perm('view_own_coachings') or has_perm('leave_coaching_review') %}
         <div class="col-md-4 mb-3">
             <a href="{{ url_for('main.my_coachings') }}" class="btn btn-lg btn-block p-4" style="background-color: #17a2b8; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
