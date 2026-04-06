@@ -107,22 +107,49 @@
     background: linear-gradient(90deg, #b80a5a 0%, #e20074 100%);
     max-width: 100%;
 }
-.coaching-dashboard-table {
+/* Kein table-responsive: vermeidet die permanente Unterbalken-Scrollbar. Tabelle bleibt in der Containerbreite. */
+.coaching-dashboard-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+}
+.coaching-dashboard-fixed-table {
+    table-layout: fixed;
+    width: 100%;
+    margin-bottom: 0;
+}
+.coaching-dashboard-fixed-table th,
+.coaching-dashboard-fixed-table td {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    vertical-align: middle;
+    padding: 0.4rem 0.35rem;
+    font-size: 0.8125rem;
+}
+.coaching-dashboard-fixed-table .btn {
+    white-space: normal;
+    line-height: 1.25;
     max-width: 100%;
 }
-.coaching-dashboard-table .table {
-    width: 100%;
-    table-layout: auto;
-}
-.coaching-dashboard-table .coaching-dashboard-score-bar {
+.coaching-dashboard-fixed-table .coaching-dashboard-score-bar {
     min-width: 0;
     width: 100%;
-    max-width: 88px;
-    height: 1.1rem;
-    font-size: 0.7rem;
+    max-width: 100%;
+    height: 1.05rem;
+    font-size: 0.65rem;
 }
-.coaching-dashboard-table tr.coaching-detail-row > td {
-    padding: 8px 12px;
+.coaching-dashboard-fixed-table .coaching-dashboard-score-bar .progress-bar {
+    overflow: hidden;
+    text-overflow: clip;
+    padding-left: 2px;
+    padding-right: 2px;
+    white-space: nowrap;
+}
+.coaching-dashboard-fixed-table tr.coaching-detail-row > td {
+    padding: 8px 10px;
     vertical-align: top;
     background: rgba(0,0,0,0.15);
 }
@@ -179,8 +206,8 @@
     border-color: #e20074;
     color: white;
 }
-/* Only wrap the notes column (10th column) and the detail notes box */
-.table td:nth-child(10) {
+/* Nur auf anderen Seiten: Coaching-Dashboard nutzt .coaching-dashboard-fixed-table (eigene Zell-Regeln) */
+.table:not(.coaching-dashboard-fixed-table) td:nth-child(10) {
     word-break: break-word;
     white-space: normal;
 }
@@ -188,10 +215,16 @@
     word-break: break-word;
     white-space: pre-wrap;
 }
+/* Zeilen/Charts: vermeidet 1–2px horizontales Scrollen durch Bootstrap .row */
+.coaching-dashboard-root {
+    max-width: 100%;
+    overflow-x: hidden;
+}
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="coaching-dashboard-root">
 <h2>{{ title }}</h2>
 
 <form method="GET" action="{{ url_for('main.coaching_dashboard') }}" id="filterForm" class="mb-4">
@@ -353,8 +386,8 @@
 </div>
 
 {% if coachings_paginated and coachings_paginated.items %}
-<div class="table-responsive coaching-dashboard-table">
-    <table class="table table-striped table-hover">
+<div class="coaching-dashboard-table-wrap">
+    <table class="table table-striped table-hover table-sm coaching-dashboard-fixed-table">
         <thead class="telekom-bg-magenta text-white">
             <tr>
                 <th>Datum</th>
@@ -541,6 +574,7 @@
 {% else %}
 <p class="text-center mt-3">Keine Coachings gefunden, die den aktuellen Filtern entsprechen.</p>
 {% endif %}
+</div>
 
 {% if can_leave_review and review_form_dashboard %}
 <div class="modal fade" id="reviewModalDash" tabindex="-1" role="dialog" aria-labelledby="reviewModalDashLabel" aria-hidden="true">
