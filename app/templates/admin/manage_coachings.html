@@ -87,7 +87,7 @@
         
         <div class="mb-3">
             {% if coachings_paginated.items %}
-            <button type="submit" name="delete_selected" class="btn btn-danger btn-sm" onclick="return confirm('Sind Sie sicher, dass Sie die ausgewählten Coachings löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.');">
+            <button type="button" id="bulkDeleteCoachingsBtn" class="btn btn-danger btn-sm">
                 <i class="fas fa-trash-alt"></i> Ausgewählte löschen
             </button>
             {% endif %}
@@ -123,7 +123,7 @@
                         <td>
                             {# Link to an edit page - you'll need to create this route/template #}
                             <a href="{{ url_for('admin.edit_coaching_entry', coaching_id=coaching.id) }}" class="btn btn-info btn-xs mr-1" title="Bearbeiten"><i class="fas fa-edit"></i></a>
-                             <a href="#" class="btn btn-danger btn-xs" title="Einzeln löschen" onclick="event.preventDefault(); if(confirm('Dieses Coaching wirklich löschen?')) { document.getElementById('delete-coaching-{{ coaching.id }}-form').submit(); }"><i class="fas fa-trash-alt"></i></a>
+                             <a href="#" class="btn btn-danger btn-xs js-admin-delete-coaching" data-coaching-id="{{ coaching.id }}" title="Einzeln löschen"><i class="fas fa-trash-alt"></i></a>
                         </td>
                     </tr>
                     {# Hidden form for single delete #}
@@ -165,34 +165,113 @@
 {% block scripts %}
 {{ super() }}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    const coachingCheckboxes = document.querySelectorAll('.coaching-checkbox');
+(function() {
+    const precheckUrl = {{ url_for('admin.coaching_delete_precheck')|tojson }};
 
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', function() {
-            coachingCheckboxes.forEach(checkbox => {
-                checkbox.checked = selectAllCheckbox.checked;
-            });
-        });
+    function buildPlannedLinksMessage(data, plural) {
+        if (!data.has_links) return null;
+        let m = plural
+            ? 'Mit der Auswahl sind geplante Coachings verknüpft:\n\n'
+            : 'Mit diesem Coaching sind geplante Termine verknüpft:\n\n';
+        if (data.fulfilled > 0) {
+            m += '• ' + data.fulfilled + ' Eintrag/Einträge zu abgeschlossenen geplanten Coachings werden ebenfalls entfernt.\n';
+        }
+        if (data.source > 0) {
+            m += '• ' + data.source + ' offene Planung(en): die Verknüpfung zum Ausgangs-Coaching wird aufgehoben (der Termin bleibt bestehen).\n';
+        }
+        m += '\nWirklich löschen?';
+        return m;
     }
 
-    coachingCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            if (!this.checked) {
-                selectAllCheckbox.checked = false;
-            } else {
-                // Check if all are checked
-                let allChecked = true;
-                coachingCheckboxes.forEach(cb => {
-                    if (!cb.checked) {
-                        allChecked = false;
-                    }
+    async function fetchPrecheck(idsComma) {
+        const r = await fetch(precheckUrl + '?ids=' + encodeURIComponent(idsComma), {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!r.ok) throw new Error('Precheck failed');
+        return r.json();
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        const coachingCheckboxes = document.querySelectorAll('.coaching-checkbox');
+        const bulkForm = document.getElementById('bulkActionForm');
+        const bulkBtn = document.getElementById('bulkDeleteCoachingsBtn');
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                coachingCheckboxes.forEach(checkbox => {
+                    checkbox.checked = selectAllCheckbox.checked;
                 });
-                selectAllCheckbox.checked = allChecked;
-            }
+            });
+        }
+
+        coachingCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                if (!this.checked) {
+                    selectAllCheckbox.checked = false;
+                } else {
+                    let allChecked = true;
+                    coachingCheckboxes.forEach(cb => {
+                        if (!cb.checked) allChecked = false;
+                    });
+                    selectAllCheckbox.checked = allChecked;
+                }
+            });
+        });
+
+        if (bulkBtn && bulkForm) {
+            bulkBtn.addEventListener('click', async function() {
+                const selected = Array.from(bulkForm.querySelectorAll('.coaching-checkbox:checked')).map(function(cb) { return cb.value; });
+                if (!selected.length) {
+                    alert('Bitte wählen Sie mindestens ein Coaching aus.');
+                    return;
+                }
+                if (!confirm('Sind Sie sicher, dass Sie die ausgewählten Coachings löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+                    return;
+                }
+                try {
+                    const data = await fetchPrecheck(selected.join(','));
+                    const extra = buildPlannedLinksMessage(data, true);
+                    if (extra && !confirm(extra)) {
+                        return;
+                    }
+                } catch (e) {
+                    alert('Verknüpfungen konnten nicht geprüft werden. Bitte erneut versuchen.');
+                    return;
+                }
+                const hi = document.createElement('input');
+                hi.type = 'hidden';
+                hi.name = 'delete_selected';
+                hi.value = '1';
+                bulkForm.appendChild(hi);
+                bulkForm.submit();
+            });
+        }
+
+        document.querySelectorAll('.js-admin-delete-coaching').forEach(function(link) {
+            link.addEventListener('click', async function(ev) {
+                ev.preventDefault();
+                const id = this.getAttribute('data-coaching-id');
+                if (!id) return;
+                if (!confirm('Dieses Coaching wirklich löschen?')) {
+                    return;
+                }
+                try {
+                    const data = await fetchPrecheck(id);
+                    const extra = buildPlannedLinksMessage(data, false);
+                    if (extra && !confirm(extra)) {
+                        return;
+                    }
+                } catch (e) {
+                    alert('Verknüpfungen konnten nicht geprüft werden. Bitte erneut versuchen.');
+                    return;
+                }
+                const form = document.getElementById('delete-coaching-' + id + '-form');
+                if (form) form.submit();
+            });
         });
     });
-});
+})();
 </script>
 {% endblock %}

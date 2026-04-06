@@ -1,14 +1,14 @@
 # app/admin.py
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, session, jsonify, abort
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_, false
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung, CoachingThemaItem, CoachingBogenLayout
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung, CoachingThemaItem, CoachingBogenLayout, PlannedCoaching
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm, AbteilungForm, CoachingThemaItemForm, CoachingBogenLayoutForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung, leitfaden_items_for_coaching_edit, bogen_layout_for_project
-from app.main_routes import calculate_date_range, get_month_name_german
+from app.main_routes import calculate_date_range, get_month_name_german, _sync_assigned_coaching_status_from_progress
 from datetime import datetime, timezone, time
 import csv
 import json
@@ -18,6 +18,70 @@ import re
 
 bp = Blueprint('admin', __name__)
 LEITFADEN_CHOICES = {'Ja', 'Nein', 'k.A.'}
+
+
+def _normalize_int_ids(raw_list):
+    out = []
+    for x in raw_list or []:
+        try:
+            out.append(int(x))
+        except (TypeError, ValueError):
+            continue
+    return list(dict.fromkeys(out))
+
+
+def _precheck_coaching_planned_links(coaching_ids):
+    """Counts planned_coachings rows referencing these coachings (fulfilled or as Folgetermin-Quelle)."""
+    ids = _normalize_int_ids(coaching_ids)
+    if not ids:
+        return {'fulfilled': 0, 'source': 0, 'has_links': False}
+    f_cnt = PlannedCoaching.query.filter(PlannedCoaching.fulfilled_coaching_id.in_(ids)).count()
+    s_cnt = PlannedCoaching.query.filter(PlannedCoaching.source_coaching_id.in_(ids)).count()
+    return {'fulfilled': f_cnt, 'source': s_cnt, 'has_links': f_cnt + s_cnt > 0}
+
+
+def _unlink_planned_coachings_before_delete(coaching_ids):
+    """
+    Erfüllte Plan-Zeilen mit dieser Coaching-ID entfernen (sonst FK auf coachings).
+    Offene Pläne: nur source_coaching_id aufheben, Termin bleibt erhalten.
+    """
+    ids = _normalize_int_ids(coaching_ids)
+    if not ids:
+        return
+    PlannedCoaching.query.filter(PlannedCoaching.fulfilled_coaching_id.in_(ids)).delete(
+        synchronize_session=False
+    )
+    PlannedCoaching.query.filter(PlannedCoaching.source_coaching_id.in_(ids)).update(
+        {PlannedCoaching.source_coaching_id: None},
+        synchronize_session=False,
+    )
+
+
+def _admin_delete_coachings_by_ids(coaching_ids):
+    """
+    Löscht Coachings inkl. Leitfaden/Antworten (ORM-Cascade) und bereinigt planned_coachings.
+    Gibt die Anzahl gelöschter Coachings zurück.
+    """
+    ids = _normalize_int_ids(coaching_ids)
+    if not ids:
+        return 0
+    _unlink_planned_coachings_before_delete(ids)
+    assigned_refs = set()
+    deleted = 0
+    for cid in ids:
+        c = Coaching.query.get(cid)
+        if c:
+            if c.assigned_coaching_id:
+                assigned_refs.add(c.assigned_coaching_id)
+            db.session.delete(c)
+            deleted += 1
+    db.session.flush()
+    for aid in assigned_refs:
+        ac = AssignedCoaching.query.get(aid)
+        if ac:
+            _sync_assigned_coaching_status_from_progress(ac)
+    db.session.commit()
+    return deleted
 
 
 def _role_ids_with_multiple_teams():
@@ -1080,9 +1144,7 @@ def manage_coachings():
             coaching_ids_to_delete = request.form.getlist('coaching_ids')
             if coaching_ids_to_delete:
                 try:
-                    coaching_ids_to_delete_int = [int(id_str) for id_str in coaching_ids_to_delete]
-                    deleted_count = Coaching.query.filter(Coaching.id.in_(coaching_ids_to_delete_int)).delete(synchronize_session='fetch')
-                    db.session.commit()
+                    deleted_count = _admin_delete_coachings_by_ids(coaching_ids_to_delete)
                     flash(f'{deleted_count} Coaching(s) erfolgreich gelöscht.', 'success')
                 except ValueError:
                     flash('Ungültige Coaching-IDs zum Löschen ausgewählt.', 'danger')
@@ -1208,16 +1270,33 @@ def edit_coaching_entry(coaching_id):
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def delete_coaching_entry(coaching_id):
-    coaching = Coaching.query.get_or_404(coaching_id)
+    if not Coaching.query.get(coaching_id):
+        abort(404)
     try:
-        db.session.delete(coaching)
-        db.session.commit()
+        _admin_delete_coachings_by_ids([coaching_id])
         flash(f'Coaching ID {coaching_id} erfolgreich gelöscht.', 'success')
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Fehler beim Löschen von Coaching ID {coaching_id}: {e}")
         flash(f'Fehler beim Löschen von Coaching ID {coaching_id}.', 'danger')
     return redirect(url_for('admin.manage_coachings'))
+
+
+@bp.route('/api/coachings/delete-precheck')
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def coaching_delete_precheck():
+    """JSON: wie viele geplante Coachings hängen an den IDs (für Lösch-Bestätigung)."""
+    raw = (request.args.get('ids') or '').strip()
+    id_strs = [x.strip() for x in raw.split(',') if x.strip()]
+    pre = _precheck_coaching_planned_links(id_strs)
+    return jsonify(
+        {
+            'fulfilled': pre['fulfilled'],
+            'source': pre['source'],
+            'has_links': pre['has_links'],
+        }
+    )
 
 
 # --- Workshop Management (Admin) ---
