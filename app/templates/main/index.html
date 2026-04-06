@@ -307,8 +307,8 @@
     }
     .coaching-dashboard-table-wrap {
         overflow-x: visible;
-        padding-left: 2px;
-        padding-right: 2px;
+        padding-left: 0;
+        padding-right: 6px;
     }
     .coaching-dashboard-fixed-table.table-striped tbody tr,
     .coaching-dashboard-fixed-table.table-striped tbody tr:nth-of-type(2n+1) {
@@ -349,12 +349,12 @@
     }
     .coaching-mobile-expand-header {
         width: 100%;
-        min-height: 56px;
+        min-height: 68px;
         display: flex;
         align-items: stretch;
         justify-content: space-between;
-        gap: 8px 10px;
-        padding: 12px 14px;
+        gap: 8px 12px;
+        padding: 16px 14px 16px 8px;
         border: none;
         background: transparent;
         color: inherit;
@@ -373,19 +373,21 @@
         display: flex;
         flex-direction: row;
         align-items: stretch;
-        gap: 14px;
+        gap: 16px;
+        margin-left: 2px;
     }
     .coaching-mobile-expand-datum-col {
         flex: 0 1 auto;
         display: flex;
         align-items: center;
         min-width: 0;
+        max-width: 46%;
     }
     .coaching-mobile-expand-datum-col .coaching-mobile-datum-text {
         font-variant-numeric: tabular-nums;
         font-weight: 600;
-        line-height: 1.3;
-        font-size: 0.95rem;
+        line-height: 1.25;
+        font-size: 1.08rem;
     }
     .coaching-mobile-expand-names-col {
         flex: 1 1 0;
@@ -396,19 +398,19 @@
         align-items: flex-end;
         text-align: right;
         padding: 2px 0;
-        min-height: 48px;
+        min-height: 52px;
     }
     .coaching-mobile-vorname {
         font-weight: 600;
-        font-size: 0.95rem;
+        font-size: 1.06rem;
         line-height: 1.2;
         max-width: 100%;
         word-break: break-word;
     }
     .coaching-mobile-nachname {
-        font-size: 0.85rem;
+        font-size: 0.95rem;
         font-weight: 500;
-        opacity: 0.9;
+        opacity: 0.92;
         line-height: 1.2;
         max-width: 100%;
         word-break: break-word;
@@ -464,21 +466,18 @@
     .coaching-mobile-expand-body .coaching-mobile-field.coaching-mobile-field-team .coaching-mobile-val {
         overflow-wrap: break-word;
     }
-    /* Aktionen: gleiche Höhe, volle Breite in der rechten Spalte */
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val:has(.btn),
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val:has(a.btn),
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val:has(.btn-icon-circle) {
+    /* Volle Breite nur für echte Aktionen (Bewertung „+“, „Bewertung abgeben“) — nicht Info/Bearbeiten */
+    .coaching-mobile-expand-body .coaching-mobile-field:not([data-label="Details"]):not([data-label="Bearbeiten"]) > .coaching-mobile-val:has(.btn:not(.btn-icon-circle)) {
         justify-self: stretch;
         display: flex;
         flex-direction: column;
         align-items: stretch;
         gap: 8px;
     }
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val:has(.btn) .btn-review-note {
+    .coaching-mobile-expand-body .coaching-mobile-field:not([data-label="Details"]):not([data-label="Bearbeiten"]) > .coaching-mobile-val:has(.btn:not(.btn-icon-circle)) .btn-review-note {
         align-self: stretch;
     }
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val .btn,
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val a.btn {
+    .coaching-mobile-expand-body .coaching-mobile-field:not([data-label="Details"]):not([data-label="Bearbeiten"]) > .coaching-mobile-val .btn:not(.btn-icon-circle) {
         width: 100% !important;
         min-height: 44px;
         margin-left: 0 !important;
@@ -488,18 +487,30 @@
         justify-content: center;
         box-sizing: border-box;
     }
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val .btn-icon-circle {
-        width: 100% !important;
-        min-height: 44px !important;
-        height: auto !important;
-        border-radius: 0.25rem;
-    }
-    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val > .text-success:only-child {
-        width: 100%;
-        min-height: 44px;
-        display: flex;
+    .coaching-mobile-expand-body .coaching-mobile-field[data-label="Details"] > .coaching-mobile-val .btn-icon-circle {
+        width: 32px !important;
+        min-height: 32px !important;
+        height: 32px !important;
+        border-radius: 50%;
+        padding: 0;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
+    }
+    .coaching-mobile-expand-body .coaching-mobile-field[data-label="Bearbeiten"] > .coaching-mobile-val a.btn {
+        width: auto !important;
+        min-height: 0;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        padding: 0.25rem 0.5rem;
+    }
+    .coaching-mobile-expand-body .coaching-mobile-field > .coaching-mobile-val > .text-success:only-child {
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        width: 100%;
     }
     .coaching-dashboard-fixed-table tr.coaching-dash-note-row td {
         display: block;
