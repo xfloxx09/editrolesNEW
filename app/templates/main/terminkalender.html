@@ -20,22 +20,14 @@
 .terminkal-legend-item {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.5rem;
     max-width: 100%;
 }
-.term-cal-legend-swatch {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    flex-shrink: 0;
+.terminkal-legend-item .term-cal-stat {
+    pointer-events: none;
+    cursor: default;
 }
-.term-cal-legend-swatch.done { background: #e20074; }
-.term-cal-legend-swatch.done-others { background: #5c7cfa; }
-.term-cal-legend-swatch.planned { background: #20c997; }
-.term-cal-legend-swatch.assigned { background: #28a745; }
 .terminkal-legend-label { color: #e0e0e0; }
-.terminkal-legend-total { color: #888; font-size: 0.82rem; }
 .term-cal-desktop { display: none; }
 @media (min-width: 768px) {
     .term-cal-desktop { display: block; }
@@ -147,29 +139,25 @@
 
     <div class="terminkal-legend">
         {% if has_perm_dash %}
-        <span class="terminkal-legend-item" title="Anzahl Ihrer eigenen Coachings in diesem Monat">
-            <span class="term-cal-legend-swatch done" aria-hidden="true"></span>
-            <span><span class="terminkal-legend-label">Eigene Coachings</span>
-                <span class="terminkal-legend-total">· {{ month_total_done_me }} im {{ month_title }}</span></span>
+        <span class="terminkal-legend-item" title="Eigene Coachings in diesem Kalendermonat">
+            <span class="term-cal-stat done" aria-label="Eigene Coachings im Monat: {{ month_total_done_me }}">{{ month_total_done_me }}</span>
+            <span class="terminkal-legend-label">Eigene Coachings</span>
         </span>
         <span class="terminkal-legend-item" title="Coachings anderer Coaches in Ihrem Dashboard-Sichtbereich">
-            <span class="term-cal-legend-swatch done-others" aria-hidden="true"></span>
-            <span><span class="terminkal-legend-label">Andere Coaches</span>
-                <span class="terminkal-legend-total">· {{ month_total_done_others }} im {{ month_title }}</span></span>
+            <span class="term-cal-stat done-others" aria-label="Andere Coaches im Monat: {{ month_total_done_others }}">{{ month_total_done_others }}</span>
+            <span class="terminkal-legend-label">Andere Coaches</span>
         </span>
         {% endif %}
         {% if has_perm_planned %}
-        <span class="terminkal-legend-item">
-            <span class="term-cal-legend-swatch planned" aria-hidden="true"></span>
-            <span><span class="terminkal-legend-label">Geplant (offen)</span>
-                <span class="terminkal-legend-total">· {{ month_total_planned }} im {{ month_title }}</span></span>
+        <span class="terminkal-legend-item" title="Offene geplante Coachings in diesem Monat">
+            <span class="term-cal-stat planned" aria-label="Geplant offen im Monat: {{ month_total_planned }}">{{ month_total_planned }}</span>
+            <span class="terminkal-legend-label">Geplant (offen)</span>
         </span>
         {% endif %}
         {% if has_perm_assigned %}
-        <span class="terminkal-legend-item">
-            <span class="term-cal-legend-swatch assigned" aria-hidden="true"></span>
-            <span><span class="terminkal-legend-label">Aufgabe (Deadline)</span>
-                <span class="terminkal-legend-total">· {{ month_total_assigned }} im {{ month_title }}</span></span>
+        <span class="terminkal-legend-item" title="Zugewiesene Aufgaben mit Deadline in diesem Monat">
+            <span class="term-cal-stat assigned" aria-label="Aufgaben Deadline im Monat: {{ month_total_assigned }}">{{ month_total_assigned }}</span>
+            <span class="terminkal-legend-label">Aufgabe (Deadline)</span>
         </span>
         {% endif %}
     </div>
