@@ -1,7 +1,7 @@
 # app/main_routes.py
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, jsonify, abort
 from flask_login import login_required, current_user
-from sqlalchemy import desc, or_, false, exists
+from sqlalchemy import desc, or_, and_, false, exists
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload, selectinload, aliased
 from app import db
@@ -185,6 +185,81 @@ def _user_may_edit_planned_workshop(pw):
         if pw.project_id is not None and pw.project_id not in acc:
             return False
     return True
+
+
+def _can_view_others_planned_in_scope():
+    """PL/QM/BL/Admin may see teammates' planned coachings & workshops in their project scope."""
+    if not current_user.is_authenticated:
+        return False
+    if current_user.role_name in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
+        return True
+    return current_user.has_permission('assign_coachings') or current_user.has_permission(
+        'view_pl_qm_dashboard'
+    )
+
+
+def _count_open_planned_for_index():
+    """Badge count: own open plans plus others' open plans in accessible projects (for oversight roles)."""
+    u = current_user
+    acc = get_accessible_project_ids()
+    can_pc = u.has_permission('planned_coachings')
+    can_pw = u.has_permission('add_workshop')
+    can_vo = _can_view_others_planned_in_scope()
+    total = 0
+
+    parts_c = []
+    if can_pc:
+        mine_c = PlannedCoaching.coach_id == u.id
+        if acc is not None:
+            if len(acc) == 0:
+                mine_c = and_(mine_c, false())
+            else:
+                mine_c = and_(mine_c, PlannedCoaching.project_id.in_(acc))
+        parts_c.append(mine_c)
+    if can_vo:
+        other_c = PlannedCoaching.coach_id != u.id
+        if acc is not None:
+            if len(acc) == 0:
+                other_c = and_(other_c, false())
+            else:
+                other_c = and_(other_c, PlannedCoaching.project_id.in_(acc))
+        parts_c.append(other_c)
+    if parts_c:
+        total += PlannedCoaching.query.filter(
+            PlannedCoaching.status == 'open',
+            or_(*parts_c),
+        ).count()
+
+    parts_w = []
+    if can_pw:
+        mine_w = PlannedWorkshop.coach_id == u.id
+        if acc is not None:
+            if len(acc) == 0:
+                mine_w = and_(mine_w, false())
+            else:
+                mine_w = and_(
+                    mine_w,
+                    or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)),
+                )
+        parts_w.append(mine_w)
+    if can_vo:
+        other_w = PlannedWorkshop.coach_id != u.id
+        if acc is not None:
+            if len(acc) == 0:
+                other_w = and_(other_w, false())
+            else:
+                other_w = and_(
+                    other_w,
+                    or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)),
+                )
+        parts_w.append(other_w)
+    if parts_w:
+        total += PlannedWorkshop.query.filter(
+            PlannedWorkshop.status == 'open',
+            or_(*parts_w),
+        ).count()
+
+    return total
 
 
 def _resolve_planned_workshop_fulfill_for_form(project_id):
@@ -832,35 +907,23 @@ def index():
             or u.has_permission('view_pl_qm_dashboard')
         ) else 0,
         1 if u.has_permission('terminkalender') else 0,
-        1 if (u.has_permission('planned_coachings') or u.has_permission('add_workshop')) else 0,
+        1 if (
+            u.has_permission('planned_coachings')
+            or u.has_permission('add_workshop')
+            or u.has_permission('assign_coachings')
+            or u.has_permission('view_pl_qm_dashboard')
+        ) else 0,
         1 if (u.has_permission('view_own_coachings') or u.has_permission('leave_coaching_review')) else 0,
         1 if u.has_permission('view_review') else 0,
         1 if u.has_permission('view_all_reviews') else 0,
     ])
     open_planned_coachings_count = 0
-    acc_ix = get_accessible_project_ids()
-    if u.has_permission('planned_coachings'):
-        pq = PlannedCoaching.query.filter(
-            PlannedCoaching.coach_id == u.id,
-            PlannedCoaching.status == 'open',
-        )
-        if acc_ix is not None and len(acc_ix) == 0:
-            pass
-        else:
-            if acc_ix is not None:
-                pq = pq.filter(PlannedCoaching.project_id.in_(acc_ix))
-            open_planned_coachings_count = pq.count()
-    if u.has_permission('add_workshop'):
-        wq = PlannedWorkshop.query.filter(
-            PlannedWorkshop.coach_id == u.id,
-            PlannedWorkshop.status == 'open',
-        )
-        if acc_ix is not None and len(acc_ix) == 0:
-            pass
-        else:
-            if acc_ix is not None:
-                wq = wq.filter(or_(PlannedWorkshop.project_id.in_(acc_ix), PlannedWorkshop.project_id.is_(None)))
-            open_planned_coachings_count += wq.count()
+    if (
+        u.has_permission('planned_coachings')
+        or u.has_permission('add_workshop')
+        or _can_view_others_planned_in_scope()
+    ):
+        open_planned_coachings_count = _count_open_planned_for_index()
 
     assigned_coachings_notify_count = 0
     if (
@@ -2714,81 +2777,172 @@ def open_planned_coachings_for_member():
 
 @bp.route('/geplante-coachings')
 @login_required
-@any_permission_required('planned_coachings', 'add_workshop')
+@any_permission_required(
+    'planned_coachings', 'add_workshop', 'assign_coachings', 'view_pl_qm_dashboard'
+)
 def planned_coachings_list():
     can_pc = current_user.has_permission('planned_coachings')
     can_pw = current_user.has_permission('add_workshop')
+    can_view_others = _can_view_others_planned_in_scope()
+    can_see_coaching_plans = can_pc or can_view_others
+    can_see_workshop_plans = can_pw or can_view_others
     acc = get_accessible_project_ids()
 
+    coaching_opts = (
+        joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
+        joinedload(PlannedCoaching.project),
+        joinedload(PlannedCoaching.team),
+        joinedload(PlannedCoaching.coach),
+    )
+
     items = []
-    if can_pc:
-        q = (
-            PlannedCoaching.query.filter(
-                PlannedCoaching.coach_id == current_user.id,
-                PlannedCoaching.status == 'open',
+    if can_see_coaching_plans:
+        parts_open = []
+        if can_pc:
+            mine_o = PlannedCoaching.coach_id == current_user.id
+            if acc is not None:
+                if len(acc) == 0:
+                    mine_o = and_(mine_o, false())
+                else:
+                    mine_o = and_(mine_o, PlannedCoaching.project_id.in_(acc))
+            parts_open.append(mine_o)
+        if can_view_others:
+            other_o = PlannedCoaching.coach_id != current_user.id
+            if acc is not None:
+                if len(acc) == 0:
+                    other_o = and_(other_o, false())
+                else:
+                    other_o = and_(other_o, PlannedCoaching.project_id.in_(acc))
+            parts_open.append(other_o)
+        if parts_open:
+            q = (
+                PlannedCoaching.query.filter(
+                    PlannedCoaching.status == 'open',
+                    or_(*parts_open),
+                )
+                .options(*coaching_opts)
+                .order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id)
             )
-            .options(
-                joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
-                joinedload(PlannedCoaching.project),
-                joinedload(PlannedCoaching.team),
-            )
-        )
-        if acc is not None:
-            q = q.filter(PlannedCoaching.project_id.in_(acc))
-        items = q.order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id).all()
+            items = q.all()
 
     workshop_items = []
     fulfilled_workshop_plans = []
-    if can_pw:
-        wq = PlannedWorkshop.query.filter(
-            PlannedWorkshop.coach_id == current_user.id,
-            PlannedWorkshop.status == 'open',
-        ).options(joinedload(PlannedWorkshop.project))
-        if acc is not None:
-            wq = wq.filter(or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)))
-        workshop_items = wq.order_by(PlannedWorkshop.planned_for_date, PlannedWorkshop.id).all()
+    if can_see_workshop_plans:
+        parts_wo = []
+        if can_pw:
+            mine_w = PlannedWorkshop.coach_id == current_user.id
+            if acc is not None:
+                if len(acc) == 0:
+                    mine_w = and_(mine_w, false())
+                else:
+                    mine_w = and_(
+                        mine_w,
+                        or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)),
+                    )
+            parts_wo.append(mine_w)
+        if can_view_others:
+            other_w = PlannedWorkshop.coach_id != current_user.id
+            if acc is not None:
+                if len(acc) == 0:
+                    other_w = and_(other_w, false())
+                else:
+                    other_w = and_(
+                        other_w,
+                        or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)),
+                    )
+            parts_wo.append(other_w)
+        if parts_wo:
+            wq = (
+                PlannedWorkshop.query.filter(
+                    PlannedWorkshop.status == 'open',
+                    or_(*parts_wo),
+                )
+                .options(joinedload(PlannedWorkshop.project), joinedload(PlannedWorkshop.coach))
+                .order_by(PlannedWorkshop.planned_for_date, PlannedWorkshop.id)
+            )
+            workshop_items = wq.all()
 
-        q_w_done = PlannedWorkshop.query.filter(
-            PlannedWorkshop.coach_id == current_user.id,
-            PlannedWorkshop.fulfilled_workshop_id.isnot(None),
-        ).options(
-            joinedload(PlannedWorkshop.project),
-            joinedload(PlannedWorkshop.fulfilled_workshop),
-        )
-        if acc is not None:
-            q_w_done = q_w_done.filter(or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)))
-        fulfilled_workshop_plans = q_w_done.all()
-        fulfilled_workshop_plans.sort(
-            key=lambda p: (
-                p.fulfilled_workshop.workshop_date if p.fulfilled_workshop else datetime.min,
-                p.id,
-            ),
-            reverse=True,
-        )
-        fulfilled_workshop_plans = fulfilled_workshop_plans[:100]
+        parts_wd = []
+        if can_pw:
+            mine_d = and_(
+                PlannedWorkshop.coach_id == current_user.id,
+                PlannedWorkshop.fulfilled_workshop_id.isnot(None),
+            )
+            if acc is not None:
+                if len(acc) == 0:
+                    mine_d = and_(mine_d, false())
+                else:
+                    mine_d = and_(
+                        mine_d,
+                        or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)),
+                    )
+            parts_wd.append(mine_d)
+        if can_view_others:
+            other_d = and_(
+                PlannedWorkshop.coach_id != current_user.id,
+                PlannedWorkshop.fulfilled_workshop_id.isnot(None),
+            )
+            if acc is not None:
+                if len(acc) == 0:
+                    other_d = and_(other_d, false())
+                else:
+                    other_d = and_(
+                        other_d,
+                        or_(PlannedWorkshop.project_id.in_(acc), PlannedWorkshop.project_id.is_(None)),
+                    )
+            parts_wd.append(other_d)
+        if parts_wd:
+            q_w_done = PlannedWorkshop.query.filter(or_(*parts_wd)).options(
+                joinedload(PlannedWorkshop.project),
+                joinedload(PlannedWorkshop.fulfilled_workshop),
+                joinedload(PlannedWorkshop.coach),
+            )
+            fulfilled_workshop_plans = q_w_done.all()
+            fulfilled_workshop_plans.sort(
+                key=lambda p: (
+                    p.fulfilled_workshop.workshop_date if p.fulfilled_workshop else datetime.min,
+                    p.id,
+                ),
+                reverse=True,
+            )
+            fulfilled_workshop_plans = fulfilled_workshop_plans[:100]
 
     fulfilled_plans = []
-    if can_pc:
-        q_done = PlannedCoaching.query.filter(
-            PlannedCoaching.coach_id == current_user.id,
-            PlannedCoaching.status == 'fulfilled',
-        ).options(
-            joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
-            joinedload(PlannedCoaching.project),
-            joinedload(PlannedCoaching.team),
-            joinedload(PlannedCoaching.fulfilled_coaching),
-        )
-        if acc is not None:
-            q_done = q_done.filter(PlannedCoaching.project_id.in_(acc))
-        fulfilled_plans = q_done.all()
-        fulfilled_plans.sort(
-            key=lambda p: (
-                p.fulfilled_coaching.coaching_date if p.fulfilled_coaching else datetime.min,
-                p.id,
-            ),
-            reverse=True,
-        )
-        fulfilled_plans = fulfilled_plans[:100]
+    if can_see_coaching_plans:
+        parts_done = []
+        if can_pc:
+            mine_done = PlannedCoaching.coach_id == current_user.id
+            if acc is not None:
+                if len(acc) == 0:
+                    mine_done = and_(mine_done, false())
+                else:
+                    mine_done = and_(mine_done, PlannedCoaching.project_id.in_(acc))
+            parts_done.append(and_(mine_done, PlannedCoaching.status == 'fulfilled'))
+        if can_view_others:
+            other_done = PlannedCoaching.coach_id != current_user.id
+            if acc is not None:
+                if len(acc) == 0:
+                    other_done = and_(other_done, false())
+                else:
+                    other_done = and_(other_done, PlannedCoaching.project_id.in_(acc))
+            parts_done.append(and_(other_done, PlannedCoaching.status == 'fulfilled'))
+        if parts_done:
+            q_done = (
+                PlannedCoaching.query.filter(or_(*parts_done))
+                .options(
+                    *coaching_opts,
+                    joinedload(PlannedCoaching.fulfilled_coaching),
+                )
+            )
+            fulfilled_plans = q_done.all()
+            fulfilled_plans.sort(
+                key=lambda p: (
+                    p.fulfilled_coaching.coaching_date if p.fulfilled_coaching else datetime.min,
+                    p.id,
+                ),
+                reverse=True,
+            )
+            fulfilled_plans = fulfilled_plans[:100]
 
     return render_template(
         'main/planned_coachings.html',
@@ -2797,6 +2951,9 @@ def planned_coachings_list():
         workshop_items=workshop_items,
         fulfilled_plans=fulfilled_plans,
         fulfilled_workshop_plans=fulfilled_workshop_plans,
+        can_view_others_planned=can_view_others,
+        can_see_coaching_plans=can_see_coaching_plans,
+        can_see_workshop_plans=can_see_workshop_plans,
         today_d=today_athens_date(),
         config=current_app.config,
     )
