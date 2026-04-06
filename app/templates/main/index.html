@@ -349,12 +349,12 @@
     }
     .coaching-mobile-expand-header {
         width: 100%;
-        min-height: 48px;
+        min-height: 56px;
         display: flex;
-        align-items: center;
+        align-items: stretch;
         justify-content: space-between;
-        gap: 10px;
-        padding: 12px 16px;
+        gap: 8px 10px;
+        padding: 12px 14px;
         border: none;
         background: transparent;
         color: inherit;
@@ -367,13 +367,55 @@
     .coaching-mobile-expand-header:active {
         background: rgba(255, 255, 255, 0.06);
     }
-    .coaching-mobile-expand-header .coaching-mobile-datum-text {
-        font-variant-numeric: tabular-nums;
-        flex: 1;
+    .coaching-mobile-expand-head-inner {
+        flex: 1 1 0;
         min-width: 0;
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        gap: 14px;
+    }
+    .coaching-mobile-expand-datum-col {
+        flex: 0 1 auto;
+        display: flex;
+        align-items: center;
+        min-width: 0;
+    }
+    .coaching-mobile-expand-datum-col .coaching-mobile-datum-text {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        line-height: 1.3;
+        font-size: 0.95rem;
+    }
+    .coaching-mobile-expand-names-col {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: flex-end;
+        text-align: right;
+        padding: 2px 0;
+        min-height: 48px;
+    }
+    .coaching-mobile-vorname {
+        font-weight: 600;
+        font-size: 0.95rem;
+        line-height: 1.2;
+        max-width: 100%;
+        word-break: break-word;
+    }
+    .coaching-mobile-nachname {
+        font-size: 0.85rem;
+        font-weight: 500;
+        opacity: 0.9;
+        line-height: 1.2;
+        max-width: 100%;
+        word-break: break-word;
     }
     .coaching-mobile-expand-header .coaching-mobile-chevron {
         flex-shrink: 0;
+        align-self: center;
         opacity: 0.75;
         transition: transform 0.2s ease;
     }
@@ -693,6 +735,15 @@
             {% set coached_self = coaching.team_member_coached and coaching.team_member_coached.user_id == current_user.id %}
             {% set dash_team_name = coaching.team_member_coached.team.name if coaching.team_member_coached and coaching.team_member_coached.team else 'N/A' %}
             {% set dash_member_name = coaching.team_member_coached.name if coaching.team_member_coached else 'N/A' %}
+            {% if dash_member_name != 'N/A' %}
+                {% set _full_name = dash_member_name|trim %}
+                {% set _name_parts = _full_name.split(' ', 1) %}
+                {% set dash_vorname = _name_parts[0] if _name_parts[0] else '—' %}
+                {% set dash_nachname = (_name_parts[1]|trim) if _name_parts|length > 1 and _name_parts[1] else '' %}
+            {% else %}
+                {% set dash_vorname = '—' %}
+                {% set dash_nachname = '' %}
+            {% endif %}
             {% set dash_coach_name = coaching.coach.coach_display_name if coaching.coach else 'N/A' %}
             {% set dash_thema = coaching.coaching_subject if coaching.coaching_subject else '-' %}
             {% set dash_stil = coaching.coaching_style if coaching.coaching_style else '-' %}
@@ -762,7 +813,15 @@
                         <button type="button" class="coaching-mobile-expand-header collapsed"
                                 data-toggle="collapse" data-target="#coachingMobileSummary{{ coaching.id }}"
                                 aria-expanded="false" aria-controls="coachingMobileSummary{{ coaching.id }}">
-                            <span class="coaching-mobile-datum-text">{{ coaching.coaching_date|athens_time }}</span>
+                            <div class="coaching-mobile-expand-head-inner">
+                                <div class="coaching-mobile-expand-datum-col">
+                                    <span class="coaching-mobile-datum-text">{{ coaching.coaching_date|athens_time }}</span>
+                                </div>
+                                <div class="coaching-mobile-expand-names-col">
+                                    <span class="coaching-mobile-vorname">{{ dash_vorname }}</span>
+                                    <span class="coaching-mobile-nachname">{% if dash_nachname %}{{ dash_nachname }}{% else %}&nbsp;{% endif %}</span>
+                                </div>
+                            </div>
                             <i class="fas fa-chevron-down coaching-mobile-chevron" aria-hidden="true"></i>
                         </button>
                         <div id="coachingMobileSummary{{ coaching.id }}" class="collapse coaching-mobile-expand-body">
