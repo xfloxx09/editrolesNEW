@@ -134,6 +134,7 @@ class Project(db.Model):
     assigned_users = db.relationship('User', secondary=user_projects, back_populates='projects')
     roles = db.relationship('Role', secondary=role_projects, back_populates='projects')
     leitfaden_items = db.relationship('LeitfadenItem', back_populates='project')
+    thema_items = db.relationship('CoachingThemaItem', back_populates='project')
 
 
 class Team(db.Model):
@@ -183,7 +184,7 @@ class Coaching(db.Model):
     coaching_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     coaching_style = db.Column(db.String(50), nullable=False)
     tcap_id = db.Column(db.String(100))
-    coaching_subject = db.Column(db.String(50))
+    coaching_subject = db.Column(db.String(120))
     leitfaden_begruessung = db.Column(db.String(10), default='k.A.')
     leitfaden_legitimation = db.Column(db.String(10), default='k.A.')
     leitfaden_pka = db.Column(db.String(10), default='k.A.')
@@ -264,6 +265,31 @@ class LeitfadenItem(db.Model):
 
     project = db.relationship('Project', back_populates='leitfaden_items')
     responses = db.relationship('CoachingLeitfadenResponse', back_populates='item')
+
+
+class CoachingThemaItem(db.Model):
+    """Selectable coaching topics (coaching_subject). NULL project_id = global defaults."""
+    __tablename__ = 'coaching_thema_items'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
+
+    project = db.relationship('Project', back_populates='thema_items')
+
+
+class CoachingBogenLayout(db.Model):
+    """Per-project or global (project_id NULL) layout flags for the Einzelcoaching form."""
+    __tablename__ = 'coaching_bogen_layouts'
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=True)
+    show_performance_bar = db.Column(db.Boolean, nullable=False, default=True)
+    show_coach_notes = db.Column(db.Boolean, nullable=False, default=True)
+    show_time_spent = db.Column(db.Boolean, nullable=False, default=True)
+    allow_side_by_side = db.Column(db.Boolean, nullable=False, default=True)
+    allow_tcap = db.Column(db.Boolean, nullable=False, default=True)
 
 
 class CoachingLeitfadenResponse(db.Model):

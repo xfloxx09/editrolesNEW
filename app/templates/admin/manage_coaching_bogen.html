@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="mb-3">Coaching-Bogen verwalten</h2>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="get" action="{{ url_for('admin.manage_coaching_bogen') }}" class="form-inline align-items-end flex-wrap gap-2">
+            <input type="hidden" name="tab" value="{{ active_tab }}">
+            <div class="form-group mr-3 mb-2 mb-md-0">
+                <label for="bogen-project-select" class="mr-2 font-weight-bold">Projekt-Kontext</label>
+                <select name="project" id="bogen-project-select" class="form-control" onchange="this.form.submit()">
+                    <option value="" {% if scope_project_id is none %}selected{% endif %}>Standard (global)</option>
+                    {% for p in all_projects %}
+                    <option value="{{ p.id }}" {% if scope_project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+        <p class="text-muted mb-0 mt-2 small">
+            Einstellungen gelten pro Kontext: <strong>Standard</strong> für alle Projekte ohne eigene Daten; bei <strong>Projekt</strong> überschreiben Sie den Leitfaden, die Themen und das Layout nur für dieses Projekt (wie beim Leitfaden üblich).
+        </p>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'leitfaden' %}active font-weight-bold{% endif %}" href="{{ url_for('admin.manage_coaching_bogen', tab='leitfaden', project=scope_project_id) if scope_project_id else url_for('admin.manage_coaching_bogen', tab='leitfaden') }}">Leitfaden</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'themen' %}active font-weight-bold{% endif %}" href="{{ url_for('admin.manage_coaching_bogen', tab='themen', project=scope_project_id) if scope_project_id else url_for('admin.manage_coaching_bogen', tab='themen') }}">Coaching-Themen</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'felder' %}active font-weight-bold{% endif %}" href="{{ url_for('admin.manage_coaching_bogen', tab='felder', project=scope_project_id) if scope_project_id else url_for('admin.manage_coaching_bogen', tab='felder') }}">Stil &amp; Felder</a>
+    </li>
+</ul>
+
+{% if active_tab == 'leitfaden' %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h4 class="mb-0 text-secondary">Leitfaden-Checkliste</h4>
+    <a href="{{ url_for('admin.create_leitfaden_item', project=scope_project_id) if scope_project_id else url_for('admin.create_leitfaden_item') }}" class="btn telekom-button btn-sm">+ Neuer Punkt</a>
+</div>
+
+{% if show_copy_from_standard_leitfaden and scope_project_id %}
+<div class="card mb-3 border-primary">
+    <div class="card-body py-3">
+        <form method="POST" action="{{ url_for('admin.copy_standard_leitfaden_to_project') }}" class="d-flex flex-wrap align-items-center gap-2" onsubmit="return confirm('Standard-Leitfaden in dieses Projekt kopieren?');">
+            <input type="hidden" name="project" value="{{ scope_project_id }}">
+            {{ csrf_token if csrf_token else '' }}
+            <span class="text-muted mr-2">Noch kein projektbezogener Leitfaden.</span>
+            <button type="submit" class="btn btn-outline-primary btn-sm">Standard übernehmen</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-body">
+        <p class="text-muted small">Punkte für die Einzelcoaching-Checkliste (Ja/Nein/k.A.).</p>
+        <table class="table table-sm">
+            <thead>
+                <tr><th style="width:80px;">Pos.</th><th>Bezeichnung</th><th style="width:120px;">Status</th><th style="width:220px;">Aktionen</th></tr>
+            </thead>
+            <tbody>
+                {% for item in leitfaden_items %}
+                <tr>
+                    <td>{{ item.position }}</td>
+                    <td>{{ item.name }}</td>
+                    <td>{% if item.is_active %}<span class="badge badge-success">Aktiv</span>{% else %}<span class="badge badge-secondary">Inaktiv</span>{% endif %}</td>
+                    <td>
+                        <a href="{{ url_for('admin.edit_leitfaden_item', item_id=item.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
+                        <form method="POST" action="{{ url_for('admin.delete_leitfaden_item', item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Wirklich löschen?');">
+                            {{ csrf_token if csrf_token else '' }}
+                            <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted">Keine Einträge.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif active_tab == 'themen' %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+    <h4 class="mb-0 text-secondary">Dropdown „Coaching-Thema“</h4>
+    <a href="{{ url_for('admin.create_thema_item', project=scope_project_id) if scope_project_id else url_for('admin.create_thema_item') }}" class="btn telekom-button btn-sm">+ Neues Thema</a>
+</div>
+
+{% if show_copy_from_standard_themen and scope_project_id %}
+<div class="card mb-3 border-primary">
+    <div class="card-body py-3">
+        <form method="POST" action="{{ url_for('admin.copy_standard_themen_to_project') }}" class="d-flex flex-wrap align-items-center gap-2" onsubmit="return confirm('Standard-Themen in dieses Projekt kopieren?');">
+            <input type="hidden" name="project" value="{{ scope_project_id }}">
+            {{ csrf_token if csrf_token else '' }}
+            <span class="text-muted mr-2">Noch keine projektbezogenen Themen.</span>
+            <button type="submit" class="btn btn-outline-primary btn-sm">Standard übernehmen</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-body">
+        <p class="text-muted small">Themen bestimmen die Auswahl im Coaching-Bogen. Ohne eigene Liste pro Projekt gelten die Standard-Themen.</p>
+        <table class="table table-sm">
+            <thead>
+                <tr><th style="width:80px;">Pos.</th><th>Bezeichnung</th><th style="width:120px;">Status</th><th style="width:220px;">Aktionen</th></tr>
+            </thead>
+            <tbody>
+                {% for item in themen_items %}
+                <tr>
+                    <td>{{ item.position }}</td>
+                    <td>{{ item.name }}</td>
+                    <td>{% if item.is_active %}<span class="badge badge-success">Aktiv</span>{% else %}<span class="badge badge-secondary">Inaktiv</span>{% endif %}</td>
+                    <td>
+                        <a href="{{ url_for('admin.edit_thema_item', item_id=item.id) }}" class="btn btn-sm btn-outline-secondary">Bearbeiten</a>
+                        <form method="POST" action="{{ url_for('admin.delete_thema_item', item_id=item.id) }}" style="display:inline;" onsubmit="return confirm('Wirklich löschen?');">
+                            {{ csrf_token if csrf_token else '' }}
+                            <button type="submit" class="btn btn-sm btn-danger">Löschen</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="text-center text-muted">Keine Themen. Legen Sie welche an oder (bei Projekt) übernehmen Sie den Standard.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% elif active_tab == 'felder' %}
+{% if layout_form %}
+<div class="card">
+    <div class="card-body">
+        <h4 class="text-secondary mb-3">Stil &amp; sichtbare Felder</h4>
+        <p class="text-muted small">Steuert den Einzelcoaching-Bogen für neue und bestehende Einträge in diesem Kontext. Deaktivierte Felder werden im Formular ausgeblendet (bestehende Werte in der Datenbank bleiben erhalten).</p>
+        <form method="POST" action="{{ url_for('admin.save_coaching_bogen_layout') }}">
+            {{ layout_form.hidden_tag() }}
+            <input type="hidden" name="project" value="{{ scope_project_id if scope_project_id else '' }}">
+            <div class="form-group form-check">
+                {{ layout_form.allow_side_by_side(class="form-check-input") }}
+                {{ layout_form.allow_side_by_side.label(class="form-check-label") }}
+            </div>
+            <div class="form-group form-check">
+                {{ layout_form.allow_tcap(class="form-check-input") }}
+                {{ layout_form.allow_tcap.label(class="form-check-label") }}
+            </div>
+            <hr>
+            <div class="form-group form-check">
+                {{ layout_form.show_performance_bar(class="form-check-input") }}
+                {{ layout_form.show_performance_bar.label(class="form-check-label") }}
+            </div>
+            <div class="form-group form-check">
+                {{ layout_form.show_coach_notes(class="form-check-input") }}
+                {{ layout_form.show_coach_notes.label(class="form-check-label") }}
+            </div>
+            <div class="form-group form-check">
+                {{ layout_form.show_time_spent(class="form-check-input") }}
+                {{ layout_form.show_time_spent.label(class="form-check-label") }}
+            </div>
+            <button type="submit" class="btn telekom-button">{{ layout_form.submit.label.text }}</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-warning">Layout-Einstellungen sind derzeit nicht verfügbar (Datenbank/Migration).</div>
+{% endif %}
+{% endif %}
+
+{% endblock %}

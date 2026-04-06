@@ -240,7 +240,7 @@
             <p class="text-muted mb-3">Klicken Sie auf die entsprechenden Icons, um den Status festzulegen.</p>
 
             {% if not leitfaden_items %}
-                <div class="alert alert-warning mb-0">Keine aktiven Leitfaden-Punkte vorhanden. Ein Admin kann diese unter Admin -> Leitfaden verwalten anlegen.</div>
+                <div class="alert alert-warning mb-0">Keine aktiven Leitfaden-Punkte vorhanden. Ein Admin kann diese unter <strong>Admin → Coaching-Bogen verwalten</strong> (Tab Leitfaden) anlegen.</div>
             {% endif %}
             {% for item in leitfaden_items %}
                 {% set current_value = selected_leitfaden_values.get(item.id, 'k.A.') %}
@@ -261,18 +261,24 @@
         </div>
 
         <!-- Abschnitt 4: Bewertung & Zeitaufwand -->
+        {% if bogen_layout.show_performance_bar or bogen_layout.show_time_spent %}
         <div class="form-section">
-            <h4 class="section-title"><i class="fas fa-star"></i> Bewertung & Zeitaufwand</h4>
+            <h4 class="section-title"><i class="fas fa-star"></i> Bewertung &amp; Zeitaufwand</h4>
             <div class="form-row">
+                {% if bogen_layout.show_performance_bar %}
                 <div class="form-group col-md-6">
                     {{ form.performance_mark.label(class="form-control-label") }}
-                    <input type="range" id="performance_slider" class="rating-slider" min="0" max="10" step="1" value="{{ form.performance_mark.data or 5 }}">
-                    <div class="rating-value"><span id="performance_display">{{ form.performance_mark.data or 5 }}</span> / 10</div>
+                    <input type="range" id="performance_slider" class="rating-slider" min="0" max="10" step="1" value="{{ form.performance_mark.data if form.performance_mark.data is not none else (coaching.performance_mark if is_edit_mode|default(false) and coaching else 5) }}">
+                    <div class="rating-value"><span id="performance_display">{{ form.performance_mark.data if form.performance_mark.data is not none else (coaching.performance_mark if is_edit_mode|default(false) and coaching else 5) }}</span> / 10</div>
                     {{ form.performance_mark(class="form-control d-none", id="performance_mark_hidden") }}
                     {% if form.performance_mark.errors %}
                         <div class="invalid-feedback d-block">{% for error in form.performance_mark.errors %}{{ error }}{% endfor %}</div>
                     {% endif %}
                 </div>
+                {% else %}
+                <input type="hidden" name="performance_mark" id="performance_mark_hidden" value="{{ form.performance_mark.data if form.performance_mark.data is not none else (coaching.performance_mark if is_edit_mode|default(false) and coaching else 5) }}">
+                {% endif %}
+                {% if bogen_layout.show_time_spent %}
                 <div class="form-group col-md-6">
                     {{ form.time_spent.label(class="form-control-label") }}
                     <div class="time-spent-wrapper">
@@ -283,10 +289,18 @@
                         <div class="invalid-feedback d-block">{% for error in form.time_spent.errors %}{{ error }}{% endfor %}</div>
                     {% endif %}
                 </div>
+                {% else %}
+                <input type="hidden" name="time_spent" id="time_spent_input" value="{{ form.time_spent.data if form.time_spent.data else (coaching.time_spent if is_edit_mode|default(false) and coaching else 30) }}">
+                {% endif %}
             </div>
         </div>
+        {% else %}
+        <input type="hidden" name="performance_mark" value="{{ form.performance_mark.data if form.performance_mark.data is not none else (coaching.performance_mark if is_edit_mode|default(false) and coaching else 5) }}">
+        <input type="hidden" name="time_spent" value="{{ form.time_spent.data if form.time_spent.data else (coaching.time_spent if is_edit_mode|default(false) and coaching else 30) }}">
+        {% endif %}
 
         <!-- Abschnitt 5: Notizen -->
+        {% if bogen_layout.show_coach_notes %}
         <div class="form-section">
             <h4 class="section-title"><i class="fas fa-pen"></i> Notizen</h4>
             <div class="form-group">
@@ -297,6 +311,9 @@
                 {% endif %}
             </div>
         </div>
+        {% else %}
+        <input type="hidden" name="coach_notes" value="{{ form.coach_notes.data or '' }}">
+        {% endif %}
 
         <!-- Buttons -->
         <div class="form-group text-center">

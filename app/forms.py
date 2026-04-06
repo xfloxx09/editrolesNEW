@@ -7,7 +7,7 @@ from flask_login import current_user
 from sqlalchemy import false, or_
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem, Abteilung
+from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem, CoachingThemaItem, Abteilung
 from app.utils import (
     ARCHIV_TEAM_NAME,
     ROLE_TEAMLEITER,
@@ -270,6 +270,35 @@ class CoachingForm(FlaskForm):
         ).all()
         self.assigned_coaching_id.choices = [(0, '--- Keine zugewiesene Aufgabe ---')] + [(a.id, f"Aufgabe #{a.id} (bis {a.deadline.strftime('%d.%m.%y')}) – Fortschritt: {a.progress}%") for a in assignments]
 
+    def apply_bogen(self, project_id, coaching=None):
+        """Set coaching style & subject choices from project bogen config and Thema-Liste."""
+        from app.utils import bogen_layout_for_project, thema_items_for_project
+
+        layout = bogen_layout_for_project(project_id)
+        style_choices = []
+        if getattr(layout, 'allow_side_by_side', True):
+            style_choices.append(('Side-by-Side', 'Side-by-Side'))
+        if getattr(layout, 'allow_tcap', True):
+            style_choices.append(('TCAP', 'TCAP'))
+        if not style_choices:
+            style_choices = [('Side-by-Side', 'Side-by-Side'), ('TCAP', 'TCAP')]
+        cur_style = coaching.coaching_style if coaching and coaching.coaching_style else None
+        if cur_style and not any(cur_style == x[0] for x in style_choices):
+            style_choices.append((cur_style, cur_style))
+        self.coaching_style.choices = style_choices
+
+        themes = thema_items_for_project(project_id)
+        subj = [('', '--- Bitte wählen ---')]
+        if themes:
+            for t in themes:
+                subj.append((t.name, t.name))
+        else:
+            subj.extend([x for x in COACHING_SUBJECT_CHOICES if x[0]])
+        cur_sub = (coaching.coaching_subject or '').strip() if coaching and coaching.coaching_subject else None
+        if cur_sub and not any(cur_sub == x[0] for x in subj):
+            subj.append((cur_sub, cur_sub))
+        self.coaching_subject.choices = subj
+
 
 class PasswordChangeForm(FlaskForm):
     old_password = PasswordField('Aktuelles Passwort', validators=[DataRequired("Bitte aktuelles Passwort eingeben.")])
@@ -474,6 +503,48 @@ class LeitfadenItemForm(FlaskForm):
             return
         if query.first():
             raise ValidationError('Diese Leitfaden-Bezeichnung existiert bereits (in diesem Kontext).')
+
+
+class CoachingThemaItemForm(FlaskForm):
+    name = StringField('Bezeichnung', validators=[DataRequired(), Length(min=2, max=120)])
+    position = IntegerField('Position', validators=[DataRequired(), NumberRange(min=0, max=9999)])
+    is_active = BooleanField('Aktiv', default=True)
+    submit = SubmitField('Speichern')
+
+    def __init__(self, original_name=None, scope_project_id=None, *args, **kwargs):
+        super(CoachingThemaItemForm, self).__init__(*args, **kwargs)
+        self.original_name = original_name
+        self.scope_project_id = scope_project_id
+
+    def validate_name(self, field):
+        name = (field.data or '').strip()
+        query = CoachingThemaItem.query.filter(db.func.lower(CoachingThemaItem.name) == name.lower())
+        if self.scope_project_id is None:
+            query = query.filter(CoachingThemaItem.project_id.is_(None))
+        else:
+            query = query.filter(CoachingThemaItem.project_id == self.scope_project_id)
+        if self.original_name and self.original_name.strip().lower() == name.lower():
+            return
+        if query.first():
+            raise ValidationError('Diese Thema-Bezeichnung existiert bereits (in diesem Kontext).')
+
+
+class CoachingBogenLayoutForm(FlaskForm):
+    allow_side_by_side = BooleanField('Coaching-Stil „Side-by-Side“ anbieten', default=True)
+    allow_tcap = BooleanField('Coaching-Stil „TCAP“ anbieten', default=True)
+    show_performance_bar = BooleanField('Performance-Balken (Note 0–10) im Bogen anzeigen', default=True)
+    show_coach_notes = BooleanField('Notizen-Feld im Bogen anzeigen', default=True)
+    show_time_spent = BooleanField('Zeitaufwand (Minuten) im Bogen anzeigen', default=True)
+    submit = SubmitField('Speichern')
+
+    def validate(self, extra_validators=None):
+        rv = super(CoachingBogenLayoutForm, self).validate(extra_validators)
+        if not rv:
+            return False
+        if not self.allow_side_by_side.data and not self.allow_tcap.data:
+            self.allow_tcap.errors.append('Mindestens ein Coaching-Stil muss aktiv sein.')
+            return False
+        return True
 
 
 class CoachingReviewForm(FlaskForm):

@@ -5,9 +5,9 @@ from sqlalchemy import desc, or_, false
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung
-from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm, AbteilungForm
-from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung, leitfaden_items_for_coaching_edit
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung, CoachingThemaItem, CoachingBogenLayout
+from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm, AbteilungForm, CoachingThemaItemForm, CoachingBogenLayoutForm
+from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung, leitfaden_items_for_coaching_edit, bogen_layout_for_project
 from app.main_routes import calculate_date_range, get_month_name_german
 from datetime import datetime, timezone, time
 import csv
@@ -1136,6 +1136,7 @@ def edit_coaching_entry(coaching_id):
     coaching_to_edit = Coaching.query.get_or_404(coaching_id)
     form = CoachingForm(obj=coaching_to_edit, current_user_role=current_user.role_name, current_user_team_ids=[])
     form.update_team_member_choices(exclude_archiv=False, project_id=coaching_to_edit.project_id)
+    form.apply_bogen(coaching_to_edit.project_id, coaching=coaching_to_edit)
     leitfaden_items = leitfaden_items_for_coaching_edit(coaching_to_edit)
     selected_leitfaden_values = {}
     if leitfaden_items:
@@ -1168,6 +1169,8 @@ def edit_coaching_entry(coaching_id):
     elif request.method == 'GET':
         form.team_member_id.data = coaching_to_edit.team_member_id
 
+    bogen_layout = bogen_layout_for_project(coaching_to_edit.project_id)
+
     tcap_js_for_edit = """document.addEventListener('DOMContentLoaded', function() {
     var styleSelect = document.getElementById('coaching_style');
     var tcapField = document.getElementById('tcap_id_field');
@@ -1195,6 +1198,7 @@ def edit_coaching_entry(coaching_id):
                             coaching=coaching_to_edit,
                             leitfaden_items=leitfaden_items,
                             selected_leitfaden_values=selected_leitfaden_values,
+                            bogen_layout=bogen_layout,
                             tcap_js=tcap_js_for_edit,
                             config=current_app.config)
 
@@ -1471,41 +1475,151 @@ def _leitfaden_create_scope_from_request():
 
 
 def _redirect_manage_leitfaden(project_id=None):
+    kw = {'tab': 'leitfaden'}
     if project_id:
-        return redirect(url_for('admin.manage_leitfaden', project=project_id))
-    return redirect(url_for('admin.manage_leitfaden'))
+        kw['project'] = project_id
+    return redirect(url_for('admin.manage_coaching_bogen', **kw))
+
+
+def _redirect_manage_themen(project_id=None):
+    kw = {'tab': 'themen'}
+    if project_id:
+        kw['project'] = project_id
+    return redirect(url_for('admin.manage_coaching_bogen', **kw))
+
+
+def _coaching_bogen_url(tab, project_id=None):
+    kw = {'tab': tab}
+    if project_id:
+        kw['project'] = project_id
+    return url_for('admin.manage_coaching_bogen', **kw)
+
+
+def get_or_create_bogen_layout(scope_project_id):
+    if scope_project_id is not None:
+        q = CoachingBogenLayout.query.filter_by(project_id=scope_project_id)
+    else:
+        q = CoachingBogenLayout.query.filter(CoachingBogenLayout.project_id.is_(None))
+    row = q.first()
+    if row:
+        return row
+    row = CoachingBogenLayout(
+        project_id=scope_project_id,
+        show_performance_bar=True,
+        show_coach_notes=True,
+        show_time_spent=True,
+        allow_side_by_side=True,
+        allow_tcap=True,
+    )
+    db.session.add(row)
+    db.session.commit()
+    return row
+
+
+def _thema_create_scope_from_request():
+    raw = request.form.get('project') if request.method == 'POST' else request.args.get('project')
+    return _parse_raw_leitfaden_project(raw, abort_on_invalid=True)
+
+
+@bp.route('/coaching-bogen')
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def manage_coaching_bogen():
+    scope_project_id, _ = _parse_leitfaden_project_param(abort_on_invalid=False)
+    tab = request.args.get('tab', 'leitfaden')
+    if tab not in ('leitfaden', 'themen', 'felder'):
+        tab = 'leitfaden'
+
+    all_projects = Project.query.order_by(Project.name).all()
+
+    leitfaden_items = []
+    show_copy_leitfaden = False
+    themen_items = []
+    show_copy_themen = False
+    layout_form = None
+
+    try:
+        if tab == 'leitfaden':
+            if scope_project_id is None:
+                q = LeitfadenItem.query.filter(LeitfadenItem.project_id.is_(None))
+            else:
+                q = LeitfadenItem.query.filter_by(project_id=scope_project_id)
+            leitfaden_items = q.order_by(LeitfadenItem.position, LeitfadenItem.id).all()
+            show_copy_leitfaden = bool(
+                scope_project_id
+                and LeitfadenItem.query.filter_by(project_id=scope_project_id).count() == 0
+            )
+        elif tab == 'themen':
+            if scope_project_id is None:
+                q = CoachingThemaItem.query.filter(CoachingThemaItem.project_id.is_(None))
+            else:
+                q = CoachingThemaItem.query.filter_by(project_id=scope_project_id)
+            themen_items = q.order_by(CoachingThemaItem.position, CoachingThemaItem.id).all()
+            show_copy_themen = bool(
+                scope_project_id
+                and CoachingThemaItem.query.filter_by(project_id=scope_project_id).count() == 0
+            )
+        else:
+            layout = get_or_create_bogen_layout(scope_project_id)
+            layout_form = CoachingBogenLayoutForm(obj=layout)
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Datenbank-Tabellen für den Coaching-Bogen fehlen ggf. noch. Bitte Migration ausführen.', 'warning')
+
+    return render_template(
+        'admin/manage_coaching_bogen.html',
+        active_tab=tab,
+        all_projects=all_projects,
+        scope_project_id=scope_project_id,
+        leitfaden_items=leitfaden_items,
+        show_copy_from_standard_leitfaden=show_copy_leitfaden,
+        themen_items=themen_items,
+        show_copy_from_standard_themen=show_copy_themen,
+        layout_form=layout_form,
+        config=current_app.config,
+    )
+
+
+@bp.route('/coaching-bogen/layout', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def save_coaching_bogen_layout():
+    scope_project_id, _ = _parse_raw_leitfaden_project(request.form.get('project'), abort_on_invalid=False)
+    form = CoachingBogenLayoutForm()
+    if not form.validate_on_submit():
+        for err in form.errors.values():
+            for e in err:
+                flash(e, 'danger')
+        kw = {'tab': 'felder'}
+        if scope_project_id:
+            kw['project'] = scope_project_id
+        return redirect(url_for('admin.manage_coaching_bogen', **kw))
+    try:
+        layout = get_or_create_bogen_layout(scope_project_id)
+        layout.allow_side_by_side = form.allow_side_by_side.data
+        layout.allow_tcap = form.allow_tcap.data
+        layout.show_performance_bar = form.show_performance_bar.data
+        layout.show_coach_notes = form.show_coach_notes.data
+        layout.show_time_spent = form.show_time_spent.data
+        db.session.commit()
+        flash('Layout des Coaching-Bogens gespeichert.', 'success')
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Layout konnte nicht gespeichert werden.', 'danger')
+    kw = {'tab': 'felder'}
+    if scope_project_id:
+        kw['project'] = scope_project_id
+    return redirect(url_for('admin.manage_coaching_bogen', **kw))
 
 
 @bp.route('/leitfaden')
 @login_required
 @role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
 def manage_leitfaden():
-    scope_project_id, _ = _parse_leitfaden_project_param(abort_on_invalid=False)
-    all_projects = []
-    try:
-        all_projects = Project.query.order_by(Project.name).all()
-        if scope_project_id is None:
-            q = LeitfadenItem.query.filter(LeitfadenItem.project_id.is_(None))
-        else:
-            q = LeitfadenItem.query.filter_by(project_id=scope_project_id)
-        items = q.order_by(LeitfadenItem.position, LeitfadenItem.id).all()
-        show_copy_from_standard = bool(
-            scope_project_id
-            and LeitfadenItem.query.filter_by(project_id=scope_project_id).count() == 0
-        )
-    except SQLAlchemyError:
-        db.session.rollback()
-        flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
-        items = []
-        show_copy_from_standard = False
-    return render_template(
-        'admin/manage_leitfaden.html',
-        items=items,
-        all_projects=all_projects,
-        scope_project_id=scope_project_id,
-        show_copy_from_standard=show_copy_from_standard,
-        config=current_app.config,
-    )
+    kw = {'tab': 'leitfaden'}
+    if request.args.get('project'):
+        kw['project'] = request.args.get('project')
+    return redirect(url_for('admin.manage_coaching_bogen', **kw))
 
 
 @bp.route('/leitfaden/copy_standard', methods=['POST'])
@@ -1577,11 +1691,7 @@ def create_leitfaden_item():
         db.session.commit()
         flash('Leitfaden-Punkt erstellt.', 'success')
         return _redirect_manage_leitfaden(scope_project_id)
-    leitfaden_list_url = (
-        url_for('admin.manage_leitfaden', project=scope_project_id)
-        if scope_project_id
-        else url_for('admin.manage_leitfaden')
-    )
+    leitfaden_list_url = _coaching_bogen_url('leitfaden', scope_project_id)
     return render_template(
         'admin/edit_leitfaden_item.html',
         form=form,
@@ -1611,11 +1721,7 @@ def edit_leitfaden_item(item_id):
         db.session.commit()
         flash('Leitfaden-Punkt aktualisiert.', 'success')
         return _redirect_manage_leitfaden(item.project_id)
-    leitfaden_list_url = (
-        url_for('admin.manage_leitfaden', project=item.project_id)
-        if item.project_id
-        else url_for('admin.manage_leitfaden')
-    )
+    leitfaden_list_url = _coaching_bogen_url('leitfaden', item.project_id)
     return render_template(
         'admin/edit_leitfaden_item.html',
         form=form,
@@ -1642,6 +1748,135 @@ def delete_leitfaden_item(item_id):
         db.session.rollback()
         flash('Leitfaden-Tabellen fehlen noch in der Datenbank. Bitte zuerst Migration ausführen: flask db upgrade', 'warning')
     return _redirect_manage_leitfaden()
+
+
+@bp.route('/coaching-bogen/themen/copy_standard', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def copy_standard_themen_to_project():
+    project_id = request.form.get('project', type=int)
+    if not project_id or not Project.query.get(project_id):
+        flash('Ungültiges Projekt.', 'danger')
+        return _redirect_manage_themen()
+    if CoachingThemaItem.query.filter_by(project_id=project_id).count() > 0:
+        flash('Dieses Projekt hat bereits eigene Themen.', 'info')
+        return _redirect_manage_themen(project_id)
+    try:
+        standard = (
+            CoachingThemaItem.query.filter(CoachingThemaItem.project_id.is_(None))
+            .order_by(CoachingThemaItem.position, CoachingThemaItem.id)
+            .all()
+        )
+        if not standard:
+            flash('Es gibt keine Standard-Themen zum Kopieren.', 'warning')
+            return _redirect_manage_themen(project_id)
+        for src in standard:
+            db.session.add(
+                CoachingThemaItem(
+                    name=src.name,
+                    position=src.position,
+                    is_active=src.is_active,
+                    project_id=project_id,
+                )
+            )
+        db.session.commit()
+        flash(f'{len(standard)} Thema/Themen aus dem Standard übernommen.', 'success')
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Themen konnten nicht kopiert werden.', 'danger')
+    return _redirect_manage_themen(project_id)
+
+
+@bp.route('/coaching-bogen/themen/create', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def create_thema_item():
+    scope_project_id, bad = _thema_create_scope_from_request()
+    if bad:
+        return _redirect_manage_themen()
+    form = CoachingThemaItemForm(scope_project_id=scope_project_id)
+    if request.method == 'GET' and form.position.data is None:
+        try:
+            q = CoachingThemaItem.query
+            if scope_project_id is None:
+                q = q.filter(CoachingThemaItem.project_id.is_(None))
+            else:
+                q = q.filter_by(project_id=scope_project_id)
+            last_item = q.order_by(CoachingThemaItem.position.desc(), CoachingThemaItem.id.desc()).first()
+            form.position.data = (last_item.position + 1) if last_item else 1
+        except SQLAlchemyError:
+            db.session.rollback()
+            flash('Themen-Tabelle fehlt ggf. noch. Bitte Migration ausführen.', 'warning')
+            return _redirect_manage_themen(scope_project_id)
+    if form.validate_on_submit():
+        db.session.add(
+            CoachingThemaItem(
+                name=form.name.data.strip(),
+                position=form.position.data,
+                is_active=form.is_active.data,
+                project_id=scope_project_id,
+            )
+        )
+        db.session.commit()
+        flash('Thema angelegt.', 'success')
+        return _redirect_manage_themen(scope_project_id)
+    thema_list_url = _coaching_bogen_url('themen', scope_project_id)
+    return render_template(
+        'admin/edit_thema_item.html',
+        form=form,
+        title='Coaching-Thema anlegen',
+        item=None,
+        scope_project_id=scope_project_id,
+        thema_list_url=thema_list_url,
+        config=current_app.config,
+    )
+
+
+@bp.route('/coaching-bogen/themen/edit/<int:item_id>', methods=['GET', 'POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def edit_thema_item(item_id):
+    try:
+        item = CoachingThemaItem.query.get_or_404(item_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Themen-Tabelle fehlt ggf. noch.', 'warning')
+        return _redirect_manage_themen()
+    form = CoachingThemaItemForm(obj=item, original_name=item.name, scope_project_id=item.project_id)
+    if form.validate_on_submit():
+        item.name = form.name.data.strip()
+        item.position = form.position.data
+        item.is_active = form.is_active.data
+        db.session.commit()
+        flash('Thema aktualisiert.', 'success')
+        return _redirect_manage_themen(item.project_id)
+    thema_list_url = _coaching_bogen_url('themen', item.project_id)
+    return render_template(
+        'admin/edit_thema_item.html',
+        form=form,
+        title='Coaching-Thema bearbeiten',
+        item=item,
+        scope_project_id=item.project_id,
+        thema_list_url=thema_list_url,
+        config=current_app.config,
+    )
+
+
+@bp.route('/coaching-bogen/themen/delete/<int:item_id>', methods=['POST'])
+@login_required
+@role_required([ROLE_ADMIN, ROLE_BETRIEBSLEITER])
+def delete_thema_item(item_id):
+    try:
+        item = CoachingThemaItem.query.get_or_404(item_id)
+        scope_pid = item.project_id
+        db.session.delete(item)
+        db.session.commit()
+        flash('Thema gelöscht.', 'success')
+        return _redirect_manage_themen(scope_pid)
+    except SQLAlchemyError:
+        db.session.rollback()
+        flash('Thema konnte nicht gelöscht werden.', 'danger')
+    return _redirect_manage_themen()
 
 
 # --- Assigned Coachings Management (Admin) ---

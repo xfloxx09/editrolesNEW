@@ -389,6 +389,94 @@ def create_app(config_class=Config):
                     conn.rollback()
                     print(f"ℹ️ leitfaden_items.project_id: {e}")
 
+        # 15. Coaching-Bogen: Themen, Layout, coaching_subject Länge
+        inspector = inspect(db.engine)
+        if 'coaching_thema_items' not in inspector.get_table_names():
+            try:
+                conn.execute(text(
+                    'CREATE TABLE coaching_thema_items ('
+                    'id SERIAL PRIMARY KEY, '
+                    'name VARCHAR(120) NOT NULL, '
+                    '"position" INTEGER NOT NULL DEFAULT 0, '
+                    'is_active BOOLEAN NOT NULL DEFAULT true, '
+                    'created_at TIMESTAMP NOT NULL DEFAULT NOW(), '
+                    'project_id INTEGER REFERENCES projects(id))'
+                ))
+                conn.commit()
+                print("✅ Tabelle coaching_thema_items erstellt.")
+            except Exception as e:
+                conn.rollback()
+                print(f"ℹ️ coaching_thema_items: {e}")
+        if 'coaching_bogen_layouts' not in inspector.get_table_names():
+            try:
+                conn.execute(text(
+                    'CREATE TABLE coaching_bogen_layouts ('
+                    'id SERIAL PRIMARY KEY, '
+                    'project_id INTEGER REFERENCES projects(id), '
+                    'show_performance_bar BOOLEAN NOT NULL DEFAULT true, '
+                    'show_coach_notes BOOLEAN NOT NULL DEFAULT true, '
+                    'show_time_spent BOOLEAN NOT NULL DEFAULT true, '
+                    'allow_side_by_side BOOLEAN NOT NULL DEFAULT true, '
+                    'allow_tcap BOOLEAN NOT NULL DEFAULT true)'
+                ))
+                conn.commit()
+                print("✅ Tabelle coaching_bogen_layouts erstellt.")
+            except Exception as e:
+                conn.rollback()
+                print(f"ℹ️ coaching_bogen_layouts: {e}")
+        inspector = inspect(db.engine)
+        if 'coachings' in inspector.get_table_names():
+            cc = [c['name'] for c in inspector.get_columns('coachings')]
+            if 'coaching_subject' in cc:
+                try:
+                    conn.execute(text('ALTER TABLE coachings ALTER COLUMN coaching_subject TYPE VARCHAR(120)'))
+                    conn.commit()
+                    print("✅ coachings.coaching_subject auf VARCHAR(120) erweitert.")
+                except Exception as e:
+                    conn.rollback()
+                    try:
+                        conn.execute(text(
+                            'ALTER TABLE coachings MODIFY coaching_subject VARCHAR(120)'
+                        ))
+                        conn.commit()
+                        print("✅ coachings.coaching_subject erweitert (Fallback).")
+                    except Exception as e2:
+                        conn.rollback()
+                        print(f"ℹ️ coachings.coaching_subject: {e} / {e2}")
+        try:
+            if 'coaching_bogen_layouts' in inspect(db.engine).get_table_names():
+                r = conn.execute(text('SELECT COUNT(*) FROM coaching_bogen_layouts WHERE project_id IS NULL')).fetchone()
+                cnt_layout = r[0] if r else 0
+            else:
+                cnt_layout = 1
+            if cnt_layout == 0:
+                conn.execute(text(
+                    'INSERT INTO coaching_bogen_layouts '
+                    '(project_id, show_performance_bar, show_coach_notes, show_time_spent, allow_side_by_side, allow_tcap) '
+                    'VALUES (NULL, true, true, true, true, true)'
+                ))
+                conn.commit()
+                print("✅ Standard coaching_bogen_layouts (global) eingefügt.")
+        except Exception as e:
+            conn.rollback()
+            print(f"ℹ️ coaching_bogen_layouts seed: {e}")
+        try:
+            if 'coaching_thema_items' in inspect(db.engine).get_table_names():
+                r2 = conn.execute(text('SELECT COUNT(*) FROM coaching_thema_items')).fetchone()
+                cnt_t = r2[0] if r2 else 0
+            else:
+                cnt_t = 1
+            if cnt_t == 0:
+                conn.execute(text(
+                    "INSERT INTO coaching_thema_items (name, \"position\", is_active, project_id) VALUES "
+                    "('Sales', 1, true, NULL), ('Qualität', 2, true, NULL), ('Allgemein', 3, true, NULL)"
+                ))
+                conn.commit()
+                print("✅ Standard coaching_thema_items eingefügt.")
+        except Exception as e:
+            conn.rollback()
+            print(f"ℹ️ coaching_thema_items seed: {e}")
+
         print("--- Migration abgeschlossen ---")
 
     # --- Blueprint registration ---

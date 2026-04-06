@@ -3,7 +3,7 @@ from flask_login import current_user
 from flask import flash, redirect, url_for
 from sqlalchemy.exc import SQLAlchemyError
 from app import db
-from app.models import Team, Project, Role, TeamMember, User, LeitfadenItem
+from app.models import Team, Project, Role, TeamMember, User, LeitfadenItem, CoachingThemaItem, CoachingBogenLayout
 
 ROLE_ADMIN = 'Admin'
 ROLE_BETRIEBSLEITER = 'Betriebsleiter'
@@ -77,6 +77,66 @@ def leitfaden_items_for_coaching_edit(coaching):
         db.session.rollback()
     extra.sort(key=lambda x: (x.position, x.id))
     return base + extra
+
+
+class DefaultCoachingBogenLayout:
+    """Fallback when DB has no layout row yet (before migration)."""
+    show_performance_bar = True
+    show_coach_notes = True
+    show_time_spent = True
+    allow_side_by_side = True
+    allow_tcap = True
+
+
+def thema_items_for_project(project_id):
+    """Active coaching topic choices; same project vs. global fallback as Leitfaden."""
+    if project_id is None:
+        try:
+            return (
+                CoachingThemaItem.query.filter(
+                    CoachingThemaItem.is_active.is_(True),
+                    CoachingThemaItem.project_id.is_(None),
+                )
+                .order_by(CoachingThemaItem.position, CoachingThemaItem.id)
+                .all()
+            )
+        except SQLAlchemyError:
+            db.session.rollback()
+            return []
+    try:
+        scoped = (
+            CoachingThemaItem.query.filter_by(is_active=True, project_id=project_id)
+            .order_by(CoachingThemaItem.position, CoachingThemaItem.id)
+            .all()
+        )
+        if scoped:
+            return scoped
+        return (
+            CoachingThemaItem.query.filter(
+                CoachingThemaItem.is_active.is_(True),
+                CoachingThemaItem.project_id.is_(None),
+            )
+            .order_by(CoachingThemaItem.position, CoachingThemaItem.id)
+            .all()
+        )
+    except SQLAlchemyError:
+        db.session.rollback()
+        return []
+
+
+def bogen_layout_for_project(project_id):
+    """Project-specific layout row, else global row, else in-memory defaults."""
+    try:
+        if project_id is not None:
+            row = CoachingBogenLayout.query.filter_by(project_id=project_id).first()
+            if row:
+                return row
+        row = CoachingBogenLayout.query.filter(CoachingBogenLayout.project_id.is_(None)).first()
+        if row:
+            return row
+    except SQLAlchemyError:
+        db.session.rollback()
+    return DefaultCoachingBogenLayout()
 
 
 def user_is_archived_only_for_login(user):

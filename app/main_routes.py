@@ -8,6 +8,7 @@ from app import db
 from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, AssignedCoaching, CoachingLeitfadenResponse, CoachingReview
 from app.forms import CoachingForm, WorkshopForm, PasswordChangeForm, CoachingReviewForm, AssignedCoachingForm
 from app.utils import (
+    bogen_layout_for_project,
     role_required,
     permission_required,
     any_permission_required,
@@ -1083,7 +1084,9 @@ def add_coaching():
     )
     form = CoachingForm(current_user_role=current_user_role, current_user_team_ids=current_user_team_ids)
     form.update_team_member_choices(exclude_archiv=True, project_id=project_id)
+    form.apply_bogen(project_id)
     leitfaden_items = leitfaden_items_for_project(project_id)
+    bogen_layout = bogen_layout_for_project(project_id)
 
     if form.validate_on_submit():
         team_member = TeamMember.query.get(form.team_member_id.data)
@@ -1097,6 +1100,9 @@ def add_coaching():
             flash('Dieses Team ist für neue Coachings deaktiviert. Wählen Sie ein anderes Teammitglied.', 'danger')
             return redirect(url_for('main.add_coaching', project=project_id))
 
+        if form.coaching_style.data == 'TCAP' and not getattr(bogen_layout, 'allow_tcap', True):
+            flash('TCAP ist für dieses Projekt nicht freigegeben.', 'danger')
+            return redirect(url_for('main.add_coaching', project=project_id))
         coaching = Coaching(
             team_member_id=form.team_member_id.data,
             coach_id=current_user.id,
@@ -1166,6 +1172,7 @@ def add_coaching():
         coaching_projects=coaching_projects,
         selected_coaching_project_id=project_id,
         show_coaching_project_picker=show_coaching_project_picker,
+        bogen_layout=bogen_layout,
         config=current_app.config
     )
 
@@ -1190,6 +1197,8 @@ def edit_coaching(coaching_id):
         project_id=coaching.project_id,
         include_member_ids=[coaching.team_member_id],
     )
+    form.apply_bogen(coaching.project_id, coaching=coaching)
+    bogen_layout = bogen_layout_for_project(coaching.project_id)
     leitfaden_items = leitfaden_items_for_coaching_edit(coaching)
     selected_leitfaden_values = {}
     if leitfaden_items:
@@ -1203,6 +1212,9 @@ def edit_coaching(coaching_id):
         tm_new = TeamMember.query.get(form.team_member_id.data)
         if not tm_new or not team_member_eligible_for_new_coaching(tm_new):
             flash('Ungültiges Teammitglied oder Team für neue Coachings deaktiviert.', 'danger')
+            return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
+        if form.coaching_style.data == 'TCAP' and not getattr(bogen_layout, 'allow_tcap', True):
+            flash('TCAP ist für dieses Projekt nicht freigegeben.', 'danger')
             return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
         prev_assigned_id = coaching.assigned_coaching_id
         form.populate_obj(coaching)
@@ -1232,6 +1244,7 @@ def edit_coaching(coaching_id):
         coaching=coaching,
         leitfaden_items=leitfaden_items,
         selected_leitfaden_values=selected_leitfaden_values,
+        bogen_layout=bogen_layout,
         config=current_app.config
     )
 
