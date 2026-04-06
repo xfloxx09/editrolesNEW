@@ -412,6 +412,7 @@
         line-height: 1.2;
         opacity: 0.88;
     }
+    /* stretch = volle Spaltenbreite; flex-end machte die Zeilen nur so breit wie der Text → rechts nie bündig */
     .coaching-mobile-expand-names-col {
         grid-column: 2;
         align-self: stretch;
@@ -420,29 +421,36 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        align-items: flex-end;
+        align-items: stretch;
         text-align: right;
         padding: 4px 0;
         overflow: hidden;
         width: 100%;
+        box-sizing: border-box;
     }
     .coaching-mobile-vorname {
+        display: block;
         font-weight: 600;
         font-size: 1.06rem;
         line-height: 1.25;
-        max-width: 100%;
+        min-width: 0;
         width: 100%;
+        max-width: 100%;
+        text-align: right;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
     .coaching-mobile-nachname {
+        display: block;
         font-size: 0.95rem;
         font-weight: 500;
         opacity: 0.92;
         line-height: 1.25;
-        max-width: 100%;
+        min-width: 0;
         width: 100%;
+        max-width: 100%;
+        text-align: right;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
