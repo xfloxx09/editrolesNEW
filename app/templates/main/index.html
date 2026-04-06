@@ -29,57 +29,76 @@
     border-bottom: 1px solid #444;
     padding-bottom: 5px;
 }
-/* Kompakte Basis-Infos: feste Label-Spalte, Werte brechen um — kein Kachel-Raster */
-.detail-kv {
+/* Basis-Infos als Kacheln: Raster bricht sauber um, nichts ragt aus der Card */
+.detail-grid {
     display: grid;
-    grid-template-columns: minmax(5.5rem, 7.5rem) minmax(0, 1fr);
-    column-gap: 12px;
-    row-gap: 8px;
-    align-items: baseline;
-    font-size: 0.9rem;
-    line-height: 1.35;
-}
-.detail-kv-k {
-    color: #9a9a9a;
-    font-weight: 500;
-    text-align: right;
-    padding-right: 4px;
-}
-.detail-kv-v {
-    color: #f0f0f0;
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+    gap: 10px;
+    width: 100%;
     min-width: 0;
-    overflow-wrap: anywhere;
-    word-break: break-word;
 }
-.detail-leitfaden-wrap {
+.detail-item {
+    background-color: #2b2b2b;
+    border: 1px solid #3d3d3d;
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.detail-item-label {
+    color: #9a9a9a;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+}
+.detail-item-value {
+    color: #f5f5f5;
+    font-weight: 500;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+/* Leitfaden eine eigene Zeile unter den übrigen Kacheln — volle Breite der Card, kein seitlicher Overflow */
+.detail-item-leitfaden {
+    grid-column: 1 / -1;
+}
+.detail-item-leitfaden .detail-leitfaden-wrap {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    max-width: 100%;
+    gap: 6px;
+    width: 100%;
 }
 .detail-leitfaden-line {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 6px 10px;
+    gap: 6px 8px;
     min-width: 0;
 }
 .detail-leitfaden-line strong {
     color: #fff;
-    font-weight: 600;
-    font-size: 0.95rem;
+    font-weight: 700;
+    font-size: 1.05rem;
 }
 .detail-leitfaden-line .detail-leitfaden-frac {
     color: #b0b0b0;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
 }
 .detail-leitfaden-bar {
     height: 6px;
     border-radius: 3px;
     background: #1a1a1a;
     overflow: hidden;
-    max-width: min(240px, 100%);
+    width: 100%;
+    max-width: 100%;
 }
 .detail-leitfaden-bar-fill {
     display: block;
@@ -426,34 +445,44 @@
                     <div class="detail-card">
                         <div class="detail-section">
                             <div class="detail-section-title">Basis-Informationen</div>
-                            <div class="detail-kv" role="group" aria-label="Basis-Informationen">
-                                <span class="detail-kv-k">Stil</span>
-                                <span class="detail-kv-v">{{ coaching.coaching_style if coaching.coaching_style else '–' }}</span>
+                            <div class="detail-grid" role="group" aria-label="Basis-Informationen">
+                                <div class="detail-item">
+                                    <span class="detail-item-label">Stil</span>
+                                    <span class="detail-item-value">{{ coaching.coaching_style if coaching.coaching_style else '–' }}</span>
+                                </div>
                                 {% if coaching.coaching_style == 'TCAP' and coaching.tcap_id %}
-                                <span class="detail-kv-k">T-CAP</span>
-                                <span class="detail-kv-v">{{ coaching.tcap_id }}</span>
+                                <div class="detail-item">
+                                    <span class="detail-item-label">T-CAP ID</span>
+                                    <span class="detail-item-value">{{ coaching.tcap_id }}</span>
+                                </div>
                                 {% endif %}
-                                <span class="detail-kv-k">Thema</span>
-                                <span class="detail-kv-v">{{ coaching.coaching_subject if coaching.coaching_subject else '–' }}</span>
-                                <span class="detail-kv-k">Note</span>
-                                <span class="detail-kv-v">{{ coaching.performance_mark }}/10</span>
-                                <span class="detail-kv-k">Zeit</span>
-                                <span class="detail-kv-v">{% if coaching.time_spent is not none %}{{ coaching.time_spent }} Min.{% else %}–{% endif %}</span>
-                                <span class="detail-kv-k">Leitfaden</span>
-                                <span class="detail-kv-v">
-                                    {% set lf = coaching.leitfaden_erfuellung_stats %}
+                                <div class="detail-item">
+                                    <span class="detail-item-label">Thema</span>
+                                    <span class="detail-item-value">{{ coaching.coaching_subject if coaching.coaching_subject else '–' }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-item-label">Performance</span>
+                                    <span class="detail-item-value">{{ coaching.performance_mark }}/10</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-item-label">Zeitaufwand</span>
+                                    <span class="detail-item-value">{% if coaching.time_spent is not none %}{{ coaching.time_spent }} Min.{% else %}–{% endif %}</span>
+                                </div>
+                                {% set lf = coaching.leitfaden_erfuellung_stats %}
+                                <div class="detail-item detail-item-leitfaden">
+                                    <span class="detail-item-label">Leitfaden</span>
                                     {% if lf %}
                                     <div class="detail-leitfaden-wrap">
                                         <div class="detail-leitfaden-line">
                                             <strong>{{ lf[0] }}%</strong>
-                                            <span class="detail-leitfaden-frac">({{ lf[1] }}/{{ lf[2] }} erfüllt)</span>
+                                            <span class="detail-leitfaden-frac">{{ lf[1] }}/{{ lf[2] }} erfüllt</span>
                                         </div>
                                         <div class="detail-leitfaden-bar" title="{{ lf[0] }}%"><span class="detail-leitfaden-bar-fill" style="width: {{ lf[0] }}%;"></span></div>
                                     </div>
                                     {% else %}
-                                    <span class="text-muted">k. A.</span>
+                                    <span class="detail-item-value text-muted">k. A.</span>
                                     {% endif %}
-                                </span>
+                                </div>
                             </div>
                         </div>
                         <div class="detail-section">
