@@ -292,6 +292,140 @@
     max-width: 100%;
     overflow-x: hidden;
 }
+/* Coaching-Liste: unter md als Karten (lesbar am Handy) */
+@media (max-width: 767.98px) {
+    .coaching-dashboard-table-wrap {
+        overflow-x: visible;
+        padding-left: 2px;
+        padding-right: 2px;
+    }
+    .coaching-dashboard-fixed-table.table-striped tbody tr,
+    .coaching-dashboard-fixed-table.table-striped tbody tr:nth-of-type(2n+1) {
+        background-color: transparent;
+    }
+    .coaching-dashboard-fixed-table.table-hover tbody tr:hover {
+        background-color: transparent;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row:hover {
+        background: rgba(255, 255, 255, 0.07);
+    }
+    .coaching-dashboard-fixed-table {
+        table-layout: auto;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .coaching-dashboard-fixed-table colgroup {
+        display: none;
+    }
+    .coaching-dashboard-fixed-table thead {
+        display: none;
+    }
+    .coaching-dashboard-fixed-table tbody,
+    .coaching-dashboard-fixed-table tr {
+        display: block;
+        width: 100%;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row {
+        margin-top: 14px;
+        margin-bottom: 6px;
+        background: rgba(255, 255, 255, 0.045);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    .coaching-dashboard-fixed-table tbody tr.coaching-dash-row:first-child {
+        margin-top: 0;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row > td {
+        display: grid;
+        grid-template-columns: minmax(0, 42%) minmax(0, 58%);
+        gap: 8px 10px;
+        align-items: center;
+        padding: 12px 14px !important;
+        border: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+        font-size: 0.9rem;
+        text-align: left;
+        width: 100% !important;
+        max-width: none;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row > td::before {
+        content: attr(data-label);
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgba(255, 255, 255, 0.55);
+        line-height: 1.25;
+        align-self: center;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row > td > .cdt-mobile-val {
+        grid-column: 2;
+        justify-self: end;
+        text-align: right;
+        min-width: 0;
+        width: 100%;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row > td.cdt-score > .cdt-mobile-val {
+        display: block;
+        justify-self: stretch;
+        text-align: center;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-row > td.cdt-team {
+        white-space: normal;
+        overflow-wrap: break-word;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-dash-note-row td {
+        display: block;
+        padding: 0 !important;
+        border-left: 1px solid rgba(255, 255, 255, 0.14);
+        border-right: 1px solid rgba(255, 255, 255, 0.14);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+        width: 100% !important;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-detail-row {
+        display: none;
+        margin: 0;
+        width: 100%;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-detail-row.collapsing {
+        display: block !important;
+        width: 100% !important;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-detail-row.show {
+        display: block !important;
+        width: 100% !important;
+        margin-top: -6px;
+        margin-bottom: 14px;
+        border-left: 1px solid rgba(255, 255, 255, 0.14);
+        border-right: 1px solid rgba(255, 255, 255, 0.14);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 0 0 10px 10px;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-detail-row > td {
+        display: block;
+        padding: 0 !important;
+        border: none;
+        background: rgba(0, 0, 0, 0.22) !important;
+        width: 100% !important;
+    }
+    .coaching-dashboard-fixed-table tr.coaching-detail-row .detail-card {
+        margin-top: 0;
+        border-radius: 0;
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .coaching-dashboard-root .pagination {
+        flex-wrap: wrap;
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+    .coaching-dashboard-root .page-link {
+        padding: 0.4rem 0.55rem;
+        font-size: 0.875rem;
+    }
+}
 </style>
 {% endblock %}
 
@@ -515,24 +649,26 @@
             {% set dash_coach_name = coaching.coach.coach_display_name if coaching.coach else 'N/A' %}
             {% set dash_thema = coaching.coaching_subject if coaching.coaching_subject else '-' %}
             {% set dash_stil = coaching.coaching_style if coaching.coaching_style else '-' %}
-            <tr>
-                <td class="cdt-datum">{{ coaching.coaching_date|athens_time }}</td>
-                <td class="cdt-mitglied">{{ dash_member_name }}</td>
-                <td class="cdt-team">{{ dash_team_name }}</td>
-                <td class="cdt-coach">{{ dash_coach_name }}</td>
-                <td class="cdt-thema">{{ dash_thema }}</td>
-                <td class="cdt-stil">{{ dash_stil }}</td>
-                <td class="cdt-note">{{ coaching.performance_mark if coaching.performance_mark is not none else '-'}}</td>
-                <td class="cdt-min">{{ coaching.time_spent if coaching.time_spent is not none else '-' }}</td>
-                <td class="cdt-score">
-                    <div class="progress coaching-dashboard-score-bar">
-                        <div class="progress-bar telekom-progress-bar" role="progressbar" style="width: {{ coaching.overall_score }}%;" aria-valuenow="{{ coaching.overall_score }}" aria-valuemin="0" aria-valuemax="100">
-                            {{ coaching.overall_score }}%
+            <tr class="coaching-dash-row">
+                <td class="cdt-datum" data-label="Datum"><span class="cdt-mobile-val">{{ coaching.coaching_date|athens_time }}</span></td>
+                <td class="cdt-mitglied" data-label="Teammitglied"><span class="cdt-mobile-val">{{ dash_member_name }}</span></td>
+                <td class="cdt-team" data-label="Team"><span class="cdt-mobile-val">{{ dash_team_name }}</span></td>
+                <td class="cdt-coach" data-label="Coach"><span class="cdt-mobile-val">{{ dash_coach_name }}</span></td>
+                <td class="cdt-thema" data-label="Thema"><span class="cdt-mobile-val">{{ dash_thema }}</span></td>
+                <td class="cdt-stil" data-label="Stil"><span class="cdt-mobile-val">{{ dash_stil }}</span></td>
+                <td class="cdt-note" data-label="Note"><span class="cdt-mobile-val">{{ coaching.performance_mark if coaching.performance_mark is not none else '-'}}</span></td>
+                <td class="cdt-min" data-label="Min."><span class="cdt-mobile-val">{{ coaching.time_spent if coaching.time_spent is not none else '-' }}</span></td>
+                <td class="cdt-score" data-label="Score">
+                    <div class="cdt-mobile-val">
+                        <div class="progress coaching-dashboard-score-bar">
+                            <div class="progress-bar telekom-progress-bar" role="progressbar" style="width: {{ coaching.overall_score }}%;" aria-valuenow="{{ coaching.overall_score }}" aria-valuemin="0" aria-valuemax="100">
+                                {{ coaching.overall_score }}%
+                            </div>
                         </div>
                     </div>
                 </td>
                 {% if can_leave_review %}
-                <td class="cdt-bewertung">
+                <td class="cdt-bewertung" data-label="Ihre Bewertung"><span class="cdt-mobile-val">
                     {% if coached_self %}
                         {% if coaching.employee_review %}
                             {{ coaching.employee_review.rating }}/5
@@ -545,8 +681,8 @@
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
-                </td>
-                <td class="cdt-coach-act text-center">
+                </span></td>
+                <td class="cdt-coach-act text-center" data-label="Rückmeldung"><span class="cdt-mobile-val">
                     {% if coached_self %}
                         {% if coaching.employee_review %}
                         <span class="text-success" title="Bewertung abgegeben"><i class="fas fa-check-circle fa-lg"></i></span>
@@ -557,23 +693,23 @@
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
-                </td>
+                </span></td>
                 {% endif %}
-                <td class="cdt-details">
+                <td class="cdt-details" data-label="Details"><span class="cdt-mobile-val">
                     <button class="btn-icon-circle" type="button" data-toggle="collapse" data-target="#coachingDetails{{ coaching.id }}" aria-expanded="false" aria-controls="coachingDetails{{ coaching.id }}" title="Details anzeigen">
                         <i class="fas fa-info"></i>
                     </button>
-                </td>
-                <td class="cdt-edit">
+                </span></td>
+                <td class="cdt-edit" data-label="Bearbeiten"><span class="cdt-mobile-val">
                     {% if current_user.id == coaching.coach_id or current_user.role == config.ROLE_ADMIN %}
                     <a href="{{ url_for('main.edit_coaching', coaching_id=coaching.id, next=request.url) }}" class="btn btn-sm btn-outline-secondary" title="Bearbeiten">
                         <i class="fas fa-edit"></i>
                     </a>
                     {% endif %}
-                </td>
+                </span></td>
             </tr>
             {% if coached_self and coaching.employee_review and coaching.employee_review.comment %}
-            <tr>
+            <tr class="coaching-dash-note-row">
                 <td colspan="{{ 13 if can_leave_review else 11 }}" class="p-0 border-0">
                     <div class="collapse" id="dashCoachingNote{{ coaching.id }}">
                         <div class="review-comment-panel small text-muted m-2">{{ coaching.employee_review.comment }}</div>
