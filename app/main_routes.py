@@ -766,12 +766,16 @@ def coaching_dashboard():
     project_raw = (request.args.get('project') or '').strip()
     project_filter_int = None
     project_scope_all = False
+
+    accessible = get_accessible_project_ids()
     if project_raw.lower() == 'all':
         project_scope_all = True
     elif project_raw.isdigit():
         project_filter_int = int(project_raw)
+    elif accessible is not None and len(accessible) > 1 and not project_raw:
+        # Mehrere Projekte sichtbar, kein ?project= → standardmäßig „alle Projekte“
+        project_scope_all = True
 
-    accessible = get_accessible_project_ids()
     sees_all_teams = _user_sees_all_teams_coaching_dashboard()
     my_dash_team_ids = _dashboard_my_team_ids() if not sees_all_teams else []
 
