@@ -2601,15 +2601,32 @@ def team_view():
 
     team_members_performance = _build_team_members_performance(team)
     member_ids = [m.id for m in TeamMember.query.filter_by(team_id=team.id).all()]
-    team_coachings = []
+    team_total_coachings = 0
+    team_avg_time_minutes = 0
+    team_avg_score_percent = 0
     if member_ids:
-        team_coachings = Coaching.query.options(
-            joinedload(Coaching.coach),
-            joinedload(Coaching.team_member_coached),
-        ).filter(
+        team_scope = [
             Coaching.team_member_id.in_(member_ids),
             Coaching.project_id == team.project_id,
-        ).order_by(desc(Coaching.coaching_date)).limit(10).all()
+        ]
+        team_total_coachings = (
+            db.session.query(db.func.count(Coaching.id))
+            .filter(*team_scope)
+            .scalar()
+            or 0
+        )
+        avg_time_val = (
+            db.session.query(db.func.avg(Coaching.time_spent))
+            .filter(*team_scope)
+            .scalar()
+        )
+        avg_mark_val = (
+            db.session.query(db.func.avg(Coaching.performance_mark))
+            .filter(*team_scope)
+            .scalar()
+        )
+        team_avg_time_minutes = int(round(avg_time_val or 0))
+        team_avg_score_percent = round((avg_mark_val or 0) * 10, 1)
 
     members = TeamMember.query.filter_by(team_id=team.id).order_by(TeamMember.name).all()
     team_leaders_display = _team_leaders_for_team_card(team)
@@ -2620,7 +2637,9 @@ def team_view():
         members=members,
         team_leaders_display=team_leaders_display,
         team_members_performance=team_members_performance,
-        team_coachings=team_coachings,
+        team_total_coachings=team_total_coachings,
+        team_avg_time_minutes=team_avg_time_minutes,
+        team_avg_score_percent=team_avg_score_percent,
         all_teams_list=all_teams_list,
         config=current_app.config,
     )
