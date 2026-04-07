@@ -2,93 +2,6 @@
 
 {% block head_extra %}
 <style>
-    .index-shell {
-        max-width: 1180px;
-        margin: 0 auto;
-    }
-    .index-head {
-        margin-bottom: 1rem;
-        padding: 1rem 1.15rem;
-        border: 1px solid #3f444b;
-        border-radius: 16px;
-        background: linear-gradient(160deg, #2d3238 0%, #25292f 100%);
-        box-shadow: 0 10px 22px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
-    }
-    .index-head h2 {
-        margin: 0;
-        color: #fff;
-        font-size: 1.32rem;
-        font-weight: 700;
-    }
-    .index-head p {
-        margin: 0.35rem 0 0;
-        color: #b7bec8;
-        font-size: 0.9rem;
-    }
-    .index-quick {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.55rem;
-        margin-top: 0.85rem;
-    }
-    .index-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.3rem 0.62rem;
-        border-radius: 999px;
-        border: 1px solid #545c68;
-        background: rgba(255,255,255,0.03);
-        color: #e0e4ea;
-        font-size: 0.79rem;
-        font-weight: 600;
-    }
-    .index-chip-dot {
-        width: 0.5rem;
-        height: 0.5rem;
-        border-radius: 50%;
-        display: inline-block;
-    }
-    .dot-open { background: #20c997; box-shadow: 0 0 10px rgba(32, 201, 151, 0.45); }
-    .dot-assigned { background: #28a745; box-shadow: 0 0 10px rgba(40, 167, 69, 0.42); }
-    .dot-role { background: #e20074; box-shadow: 0 0 10px rgba(226, 0, 116, 0.45); }
-    .index-grid {
-        margin-top: 0.2rem;
-    }
-    .index-tile {
-        position: relative;
-        overflow: hidden;
-        border-radius: 20px;
-        text-decoration: none !important;
-        height: 200px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        border: 1px solid rgba(255,255,255,0.18);
-        box-shadow: 0 10px 24px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.2);
-        transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
-    }
-    .index-tile:after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.0) 55%);
-        pointer-events: none;
-    }
-    .index-tile:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 14px 28px rgba(0,0,0,0.3), 0 0 18px rgba(255,255,255,0.1);
-        filter: brightness(1.04);
-    }
-    .index-tile h4 {
-        margin-bottom: 0.32rem;
-        font-weight: 700;
-    }
-    .index-tile p {
-        margin-bottom: 0;
-        opacity: 0.95;
-    }
     .planned-tile-link {
         position: relative;
         overflow: visible;
@@ -132,24 +45,11 @@
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4 index-shell">
-    <div class="index-head">
-        <h2>Dashboard</h2>
-        <p>Schnellzugriff auf Ihre Bereiche, Aufgaben und geplanten Termine.</p>
-        <div class="index-quick">
-            {% if has_perm('planned_coachings') or has_perm('add_workshop') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
-            <span class="index-chip"><span class="index-chip-dot dot-open"></span>{{ open_planned_coachings_count }} offen geplant</span>
-            {% endif %}
-            {% if has_perm('view_assigned_coachings') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
-            <span class="index-chip"><span class="index-chip-dot dot-assigned"></span>{{ assigned_coachings_notify_count }} aktive Aufgaben</span>
-            {% endif %}
-            <span class="index-chip"><span class="index-chip-dot dot-role"></span>{{ current_user.role_name }}</span>
-        </div>
-    </div>
-    <div class="row index-grid {% if index_tile_count == 1 %}justify-content-center{% endif %}">
+<div class="container mt-5">
+    <div class="row {% if index_tile_count == 1 %}justify-content-center{% endif %}">
         {% if has_perm('view_coaching_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-lg btn-block p-4 index-tile" style="background-color: #e20074; color: white;">
+            <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-lg btn-block p-4" style="background-color: #e20074; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <i class="fas fa-chalkboard-teacher fa-3x mb-2"></i>
                 <h4>Coachings</h4>
                 <p>Alle Einzelcoachings anzeigen</p>
@@ -158,7 +58,7 @@
         {% endif %}
         {% if has_perm('terminkalender') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.terminkalender') }}" class="btn btn-lg btn-block p-4 index-tile" style="background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 45%, #e20074 100%); color: white;">
+            <a href="{{ url_for('main.terminkalender') }}" class="btn btn-lg btn-block p-4" style="background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 45%, #e20074 100%); color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <i class="fas fa-calendar-week fa-3x mb-2"></i>
                 <h4 class="mb-0">Terminkalender</h4>
             </a>
@@ -166,7 +66,7 @@
         {% endif %}
         {% if has_perm('view_workshop_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-lg btn-block p-4 index-tile" style="background-color: #6c757d; color: white;">
+            <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-lg btn-block p-4" style="background-color: #6c757d; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <i class="fas fa-users fa-3x mb-2"></i>
                 <h4>Workshops</h4>
                 <p>Alle Workshops anzeigen</p>
@@ -175,7 +75,7 @@
         {% endif %}
         {% if has_perm('view_assigned_coachings') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.assigned_coachings') }}" class="btn btn-lg btn-block p-4 planned-tile-link index-tile" style="background-color: #28a745; color: white;">
+            <a href="{{ url_for('main.assigned_coachings') }}" class="btn btn-lg btn-block p-4 planned-tile-link" style="background-color: #28a745; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <span class="planned-tile-icon-wrap">
                     {% if assigned_coachings_notify_count > 0 %}
                     <span class="planned-tile-badge" title="{{ assigned_coachings_notify_count }} aktive Zuweisung(en)" aria-label="{{ assigned_coachings_notify_count }} zugewiesene Coachings offen">{{ assigned_coachings_notify_count }}</span>
@@ -189,7 +89,7 @@
         {% endif %}
         {% if has_perm('planned_coachings') or has_perm('add_workshop') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4 planned-tile-link index-tile" style="background-color: #20c997; color: white;">
+            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4 planned-tile-link" style="background-color: #20c997; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <span class="planned-tile-icon-wrap">
                     {% if open_planned_coachings_count > 0 %}
                     <span class="planned-tile-badge" title="{{ open_planned_coachings_count }} offene Termine" aria-label="{{ open_planned_coachings_count }} offen geplant">{{ open_planned_coachings_count }}</span>
@@ -203,7 +103,7 @@
         {% endif %}
         {% if has_perm('view_own_coachings') or has_perm('leave_coaching_review') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.my_coachings') }}" class="btn btn-lg btn-block p-4 index-tile" style="background-color: #17a2b8; color: white;">
+            <a href="{{ url_for('main.my_coachings') }}" class="btn btn-lg btn-block p-4" style="background-color: #17a2b8; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <i class="fas fa-user-check fa-3x mb-2"></i>
                 <h4 class="mb-0">Meine Coachings</h4>
             </a>
@@ -211,7 +111,7 @@
         {% endif %}
         {% if has_perm('view_review') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.coach_received_reviews') }}" class="btn btn-lg btn-block p-4 index-tile" style="background-color: #fd7e14; color: white;">
+            <a href="{{ url_for('main.coach_received_reviews') }}" class="btn btn-lg btn-block p-4" style="background-color: #fd7e14; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <i class="fas fa-star fa-3x mb-2"></i>
                 <h4>Bewertungen über mich</h4>
                 <p>Feedback von Mitarbeitenden zu Ihren Coachings</p>
@@ -220,7 +120,7 @@
         {% endif %}
         {% if has_perm('view_all_reviews') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.all_coaching_reviews') }}" class="btn btn-lg btn-block p-4 index-tile" style="background-color: #6f42c1; color: white;">
+            <a href="{{ url_for('main.all_coaching_reviews') }}" class="btn btn-lg btn-block p-4" style="background-color: #6f42c1; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
                 <i class="fas fa-star-half-alt fa-3x mb-2"></i>
                 <h4>Alle Bewertungen</h4>
                 <p>Übersicht nach Projekt (nur zugängliche Projekte)</p>
