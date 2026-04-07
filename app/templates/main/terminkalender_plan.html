@@ -3,11 +3,15 @@
 {% block content %}
 <div class="container mt-4" style="max-width: 560px;">
     <h2 class="mb-3" style="color:#e20074;">Geplantes Coaching</h2>
-    <p class="text-muted">Termin: <strong>{{ plan_date.strftime('%d.%m.%Y') }}</strong></p>
+    <p class="text-muted">Termin frei wählbar</p>
 
     <form method="post" class="card card-body bg-dark border-secondary text-light">
-        <input type="hidden" name="plan_date" value="{{ plan_date.isoformat() }}">
         <input type="hidden" name="project_id" value="{{ project_id }}">
+
+        <div class="form-group">
+            <label for="plan_date">Datum</label>
+            <input type="date" name="plan_date" id="plan_date" class="form-control" value="{{ plan_date.isoformat() }}" min="{{ today.isoformat() }}" required>
+        </div>
 
         <div class="form-group">
             <label for="team_member_id">Teammitglied</label>

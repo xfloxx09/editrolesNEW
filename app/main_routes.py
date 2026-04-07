@@ -1774,6 +1774,8 @@ def terminkalender_plan_workshop():
 def terminkalender_plan():
     today = today_athens_date()
     plan_date_str = (request.args.get('day') if request.method == 'GET' else request.form.get('plan_date')) or ''
+    if request.method == 'GET' and not plan_date_str.strip():
+        plan_date_str = (today + timedelta(days=1)).isoformat()
     try:
         plan_date = datetime.strptime(plan_date_str.strip(), '%Y-%m-%d').date()
     except ValueError:
