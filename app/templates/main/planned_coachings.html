@@ -38,6 +38,31 @@
 .planned-page-tabs .tab-content h3 {
     color: #e0e0e0;
 }
+.planned-open-list .list-group-item {
+    border-radius: 10px !important;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+.planned-open-list .list-group-item:last-child {
+    margin-bottom: 0;
+}
+.planned-notes-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid #3d89a8;
+    background: rgba(23, 162, 184, 0.14);
+    color: #9fdcf0 !important;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: none !important;
+}
+.planned-notes-toggle:hover {
+    color: #d4f3fb !important;
+    background: rgba(23, 162, 184, 0.25);
+}
 </style>
 {% endblock %}
 
@@ -72,7 +97,7 @@
                 {% if not items %}
                 <div class="alert alert-secondary mb-4">{% if can_view_others_planned %}Keine offenen geplanten Coachings in Ihrem Projektbereich.{% else %}Sie haben keine offenen geplanten Coachings.{% endif %}</div>
                 {% else %}
-                <div class="list-group mb-4">
+                <div class="list-group mb-4 planned-open-list">
                     {% for it in items %}
                     {% set is_mine = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
@@ -113,8 +138,8 @@
                         {% endif %}
                         {% if it.notes %}
                         <div class="mt-2">
-                            <a class="small text-info collapsed" data-toggle="collapse" href="#plan-notes-{{ it.id }}" role="button" aria-expanded="false" aria-controls="plan-notes-{{ it.id }}">
-                                Notizen anzeigen
+                            <a class="planned-notes-toggle collapsed" data-toggle="collapse" href="#plan-notes-{{ it.id }}" role="button" aria-expanded="false" aria-controls="plan-notes-{{ it.id }}">
+                                <i class="far fa-sticky-note"></i> Notizen anzeigen
                             </a>
                             <div class="collapse mt-1" id="plan-notes-{{ it.id }}">
                                 <div class="small border-left border-info pl-2" style="white-space: pre-wrap;">{{ it.notes }}</div>
@@ -147,7 +172,7 @@
                 {% if not workshop_items %}
                 <div class="alert alert-secondary mb-0">{% if can_view_others_planned %}Keine offenen geplanten Workshops in Ihrem Projektbereich.{% else %}Sie haben keine offenen geplanten Workshops.{% endif %}</div>
                 {% else %}
-                <div class="list-group mb-0">
+                <div class="list-group mb-0 planned-open-list">
                     {% for it in workshop_items %}
                     {% set is_mine_w = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
