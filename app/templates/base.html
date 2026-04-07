@@ -7,9 +7,140 @@
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        .qc-toggle {
+            position: fixed;
+            left: 0;
+            top: 44%;
+            transform: translateY(-50%);
+            z-index: 1055;
+            width: 42px;
+            height: 120px;
+            border: 1px solid #e20074;
+            border-left: none;
+            border-radius: 0 12px 12px 0;
+            background: linear-gradient(180deg, #ff3ea1 0%, #e20074 58%, #b9005e 100%);
+            color: #fff;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.28), 0 0 12px rgba(226,0,116,0.42);
+            cursor: pointer;
+        }
+        .qc-panel {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 360px;
+            max-width: 92vw;
+            height: 100vh;
+            z-index: 1056;
+            background: linear-gradient(160deg, #2c3036 0%, #24282d 100%);
+            border-right: 1px solid #4b525d;
+            box-shadow: 10px 0 24px rgba(0,0,0,0.35);
+            transform: translateX(-100%);
+            transition: transform .2s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        .qc-panel.open { transform: translateX(0); }
+        .qc-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: .9rem 1rem;
+            border-bottom: 1px solid #454b55;
+            color: #fff;
+        }
+        .qc-head h5 { margin: 0; font-size: 1rem; font-weight: 700; }
+        .qc-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid #5a616d;
+            color: #d5dbe3;
+            background: transparent;
+        }
+        .qc-body { padding: .8rem; overflow-y: auto; }
+        .qc-help {
+            color: #b8bfca;
+            font-size: .82rem;
+            margin-bottom: .7rem;
+        }
+        .qc-item {
+            border: 1px solid #4f5662;
+            border-radius: 12px;
+            background: rgba(255,255,255,.03);
+            padding: .65rem .7rem;
+            margin-bottom: .6rem;
+            color: #ecf0f4;
+        }
+        .qc-item-top {
+            display: flex;
+            justify-content: space-between;
+            gap: .5rem;
+            align-items: baseline;
+        }
+        .qc-name { font-weight: 700; color: #fff; }
+        .qc-reason {
+            font-size: .72rem;
+            border: 1px solid #5f6673;
+            border-radius: 999px;
+            padding: .1rem .45rem;
+            color: #e2e7ef;
+        }
+        .qc-meta {
+            margin-top: .35rem;
+            font-size: .78rem;
+            color: #c8cfd8;
+            line-height: 1.35;
+        }
+        .qc-action {
+            margin-top: .55rem;
+            width: 100%;
+            border-radius: 9px;
+            font-size: .83rem;
+            font-weight: 600;
+            background: #e20074;
+            border: 1px solid #ff5dad;
+            color: #fff;
+        }
+        .qc-action:hover { background: #c00062; color: #fff; }
+    </style>
     {% block head_extra %}{% endblock %}
 </head>
 <body>
+    {% if current_user.is_authenticated and has_perm('add_coaching') %}
+    <button id="qcToggle" class="qc-toggle" type="button" title="Coaching-Vorschläge öffnen/schließen" aria-label="Coaching-Vorschläge öffnen">
+        <i class="fas fa-bolt"></i>
+    </button>
+    <aside id="qcPanel" class="qc-panel" aria-hidden="true">
+        <div class="qc-head">
+            <h5><i class="fas fa-lightbulb mr-1"></i> Quick Coaching Vorschläge</h5>
+            <button id="qcClose" type="button" class="qc-close" aria-label="Schließen">×</button>
+        </div>
+        <div class="qc-body">
+            <p class="qc-help">Priorisiert nach wenig Coaching-Zeit und/oder niedriger Performance.</p>
+            {% if quick_coaching_suggestions %}
+                {% for s in quick_coaching_suggestions %}
+                <div class="qc-item">
+                    <div class="qc-item-top">
+                        <span class="qc-name">{{ s.name }}</span>
+                        <span class="qc-reason">{{ s.reason }}</span>
+                    </div>
+                    <div class="qc-meta">
+                        Team: {{ s.team_name }}<br>
+                        Coachings: {{ s.coaching_count }} · Zeit: {{ s.total_time }} Min ·
+                        Score: {% if s.avg_score is not none %}{{ s.avg_score }}%{% else %}k.A.{% endif %}
+                    </div>
+                    <a class="btn btn-sm qc-action" href="{{ url_for('main.add_coaching', project=s.project_id, suggested_member_id=s.team_member_id) }}">
+                        <i class="fas fa-plus-circle mr-1"></i> Coaching planen
+                    </a>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-secondary mb-0">Keine Vorschläge im aktuellen Sichtbereich.</div>
+            {% endif %}
+        </div>
+    </aside>
+    {% endif %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <a class="navbar-brand telekom-brand" href="{{ url_for('main.index') }}">Helpsense - Coaching</a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -100,6 +231,24 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+    <script>
+        (function() {
+            var panel = document.getElementById('qcPanel');
+            var toggle = document.getElementById('qcToggle');
+            var closeBtn = document.getElementById('qcClose');
+            if (!panel || !toggle) return;
+            function setOpen(open) {
+                panel.classList.toggle('open', open);
+                panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+                try { localStorage.setItem('qc_panel_open', open ? '1' : '0'); } catch (e) {}
+            }
+            toggle.addEventListener('click', function() { setOpen(!panel.classList.contains('open')); });
+            if (closeBtn) closeBtn.addEventListener('click', function() { setOpen(false); });
+            try {
+                if (localStorage.getItem('qc_panel_open') === '1') setOpen(true);
+            } catch (e) {}
+        })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

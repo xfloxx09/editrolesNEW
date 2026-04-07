@@ -593,6 +593,13 @@ def create_app(config_class=Config):
             return {'show_mein_team_nav': user_has_mein_team_nav(current_user)}
         return {'show_mein_team_nav': False}
 
+    @app.context_processor
+    def inject_quick_coaching_suggestions():
+        from app.utils import quick_coaching_suggestions
+        if current_user.is_authenticated:
+            return {'quick_coaching_suggestions': quick_coaching_suggestions(limit=6)}
+        return {'quick_coaching_suggestions': []}
+
     @app.template_filter('athens_time')
     def format_athens_time(utc_dt, fmt='%d.%m.%Y %H:%M'):
         if not utc_dt:

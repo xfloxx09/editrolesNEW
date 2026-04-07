@@ -489,6 +489,95 @@ def today_athens_date():
     return datetime.now(ZoneInfo('Europe/Athens')).date()
 
 
+def quick_coaching_suggestions(limit=6):
+    """
+    Best candidates for the next coaching:
+    - low total coached time
+    - low average performance note
+    Scoped to current user's visible projects and coaching constraints.
+    """
+    if not current_user.is_authenticated or not current_user.has_permission('add_coaching'):
+        return []
+
+    from sqlalchemy import func
+    from app.models import Coaching
+
+    acc = get_accessible_project_ids()
+    if acc is not None and len(acc) == 0:
+        return []
+
+    q = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
+        Team.name != ARCHIV_TEAM_NAME,
+        Team.active_for_coaching.is_(True),
+    )
+    if acc is not None:
+        q = q.filter(Team.project_id.in_(acc))
+
+    if current_user.has_permission('coach_own_team_only') or current_user.role_name == ROLE_TEAMLEITER:
+        own_team_ids = sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
+        if not own_team_ids:
+            return []
+        q = q.filter(TeamMember.team_id.in_(own_team_ids))
+
+    members = q.order_by(TeamMember.name).all()
+    if not members:
+        return []
+
+    member_ids = [m.id for m in members]
+    agg_rows = (
+        db.session.query(
+            Coaching.team_member_id.label('tmid'),
+            func.coalesce(func.sum(Coaching.time_spent), 0).label('sum_time'),
+            func.avg(Coaching.performance_mark).label('avg_mark'),
+            func.count(Coaching.id).label('cnt'),
+        )
+        .filter(Coaching.team_member_id.in_(member_ids))
+        .group_by(Coaching.team_member_id)
+        .all()
+    )
+    agg_map = {r.tmid: r for r in agg_rows}
+
+    out = []
+    for m in members:
+        team = m.team
+        if not team:
+            continue
+        ar = agg_map.get(m.id)
+        sum_time = int(ar.sum_time or 0) if ar else 0
+        avg_mark = float(ar.avg_mark) if ar and ar.avg_mark is not None else None
+        cnt = int(ar.cnt or 0) if ar else 0
+
+        score_need = 0.0
+        score_need += max(0.0, 180.0 - min(180.0, float(sum_time))) * 0.45
+        score_need += (10.0 - (avg_mark if avg_mark is not None else 5.0)) * 12.0
+        if cnt == 0:
+            score_need += 22.0
+
+        if cnt == 0:
+            reason = 'Noch kein Coaching'
+        elif avg_mark is not None and avg_mark < 6:
+            reason = 'Niedrige Performance'
+        elif sum_time < 60:
+            reason = 'Wenig gecoacht'
+        else:
+            reason = 'Empfohlen'
+
+        out.append({
+            'team_member_id': m.id,
+            'name': (m.name or '—').strip() or '—',
+            'team_name': team.name or '—',
+            'project_id': team.project_id,
+            'coaching_count': cnt,
+            'total_time': sum_time,
+            'avg_score': round((avg_mark or 0) * 10, 1) if avg_mark is not None else None,
+            'reason': reason,
+            'need_score': score_need,
+        })
+
+    out.sort(key=lambda x: (-x['need_score'], x['total_time'], x['name'].lower()))
+    return out[:max(1, int(limit or 6))]
+
+
 def athens_calendar_day_utc_naive_bounds(d):
     """
     Europe/Athens local calendar day d → (start, end) as naive UTC datetimes for DB compare.

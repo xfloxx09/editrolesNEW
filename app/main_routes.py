@@ -2118,6 +2118,7 @@ def add_coaching():
 
     initial_fulfill_planned_id = None
     if request.method == 'GET':
+        suggested_member_id = request.args.get('suggested_member_id', type=int)
         planned_id_arg = request.args.get('planned_id', type=int)
         if planned_id_arg:
             pc = PlannedCoaching.query.get(planned_id_arg)
@@ -2135,6 +2136,13 @@ def add_coaching():
                         form.team_member_id.data = pc.team_member_id
                         if planned_coaching_can_start_today(pc.planned_for_date):
                             initial_fulfill_planned_id = pc.id
+        elif suggested_member_id:
+            try:
+                valid_ids = {int(choice[0]) for choice in (form.team_member_id.choices or []) if int(choice[0]) != 0}
+            except (TypeError, ValueError):
+                valid_ids = set()
+            if suggested_member_id in valid_ids:
+                form.team_member_id.data = suggested_member_id
 
     if form.validate_on_submit():
         team_member = TeamMember.query.get(form.team_member_id.data)
