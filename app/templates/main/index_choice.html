@@ -2,6 +2,49 @@
 
 {% block head_extra %}
 <style>
+    .index-choice-tile {
+        position: relative;
+        overflow: hidden;
+        height: 200px;
+        border-radius: 20px;
+        text-decoration: none;
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: linear-gradient(155deg, #14141a 0%, #241329 52%, #32113b 100%);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(226, 0, 116, 0.1) inset;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        animation: choiceTileIn .42s ease both;
+    }
+    .index-choice-tile::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(120deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+        pointer-events: none;
+    }
+    .index-choice-tile:hover {
+        color: #fff;
+        text-decoration: none;
+        transform: translateY(-3px) scale(1.01);
+        border-color: rgba(226, 0, 116, 0.65);
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.48), 0 0 26px rgba(226, 0, 116, 0.25);
+    }
+    .index-choice-tile i {
+        color: var(--tile-accent, #e20074);
+        filter: drop-shadow(0 3px 10px rgba(0,0,0,0.3));
+    }
+    .index-choice-tile p { margin-bottom: 0; opacity: 0.92; }
+    @keyframes choiceTileIn {
+        from { opacity: 0.72; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .index-choice-tile { animation: none; transition: none; }
+    }
     .planned-tile-link {
         position: relative;
         overflow: visible;
@@ -49,7 +92,7 @@
     <div class="row {% if index_tile_count == 1 %}justify-content-center{% endif %}">
         {% if has_perm('view_coaching_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-lg btn-block p-4" style="background-color: #e20074; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-lg btn-block p-4 index-choice-tile" style="--tile-accent:#ff4fa4;">
                 <i class="fas fa-chalkboard-teacher fa-3x mb-2"></i>
                 <h4>Coachings</h4>
                 <p>Alle Einzelcoachings anzeigen</p>
@@ -58,7 +101,7 @@
         {% endif %}
         {% if has_perm('terminkalender') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.terminkalender') }}" class="btn btn-lg btn-block p-4" style="background: linear-gradient(135deg, #4a148c 0%, #7b1fa2 45%, #e20074 100%); color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.terminkalender') }}" class="btn btn-lg btn-block p-4 index-choice-tile" style="--tile-accent:#c57bff;">
                 <i class="fas fa-calendar-week fa-3x mb-2"></i>
                 <h4 class="mb-0">Terminkalender</h4>
             </a>
@@ -66,7 +109,7 @@
         {% endif %}
         {% if has_perm('view_workshop_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-lg btn-block p-4" style="background-color: #6c757d; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-lg btn-block p-4 index-choice-tile" style="--tile-accent:#9aa6b2;">
                 <i class="fas fa-users fa-3x mb-2"></i>
                 <h4>Workshops</h4>
                 <p>Alle Workshops anzeigen</p>
@@ -75,7 +118,7 @@
         {% endif %}
         {% if has_perm('view_assigned_coachings') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.assigned_coachings') }}" class="btn btn-lg btn-block p-4 planned-tile-link" style="background-color: #28a745; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.assigned_coachings') }}" class="btn btn-lg btn-block p-4 planned-tile-link index-choice-tile" style="--tile-accent:#64df8c;">
                 <span class="planned-tile-icon-wrap">
                     {% if assigned_coachings_notify_count > 0 %}
                     <span class="planned-tile-badge" title="{{ assigned_coachings_notify_count }} aktive Zuweisung(en)" aria-label="{{ assigned_coachings_notify_count }} zugewiesene Coachings offen">{{ assigned_coachings_notify_count }}</span>
@@ -89,7 +132,7 @@
         {% endif %}
         {% if has_perm('planned_coachings') or has_perm('add_workshop') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4 planned-tile-link" style="background-color: #20c997; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-lg btn-block p-4 planned-tile-link index-choice-tile" style="--tile-accent:#4debd4;">
                 <span class="planned-tile-icon-wrap">
                     {% if open_planned_coachings_count > 0 %}
                     <span class="planned-tile-badge" title="{{ open_planned_coachings_count }} offene Termine" aria-label="{{ open_planned_coachings_count }} offen geplant">{{ open_planned_coachings_count }}</span>
@@ -97,13 +140,12 @@
                     <i class="fas fa-calendar-alt fa-3x"></i>
                 </span>
                 <h4 class="mb-1">Geplante Coachings / Workshops</h4>
-                <p class="mb-0 small" style="opacity:0.95;">Kalender &amp; Folgetermine</p>
             </a>
         </div>
         {% endif %}
         {% if has_perm('view_own_coachings') or has_perm('leave_coaching_review') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.my_coachings') }}" class="btn btn-lg btn-block p-4" style="background-color: #17a2b8; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.my_coachings') }}" class="btn btn-lg btn-block p-4 index-choice-tile" style="--tile-accent:#58d4e4;">
                 <i class="fas fa-user-check fa-3x mb-2"></i>
                 <h4 class="mb-0">Meine Coachings</h4>
             </a>
@@ -111,7 +153,7 @@
         {% endif %}
         {% if has_perm('view_review') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.coach_received_reviews') }}" class="btn btn-lg btn-block p-4" style="background-color: #fd7e14; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.coach_received_reviews') }}" class="btn btn-lg btn-block p-4 index-choice-tile" style="--tile-accent:#ffb15f;">
                 <i class="fas fa-star fa-3x mb-2"></i>
                 <h4>Bewertungen über mich</h4>
                 <p>Feedback von Mitarbeitenden zu Ihren Coachings</p>
@@ -120,7 +162,7 @@
         {% endif %}
         {% if has_perm('view_all_reviews') %}
         <div class="col-md-4 mb-3">
-            <a href="{{ url_for('main.all_coaching_reviews') }}" class="btn btn-lg btn-block p-4" style="background-color: #6f42c1; color: white; border-radius: 20px; text-decoration: none; height: 200px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <a href="{{ url_for('main.all_coaching_reviews') }}" class="btn btn-lg btn-block p-4 index-choice-tile" style="--tile-accent:#b48bff;">
                 <i class="fas fa-star-half-alt fa-3x mb-2"></i>
                 <h4>Alle Bewertungen</h4>
                 <p>Übersicht nach Projekt (nur zugängliche Projekte)</p>
