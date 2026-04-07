@@ -35,6 +35,12 @@ body {
     border-color: #c0005e;
     color: white;
 }
+/* Keep label readable on navbar action button hover/focus */
+.navbar .nav-link.telekom-button:hover,
+.navbar .nav-link.telekom-button:focus,
+.navbar .nav-link.telekom-button:active {
+    color: #fff !important;
+}
 
 .telekom-button-outline {
     border-color: #e20074;
