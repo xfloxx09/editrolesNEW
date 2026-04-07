@@ -238,7 +238,7 @@
                 {% if not fulfilled_plans %}
                 <div class="alert alert-secondary mb-4">Noch keine erfüllten geplanten Coachings in diesem Bereich.</div>
                 {% else %}
-                <div class="list-group mb-4">
+                <div class="list-group mb-4 planned-open-list">
                     {% for it in fulfilled_plans %}
                     {% set is_mine_fc = (it.coach_id == current_user.id) %}
                     <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
@@ -298,7 +298,7 @@
                 {% if not fulfilled_workshop_plans %}
                 <div class="alert alert-secondary mb-0">Noch keine erfüllten Planungen in diesem Bereich.</div>
                 {% else %}
-                <div class="list-group mb-0">
+                <div class="list-group mb-0 planned-open-list">
                     {% for it in fulfilled_workshop_plans %}
                     {% set is_mine_fw = (it.coach_id == current_user.id) %}
                     <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
