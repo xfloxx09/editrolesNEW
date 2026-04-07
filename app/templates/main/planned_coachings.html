@@ -43,32 +43,6 @@
     margin-bottom: 0.75rem;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
-.planned-metal-card {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(165deg, #17171d 0%, #231325 52%, #32113b 100%) !important;
-    border: 1px solid #5f2c66 !important;
-    color: #f3eef6 !important;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(226, 0, 116, 0.08) inset;
-    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
-    animation: plannedCardIn 0.45s ease both;
-}
-.planned-metal-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(120deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
-    pointer-events: none;
-}
-.planned-metal-card:hover {
-    transform: translateY(-3px) scale(1.01);
-    border-color: #e20074 !important;
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45), 0 0 22px rgba(226, 0, 116, 0.24);
-}
-@keyframes plannedCardIn {
-    from { opacity: 0.7; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
 .planned-open-list .list-group-item:last-child {
     margin-bottom: 0;
 }
@@ -97,7 +71,7 @@
 {% set n_done = (fulfilled_plans|length if can_see_coaching_plans else 0) + (fulfilled_workshop_plans|length if can_see_workshop_plans else 0) %}
 <div class="container mt-4">
     <h2 class="mb-2"><i class="fas fa-calendar-alt text-info"></i> Geplante Coachings / Workshops</h2>
-    <p class="text-muted">Offene geplante Coachings und Workshops sehen Sie hier zentral und können fällige Termine direkt starten oder erfassen.</p>
+    <p class="text-muted">Offene Termine aus dem Kalender („+“ planen) und Folgetermine aus dem Coaching-Bogen. Workshops vormerken Sie im Terminkalender; hier sehen Sie die Liste und können sie als echten Workshop erfassen.</p>
     {% if can_view_others_planned %}
     <p class="text-muted small mb-0">Als Projektleitung / QM sehen Sie zusätzlich geplante Termine der Coaches in Ihrem Projektbereich (nur lesen). Bearbeiten und „Jetzt coachen“ / „Workshop erfassen“ bleiben dem jeweiligen Coach vorbehalten.</p>
     {% endif %}
@@ -191,7 +165,7 @@
                     {% for it in items %}
                     {% set is_mine = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
-                    <div class="list-group-item flex-column align-items-start planned-metal-card">
+                    <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
                             <div class="mb-2 mb-md-0">
                                 <strong>{{ it.team_member.name }}</strong>
@@ -266,7 +240,7 @@
                     {% for it in workshop_items %}
                     {% set is_mine_w = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
-                    <div class="list-group-item flex-column align-items-start planned-metal-card">
+                    <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
                             <div class="mb-2 mb-md-0">
                                 <strong>{{ it.title }}</strong>
@@ -331,7 +305,7 @@
                 <div class="list-group mb-4 planned-open-list">
                     {% for it in fulfilled_plans %}
                     {% set is_mine_fc = (it.coach_id == current_user.id) %}
-                    <div class="list-group-item flex-column align-items-start planned-metal-card">
+                    <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
                             <div class="mb-2 mb-md-0">
                                 <strong>{{ it.team_member.name }}</strong>
@@ -391,7 +365,7 @@
                 <div class="list-group mb-0 planned-open-list">
                     {% for it in fulfilled_workshop_plans %}
                     {% set is_mine_fw = (it.coach_id == current_user.id) %}
-                    <div class="list-group-item flex-column align-items-start planned-metal-card">
+                    <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
                             <div class="mb-2 mb-md-0">
                                 <strong>{{ it.title }}</strong>
