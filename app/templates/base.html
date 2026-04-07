@@ -114,6 +114,27 @@
             background: rgba(77, 175, 255, 0.12);
         }
         .qc-action-secondary:hover { background: rgba(77, 175, 255, 0.22); color: #fff; }
+        .qc-plan-row {
+            display: flex;
+            gap: .35rem;
+            align-items: center;
+            margin-top: .55rem;
+        }
+        .qc-date {
+            flex: 1;
+            min-width: 0;
+            border-radius: 8px;
+            border: 1px solid #5a616d;
+            background: #1f2328;
+            color: #f1f5f9;
+            font-size: .78rem;
+            padding: .3rem .4rem;
+            height: 32px;
+        }
+        .qc-plan-btn {
+            flex: 1;
+            margin-top: 0;
+        }
         .qc-sublist {
             margin-top: .75rem;
             border: 1px solid #4f5662;
@@ -162,9 +183,15 @@
                         Coachings: {{ s.coaching_count }} · Zeit: {{ s.total_time }} Min ·
                         Score: {% if s.avg_score is not none %}{{ s.avg_score }}%{% else %}k.A.{% endif %}
                     </div>
-                    <a class="btn btn-sm qc-action" href="{{ url_for('main.terminkalender_plan', day=s.plan_day, project=s.project_id, suggested_member_id=s.team_member_id) }}">
-                        <i class="fas fa-plus-circle mr-1"></i> Coaching planen
-                    </a>
+                    <div class="qc-plan-row">
+                        <input type="date" class="qc-date" value="{{ s.plan_day }}" min="{{ s.plan_day }}">
+                        <button type="button"
+                                class="btn btn-sm qc-action qc-plan-btn qc-plan-go"
+                                data-project-id="{{ s.project_id }}"
+                                data-member-id="{{ s.team_member_id }}">
+                            <i class="fas fa-plus-circle mr-1"></i> Coaching planen
+                        </button>
+                    </div>
                     <a class="btn btn-sm qc-action-secondary" href="{{ url_for('main.add_coaching', project=s.project_id, suggested_member_id=s.team_member_id) }}">
                         <i class="fas fa-play-circle mr-1"></i> Jetzt coachen
                     </a>
@@ -184,9 +211,15 @@
                                 Team: {{ s.team_name }}<br>
                                 Coachings: 0 · Zeit: 0 Min · Score: k.A.
                             </div>
-                            <a class="btn btn-sm qc-action" href="{{ url_for('main.terminkalender_plan', day=s.plan_day, project=s.project_id, suggested_member_id=s.team_member_id) }}">
-                                <i class="fas fa-plus-circle mr-1"></i> Coaching planen
-                            </a>
+                            <div class="qc-plan-row">
+                                <input type="date" class="qc-date" value="{{ s.plan_day }}" min="{{ s.plan_day }}">
+                                <button type="button"
+                                        class="btn btn-sm qc-action qc-plan-btn qc-plan-go"
+                                        data-project-id="{{ s.project_id }}"
+                                        data-member-id="{{ s.team_member_id }}">
+                                    <i class="fas fa-plus-circle mr-1"></i> Coaching planen
+                                </button>
+                            </div>
                             <a class="btn btn-sm qc-action-secondary" href="{{ url_for('main.add_coaching', project=s.project_id, suggested_member_id=s.team_member_id) }}">
                                 <i class="fas fa-play-circle mr-1"></i> Jetzt coachen
                             </a>
@@ -307,6 +340,22 @@
             try {
                 if (localStorage.getItem('qc_panel_open') === '1') setOpen(true);
             } catch (e) {}
+
+            document.querySelectorAll('.qc-plan-go').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var wrap = btn.closest('.qc-plan-row');
+                    var dateInput = wrap ? wrap.querySelector('.qc-date') : null;
+                    var day = dateInput && dateInput.value ? dateInput.value : '';
+                    if (!day) return;
+                    var pid = btn.getAttribute('data-project-id');
+                    var mid = btn.getAttribute('data-member-id');
+                    var u = "{{ url_for('main.terminkalender_plan') }}"
+                        + "?day=" + encodeURIComponent(day)
+                        + "&project=" + encodeURIComponent(pid || '')
+                        + "&suggested_member_id=" + encodeURIComponent(mid || '');
+                    window.location.href = u;
+                });
+            });
         })();
     </script>
     {% block scripts %}{% endblock %}
