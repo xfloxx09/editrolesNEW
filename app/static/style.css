@@ -41,6 +41,15 @@ body {
 .navbar .nav-link.telekom-button:active {
     color: #fff !important;
 }
+.navbar .nav-link.telekom-button {
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.navbar .nav-link.telekom-button:hover,
+.navbar .nav-link.telekom-button:focus {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+    box-shadow: 0 8px 18px rgba(226, 0, 116, 0.38);
+}
 
 .telekom-button-outline {
     border-color: #e20074;
