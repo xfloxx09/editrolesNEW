@@ -14,8 +14,8 @@
         justify-content: center;
         align-items: center;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        background: linear-gradient(155deg, #14141a 0%, #241329 52%, #32113b 100%);
-        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(226, 0, 116, 0.1) inset;
+        background: linear-gradient(155deg, #18121c 0%, #3a1230 45%, #5a0f3d 100%);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255, 0, 140, 0.18) inset;
         transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         animation: choiceTileIn .42s ease both;
     }
@@ -23,15 +23,17 @@
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(120deg, rgba(255,255,255,0.06), rgba(255,255,255,0));
+        background:
+            linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0)),
+            radial-gradient(circle at 85% 18%, rgba(255, 0, 153, 0.2), transparent 45%);
         pointer-events: none;
     }
     .index-choice-tile:hover {
         color: #fff;
         text-decoration: none;
         transform: translateY(-3px) scale(1.01);
-        border-color: rgba(226, 0, 116, 0.65);
-        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.48), 0 0 26px rgba(226, 0, 116, 0.25);
+        border-color: rgba(255, 0, 153, 0.75);
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.48), 0 0 28px rgba(255, 0, 153, 0.34);
     }
     .index-choice-tile i {
         color: var(--tile-accent, #e20074);
