@@ -133,20 +133,58 @@
         }
         .qc-sublist summary::-webkit-details-marker { display: none; }
         .qc-sublist-body { padding: .45rem .55rem .1rem; }
+        .qc-section-title {
+            color: #9aa4b2;
+            font-size: .72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            margin-bottom: .45rem;
+        }
+        .qc-item--due {
+            border-color: rgba(255, 193, 7, 0.45);
+            box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.12) inset;
+        }
+        .qc-divider {
+            border: 0;
+            border-top: 1px solid #4f5662;
+            margin: .85rem 0;
+        }
     </style>
     {% block head_extra %}{% endblock %}
 </head>
 <body>
     {% if current_user.is_authenticated and has_perm('add_coaching') %}
-    <button id="qcToggle" class="qc-toggle" type="button" title="Coaching-Vorschläge öffnen/schließen" aria-label="Coaching-Vorschläge öffnen">
+    <button id="qcToggle" class="qc-toggle" type="button" title="Schnellpanel öffnen/schließen" aria-label="Schnellpanel öffnen">
         <i class="fas fa-bolt"></i>
     </button>
     <aside id="qcPanel" class="qc-panel" aria-hidden="true">
         <div class="qc-head">
-            <h5><i class="fas fa-lightbulb mr-1"></i> Quick Coaching Vorschläge</h5>
+            <h5><i class="fas fa-bolt mr-1"></i> Schnellpanel</h5>
             <button id="qcClose" type="button" class="qc-close" aria-label="Schließen">×</button>
         </div>
         <div class="qc-body">
+            {% set qc_notify = planned_due_today_notifications or [] %}
+            {% if qc_notify %}
+            <div class="qc-section-title"><i class="fas fa-bell mr-1"></i>Fällig heute</div>
+            {% for n in qc_notify %}
+            <div class="qc-item qc-item--due">
+                <div class="qc-item-top">
+                    <span class="qc-name">{% if n.kind == 'workshop' %}<i class="fas fa-chalkboard-teacher mr-1 text-info"></i>{% endif %}{{ n.title }}</span>
+                    <span class="qc-reason" style="border-color:#b88900;color:#ffe6a3;">Heute</span>
+                </div>
+                {% if n.subtitle %}
+                <div class="qc-meta">{{ n.subtitle }}</div>
+                {% endif %}
+                {% if n.action_href %}
+                <a class="btn btn-sm qc-action" href="{{ n.action_href }}"><i class="fas fa-play-circle mr-1"></i>{{ n.action_label }}</a>
+                {% endif %}
+                <a class="btn btn-sm qc-action-secondary" href="{{ n.list_href }}"><i class="fas fa-list mr-1"></i>Geplante Termine</a>
+            </div>
+            {% endfor %}
+            <hr class="qc-divider">
+            {% endif %}
+            <div class="qc-section-title"><i class="fas fa-lightbulb mr-1"></i>Vorschläge</div>
             <p class="qc-help">Priorisiert nach wenig Coaching-Zeit und/oder niedriger Performance.</p>
             {% set qc_primary = quick_coaching_suggestions.primary or [] %}
             {% set qc_without = quick_coaching_suggestions.without_coaching or [] %}

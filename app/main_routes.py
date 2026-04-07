@@ -2893,6 +2893,7 @@ def open_planned_coachings_for_member():
     'planned_coachings', 'add_workshop', 'assign_coachings', 'view_pl_qm_dashboard'
 )
 def planned_coachings_list():
+    sort_today = today_athens_date()
     can_pc = current_user.has_permission('planned_coachings')
     can_pw = current_user.has_permission('add_workshop')
     can_view_others = _can_view_others_planned_in_scope()
@@ -2936,6 +2937,13 @@ def planned_coachings_list():
                 .order_by(PlannedCoaching.planned_for_date, PlannedCoaching.id)
             )
             items = q.all()
+            items.sort(
+                key=lambda it: (
+                    0 if it.planned_for_date == sort_today else 1,
+                    it.planned_for_date or date.min,
+                    it.id,
+                )
+            )
 
     workshop_items = []
     fulfilled_workshop_plans = []
@@ -2973,6 +2981,13 @@ def planned_coachings_list():
                 .order_by(PlannedWorkshop.planned_for_date, PlannedWorkshop.id)
             )
             workshop_items = wq.all()
+            workshop_items.sort(
+                key=lambda it: (
+                    0 if it.planned_for_date == sort_today else 1,
+                    it.planned_for_date or date.min,
+                    it.id,
+                )
+            )
 
         parts_wd = []
         if can_pw:
@@ -3066,7 +3081,7 @@ def planned_coachings_list():
         can_view_others_planned=can_view_others,
         can_see_coaching_plans=can_see_coaching_plans,
         can_see_workshop_plans=can_see_workshop_plans,
-        today_d=today_athens_date(),
+        today_d=sort_today,
         config=current_app.config,
     )
 

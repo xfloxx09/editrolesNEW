@@ -600,6 +600,13 @@ def create_app(config_class=Config):
             return {'quick_coaching_suggestions': quick_coaching_suggestions(limit=6, max_without_coaching=40)}
         return {'quick_coaching_suggestions': {'primary': [], 'without_coaching': []}}
 
+    @app.context_processor
+    def inject_planned_due_today_notifications():
+        from app.utils import quick_planned_due_today_notifications
+        if current_user.is_authenticated:
+            return {'planned_due_today_notifications': quick_planned_due_today_notifications()}
+        return {'planned_due_today_notifications': []}
+
     @app.template_filter('athens_time')
     def format_athens_time(utc_dt, fmt='%d.%m.%Y %H:%M'):
         if not utc_dt:

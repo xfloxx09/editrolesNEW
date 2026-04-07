@@ -585,6 +585,98 @@ def quick_coaching_suggestions(limit=6, max_without_coaching=30):
     }
 
 
+def quick_planned_due_today_notifications():
+    """
+    Open planned coaching/workshop dated today for the current user (coach).
+    Used in the sidebar quick panel above Vorschläge.
+    """
+    if not current_user.is_authenticated or not current_user.has_permission('add_coaching'):
+        return []
+
+    from sqlalchemy.orm import joinedload
+    from app.models import PlannedCoaching, PlannedWorkshop, Project
+
+    acc = get_accessible_project_ids()
+    if acc is not None and len(acc) == 0:
+        return []
+
+    today = today_athens_date()
+    out = []
+
+    def coaching_project_id(pc):
+        if pc.project_id:
+            return pc.project_id
+        tm = pc.team_member
+        if tm and tm.team:
+            return tm.team.project_id
+        return None
+
+    def pick_project_for_workshop(pw):
+        if pw.project_id:
+            return pw.project_id
+        if acc is not None and len(acc) > 0:
+            return acc[0]
+        first = Project.query.order_by(Project.id).first()
+        return first.id if first else None
+
+    q_pc = PlannedCoaching.query.filter(
+        PlannedCoaching.coach_id == current_user.id,
+        PlannedCoaching.status == 'open',
+        PlannedCoaching.planned_for_date == today,
+    ).options(
+        joinedload(PlannedCoaching.team_member).joinedload(TeamMember.team),
+        joinedload(PlannedCoaching.project),
+    )
+    for pc in q_pc.order_by(PlannedCoaching.id).all():
+        pid = coaching_project_id(pc)
+        if acc is not None:
+            if pid is None or pid not in acc:
+                continue
+        elif pid is None:
+            first = Project.query.order_by(Project.id).first()
+            pid = first.id if first else None
+
+        subtitle_parts = []
+        if pc.project and pc.project.name:
+            subtitle_parts.append(pc.project.name)
+        elif pc.team_member and pc.team_member.team and pc.team_member.team.name:
+            subtitle_parts.append(pc.team_member.team.name)
+        subtitle = ' · '.join(subtitle_parts)
+
+        out.append({
+            'kind': 'coaching',
+            'title': (pc.team_member.name or 'Coaching').strip() if pc.team_member else 'Coaching',
+            'subtitle': subtitle,
+            'action_label': 'Jetzt coachen',
+            'action_href': url_for('main.add_coaching', project=pid, planned_id=pc.id) if pid else None,
+            'list_href': url_for('main.planned_coachings_list'),
+        })
+
+    if current_user.has_permission('add_workshop'):
+        q_pw = PlannedWorkshop.query.filter(
+            PlannedWorkshop.coach_id == current_user.id,
+            PlannedWorkshop.status == 'open',
+            PlannedWorkshop.planned_for_date == today,
+        ).options(joinedload(PlannedWorkshop.project))
+        for pw in q_pw.order_by(PlannedWorkshop.id).all():
+            if acc is not None and pw.project_id is not None and pw.project_id not in acc:
+                continue
+            wpid = pick_project_for_workshop(pw)
+            sub = pw.project.name if pw.project and pw.project.name else ''
+            out.append({
+                'kind': 'workshop',
+                'title': (pw.title or 'Workshop').strip(),
+                'subtitle': sub,
+                'action_label': 'Workshop erfassen',
+                'action_href': (
+                    url_for('main.add_workshop', project=wpid, planned_workshop=pw.id) if wpid else None
+                ),
+                'list_href': url_for('main.planned_coachings_list'),
+            })
+
+    return out
+
+
 def athens_calendar_day_utc_naive_bounds(d):
     """
     Europe/Athens local calendar day d → (start, end) as naive UTC datetimes for DB compare.
