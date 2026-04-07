@@ -7,9 +7,178 @@
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        .toolbox-toggle {
+            position: fixed;
+            left: 0;
+            top: 45%;
+            transform: translateY(-50%);
+            z-index: 1055;
+            width: 40px;
+            height: 110px;
+            border: 1px solid #e20074;
+            border-left: none;
+            border-radius: 0 12px 12px 0;
+            background: linear-gradient(180deg, #ff3ea1 0%, #e20074 58%, #b9005e 100%);
+            color: #fff;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28), 0 0 12px rgba(226, 0, 116, 0.45);
+            cursor: pointer;
+        }
+        .toolbox-toggle i { font-size: 1.1rem; }
+        .toolbox-panel {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 340px;
+            max-width: 92vw;
+            height: 100vh;
+            z-index: 1056;
+            background: linear-gradient(160deg, #2c3036 0%, #24282d 100%);
+            border-right: 1px solid #4b525d;
+            box-shadow: 10px 0 24px rgba(0, 0, 0, 0.35);
+            transform: translateX(-100%);
+            transition: transform 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            color: #e9edf2;
+        }
+        .toolbox-panel.open { transform: translateX(0); }
+        .toolbox-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid #454b55;
+        }
+        .toolbox-title { margin: 0; font-size: 1.05rem; color: #fff; font-weight: 700; }
+        .toolbox-close {
+            background: transparent;
+            border: 1px solid #5a616d;
+            color: #d5dbe3;
+            border-radius: 8px;
+            width: 32px;
+            height: 32px;
+        }
+        .toolbox-body { padding: 0.9rem; overflow-y: auto; }
+        .toolbox-card {
+            border: 1px solid #49515d;
+            border-radius: 12px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .toolbox-card h6 { color: #fff; margin-bottom: 0.55rem; }
+        .toolbox-note {
+            width: 100%;
+            min-height: 130px;
+            border-radius: 8px;
+            border: 1px solid #5a616d;
+            background: #1f2328;
+            color: #f1f5f9;
+            padding: 0.55rem;
+            resize: vertical;
+        }
+        .toolbox-input {
+            border-radius: 8px;
+            border: 1px solid #5a616d;
+            background: #1f2328;
+            color: #f1f5f9;
+            padding: 0.45rem 0.55rem;
+            width: 100%;
+        }
+        .toolbox-calc-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+        }
+        .toolbox-calc-btn {
+            border: 1px solid #5a616d;
+            background: #30363f;
+            color: #fff;
+            border-radius: 8px;
+            padding: 0.4rem 0.25rem;
+            font-weight: 600;
+        }
+        .toolbox-links a {
+            display: block;
+            margin-bottom: 0.35rem;
+            color: #cfe8ff;
+        }
+        .toolbox-timer {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #fff;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+    </style>
     {% block head_extra %}{% endblock %}
 </head>
 <body>
+    {% if current_user.is_authenticated %}
+    <button id="toolboxToggle" class="toolbox-toggle" type="button" title="Toolbox öffnen/schließen" aria-label="Toolbox öffnen">
+        <i class="fas fa-toolbox"></i>
+    </button>
+    <aside id="toolboxPanel" class="toolbox-panel" aria-hidden="true">
+        <div class="toolbox-head">
+            <h5 class="toolbox-title"><i class="fas fa-toolbox mr-1"></i> Toolbox</h5>
+            <button id="toolboxClose" type="button" class="toolbox-close" aria-label="Toolbox schließen">×</button>
+        </div>
+        <div class="toolbox-body">
+            <div class="toolbox-card">
+                <h6><i class="fas fa-sticky-note mr-1"></i> Notizblock</h6>
+                <textarea id="toolboxNote" class="toolbox-note" placeholder="Schnelle Notizen..."></textarea>
+                <small class="text-muted">Wird lokal im Browser gespeichert.</small>
+            </div>
+
+            <div class="toolbox-card">
+                <h6><i class="fas fa-calculator mr-1"></i> Rechner</h6>
+                <input id="toolboxCalcDisplay" class="toolbox-input" type="text" placeholder="z.B. (5+8)*2" readonly>
+                <div class="toolbox-calc-grid">
+                    <button class="toolbox-calc-btn" type="button" data-calc="7">7</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="8">8</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="9">9</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="/">÷</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="4">4</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="5">5</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="6">6</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="*">×</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="1">1</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="2">2</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="3">3</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="-">−</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="0">0</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc=".">.</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="C">C</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="+">+</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="(">(</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc=")">)</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="⌫">⌫</button>
+                    <button class="toolbox-calc-btn" type="button" data-calc="=">=</button>
+                </div>
+            </div>
+
+            <div class="toolbox-card">
+                <h6><i class="fas fa-hourglass-half mr-1"></i> Fokus-Timer</h6>
+                <div id="toolboxTimer" class="toolbox-timer">15:00</div>
+                <div class="d-flex justify-content-between">
+                    <button id="toolboxTimerStart" class="btn btn-sm btn-outline-light" type="button">Start</button>
+                    <button id="toolboxTimerPause" class="btn btn-sm btn-outline-warning" type="button">Pause</button>
+                    <button id="toolboxTimerReset" class="btn btn-sm btn-outline-info" type="button">Reset</button>
+                </div>
+            </div>
+
+            <div class="toolbox-card toolbox-links">
+                <h6><i class="fas fa-link mr-1"></i> Schnellzugriffe</h6>
+                <a href="{{ url_for('main.index') }}"><i class="fas fa-home mr-1"></i> Dashboard</a>
+                <a href="{{ url_for('main.terminkalender') }}"><i class="fas fa-calendar-week mr-1"></i> Terminkalender</a>
+                <a href="{{ url_for('main.planned_coachings_list') }}"><i class="fas fa-calendar-alt mr-1"></i> Geplante Coachings</a>
+                <a href="{{ url_for('main.profile') }}"><i class="fas fa-user-cog mr-1"></i> Profil</a>
+            </div>
+        </div>
+    </aside>
+    {% endif %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <a class="navbar-brand telekom-brand" href="{{ url_for('main.index') }}">Helpsense - Coaching</a>
         <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -100,6 +269,74 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+    <script>
+        (function() {
+            var panel = document.getElementById('toolboxPanel');
+            var toggle = document.getElementById('toolboxToggle');
+            var closeBtn = document.getElementById('toolboxClose');
+            if (!panel || !toggle) return;
+
+            function setOpen(open) {
+                panel.classList.toggle('open', open);
+                panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+                localStorage.setItem('toolbox_open', open ? '1' : '0');
+            }
+            toggle.addEventListener('click', function() { setOpen(!panel.classList.contains('open')); });
+            if (closeBtn) closeBtn.addEventListener('click', function() { setOpen(false); });
+            if (localStorage.getItem('toolbox_open') === '1') setOpen(true);
+
+            var note = document.getElementById('toolboxNote');
+            if (note) {
+                note.value = localStorage.getItem('toolbox_note') || '';
+                note.addEventListener('input', function() {
+                    localStorage.setItem('toolbox_note', note.value);
+                });
+            }
+
+            var calcDisplay = document.getElementById('toolboxCalcDisplay');
+            var calcBtns = document.querySelectorAll('.toolbox-calc-btn');
+            calcBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    if (!calcDisplay) return;
+                    var val = btn.getAttribute('data-calc');
+                    if (val === 'C') { calcDisplay.value = ''; return; }
+                    if (val === '⌫') { calcDisplay.value = calcDisplay.value.slice(0, -1); return; }
+                    if (val === '=') {
+                        try {
+                            var safe = calcDisplay.value.replace(/[^0-9+\-*/().]/g, '');
+                            calcDisplay.value = String(Function('return (' + safe + ')')());
+                        } catch (e) {
+                            calcDisplay.value = 'Fehler';
+                        }
+                        return;
+                    }
+                    calcDisplay.value += val;
+                });
+            });
+
+            var timerEl = document.getElementById('toolboxTimer');
+            var startBtn = document.getElementById('toolboxTimerStart');
+            var pauseBtn = document.getElementById('toolboxTimerPause');
+            var resetBtn = document.getElementById('toolboxTimerReset');
+            var remaining = 15 * 60;
+            var timerId = null;
+            function renderTimer() {
+                if (!timerEl) return;
+                var m = Math.floor(remaining / 60);
+                var s = remaining % 60;
+                timerEl.textContent = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+            }
+            function tick() {
+                if (remaining <= 0) { clearInterval(timerId); timerId = null; return; }
+                remaining -= 1;
+                renderTimer();
+            }
+            if (startBtn) startBtn.addEventListener('click', function() { if (!timerId) timerId = setInterval(tick, 1000); });
+            if (pauseBtn) pauseBtn.addEventListener('click', function() { if (timerId) { clearInterval(timerId); timerId = null; } });
+            if (resetBtn) resetBtn.addEventListener('click', function() { remaining = 15 * 60; renderTimer(); });
+            renderTimer();
+        })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
