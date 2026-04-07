@@ -14,7 +14,7 @@
             <select name="team_member_id" id="team_member_id" class="form-control" required>
                 <option value="">— Bitte wählen —</option>
                 {% for m in members %}
-                <option value="{{ m.id }}">{{ m.name }} ({{ m.team.name if m.team else '' }})</option>
+                <option value="{{ m.id }}" {% if selected_member_id and selected_member_id == m.id %}selected{% endif %}>{{ m.name }} ({{ m.team.name if m.team else '' }})</option>
                 {% endfor %}
             </select>
         </div>

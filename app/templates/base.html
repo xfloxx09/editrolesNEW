@@ -103,6 +103,36 @@
             color: #fff;
         }
         .qc-action:hover { background: #c00062; color: #fff; }
+        .qc-action-secondary {
+            margin-top: .35rem;
+            width: 100%;
+            border-radius: 9px;
+            font-size: .82rem;
+            font-weight: 600;
+            border: 1px solid #4dafff;
+            color: #d9ebff;
+            background: rgba(77, 175, 255, 0.12);
+        }
+        .qc-action-secondary:hover { background: rgba(77, 175, 255, 0.22); color: #fff; }
+        .qc-sublist {
+            margin-top: .75rem;
+            border: 1px solid #4f5662;
+            border-radius: 12px;
+            background: rgba(255,255,255,.02);
+            overflow: hidden;
+        }
+        .qc-sublist summary {
+            cursor: pointer;
+            list-style: none;
+            padding: .55rem .7rem;
+            color: #dbe1ea;
+            font-weight: 600;
+            font-size: .84rem;
+            border-bottom: 1px solid #4f5662;
+            background: rgba(255,255,255,.03);
+        }
+        .qc-sublist summary::-webkit-details-marker { display: none; }
+        .qc-sublist-body { padding: .45rem .55rem .1rem; }
     </style>
     {% block head_extra %}{% endblock %}
 </head>
@@ -118,8 +148,10 @@
         </div>
         <div class="qc-body">
             <p class="qc-help">Priorisiert nach wenig Coaching-Zeit und/oder niedriger Performance.</p>
-            {% if quick_coaching_suggestions %}
-                {% for s in quick_coaching_suggestions %}
+            {% set qc_primary = quick_coaching_suggestions.primary or [] %}
+            {% set qc_without = quick_coaching_suggestions.without_coaching or [] %}
+            {% if qc_primary or qc_without %}
+                {% for s in qc_primary %}
                 <div class="qc-item">
                     <div class="qc-item-top">
                         <span class="qc-name">{{ s.name }}</span>
@@ -130,11 +162,39 @@
                         Coachings: {{ s.coaching_count }} · Zeit: {{ s.total_time }} Min ·
                         Score: {% if s.avg_score is not none %}{{ s.avg_score }}%{% else %}k.A.{% endif %}
                     </div>
-                    <a class="btn btn-sm qc-action" href="{{ url_for('main.add_coaching', project=s.project_id, suggested_member_id=s.team_member_id) }}">
+                    <a class="btn btn-sm qc-action" href="{{ url_for('main.terminkalender_plan', day=s.plan_day, project=s.project_id, suggested_member_id=s.team_member_id) }}">
                         <i class="fas fa-plus-circle mr-1"></i> Coaching planen
+                    </a>
+                    <a class="btn btn-sm qc-action-secondary" href="{{ url_for('main.add_coaching', project=s.project_id, suggested_member_id=s.team_member_id) }}">
+                        <i class="fas fa-play-circle mr-1"></i> Jetzt coachen
                     </a>
                 </div>
                 {% endfor %}
+                {% if qc_without %}
+                <details class="qc-sublist">
+                    <summary>MA ohne Coaching ({{ qc_without|length }})</summary>
+                    <div class="qc-sublist-body">
+                        {% for s in qc_without %}
+                        <div class="qc-item">
+                            <div class="qc-item-top">
+                                <span class="qc-name">{{ s.name }}</span>
+                                <span class="qc-reason">{{ s.reason }}</span>
+                            </div>
+                            <div class="qc-meta">
+                                Team: {{ s.team_name }}<br>
+                                Coachings: 0 · Zeit: 0 Min · Score: k.A.
+                            </div>
+                            <a class="btn btn-sm qc-action" href="{{ url_for('main.terminkalender_plan', day=s.plan_day, project=s.project_id, suggested_member_id=s.team_member_id) }}">
+                                <i class="fas fa-plus-circle mr-1"></i> Coaching planen
+                            </a>
+                            <a class="btn btn-sm qc-action-secondary" href="{{ url_for('main.add_coaching', project=s.project_id, suggested_member_id=s.team_member_id) }}">
+                                <i class="fas fa-play-circle mr-1"></i> Jetzt coachen
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+                {% endif %}
             {% else %}
                 <div class="alert alert-secondary mb-0">Keine Vorschläge im aktuellen Sichtbereich.</div>
             {% endif %}

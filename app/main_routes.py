@@ -1826,12 +1826,17 @@ def terminkalender_plan():
         return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
 
     members = _team_members_for_planned_coaching_picker(project_id)
+    selected_member_id = request.args.get('suggested_member_id', type=int)
+    allowed_member_ids = {m.id for m in members}
+    if selected_member_id not in allowed_member_ids:
+        selected_member_id = None
     return render_template(
         'main/terminkalender_plan.html',
         title='Geplantes Coaching anlegen',
         plan_date=plan_date,
         project_id=project_id,
         members=members,
+        selected_member_id=selected_member_id,
         today=today,
         config=current_app.config,
     )

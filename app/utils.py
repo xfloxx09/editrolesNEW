@@ -1,5 +1,5 @@
 from functools import wraps
-from datetime import datetime, date, time, timezone
+from datetime import datetime, date, time, timezone, timedelta
 from zoneinfo import ZoneInfo
 from flask_login import current_user
 from flask import flash, redirect, url_for
@@ -489,7 +489,7 @@ def today_athens_date():
     return datetime.now(ZoneInfo('Europe/Athens')).date()
 
 
-def quick_coaching_suggestions(limit=6):
+def quick_coaching_suggestions(limit=6, max_without_coaching=30):
     """
     Best candidates for the next coaching:
     - low total coached time
@@ -497,14 +497,14 @@ def quick_coaching_suggestions(limit=6):
     Scoped to current user's visible projects and coaching constraints.
     """
     if not current_user.is_authenticated or not current_user.has_permission('add_coaching'):
-        return []
+        return {'primary': [], 'without_coaching': []}
 
     from sqlalchemy import func
     from app.models import Coaching
 
     acc = get_accessible_project_ids()
     if acc is not None and len(acc) == 0:
-        return []
+        return {'primary': [], 'without_coaching': []}
 
     q = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
         Team.name != ARCHIV_TEAM_NAME,
@@ -516,12 +516,12 @@ def quick_coaching_suggestions(limit=6):
     if current_user.has_permission('coach_own_team_only') or current_user.role_name == ROLE_TEAMLEITER:
         own_team_ids = sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
         if not own_team_ids:
-            return []
+            return {'primary': [], 'without_coaching': []}
         q = q.filter(TeamMember.team_id.in_(own_team_ids))
 
     members = q.order_by(TeamMember.name).all()
     if not members:
-        return []
+        return {'primary': [], 'without_coaching': []}
 
     member_ids = [m.id for m in members]
     agg_rows = (
@@ -538,6 +538,7 @@ def quick_coaching_suggestions(limit=6):
     agg_map = {r.tmid: r for r in agg_rows}
 
     out = []
+    plan_day = (today_athens_date() + timedelta(days=1)).isoformat()
     for m in members:
         team = m.team
         if not team:
@@ -572,10 +573,16 @@ def quick_coaching_suggestions(limit=6):
             'avg_score': round((avg_mark or 0) * 10, 1) if avg_mark is not None else None,
             'reason': reason,
             'need_score': score_need,
+            'plan_day': plan_day,
         })
 
     out.sort(key=lambda x: (-x['need_score'], x['total_time'], x['name'].lower()))
-    return out[:max(1, int(limit or 6))]
+    without = [x for x in out if x['coaching_count'] == 0]
+    primary = [x for x in out if x['coaching_count'] > 0][:max(1, int(limit or 6))]
+    return {
+        'primary': primary,
+        'without_coaching': without[:max(1, int(max_without_coaching or 30))],
+    }
 
 
 def athens_calendar_day_utc_naive_bounds(d):

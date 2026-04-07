@@ -597,8 +597,8 @@ def create_app(config_class=Config):
     def inject_quick_coaching_suggestions():
         from app.utils import quick_coaching_suggestions
         if current_user.is_authenticated:
-            return {'quick_coaching_suggestions': quick_coaching_suggestions(limit=6)}
-        return {'quick_coaching_suggestions': []}
+            return {'quick_coaching_suggestions': quick_coaching_suggestions(limit=6, max_without_coaching=40)}
+        return {'quick_coaching_suggestions': {'primary': [], 'without_coaching': []}}
 
     @app.template_filter('athens_time')
     def format_athens_time(utc_dt, fmt='%d.%m.%Y %H:%M'):
