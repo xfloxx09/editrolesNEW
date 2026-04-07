@@ -93,16 +93,15 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
     padding: 0.5rem 0;
 }
 /* Desktop: gleiche Mindesthöhe für leere/volle Tage; Inhalt darf Zeile bei Bedarf etwas höher machen */
-.term-cal-table td.term-cal-cell {
-    min-height: 132px;
-    box-sizing: border-box;
-}
 .term-cal-cell {
     vertical-align: top;
     background: linear-gradient(165deg, #2a2a2a 0%, #232323 100%);
     border: 1px solid #3d3d3d;
     border-radius: 12px;
-    padding: 8px;
+    padding: 8px 8px 12px 8px;
+    min-height: 132px;
+    position: relative;
+    overflow: hidden;
     transition: border-color 0.15s, box-shadow 0.15s;
 }
 .term-cal-cell:hover { border-color: #e20074; box-shadow: 0 0 0 1px rgba(226,0,116,0.35); }
@@ -115,29 +114,47 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
     font-size: 1.15rem;
     font-weight: 700;
     color: #fff;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    min-height: 1.5rem;
 }
-.term-cal-stats { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.term-cal-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-start;
+    align-content: flex-start;
+    min-height: 60px;
+    padding-right: 2.05rem;
+}
 .term-cal-stat {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 1.75rem;
+    min-width: 1.9rem;
     height: 1.75rem;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.01em;
     text-decoration: none !important;
     color: #fff !important;
-    padding: 0 6px;
+    padding: 0 7px;
+    border: 1px solid rgba(255,255,255,0.28);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 0 0 1px rgba(0,0,0,0.2);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
-.term-cal-stat.done { background: #e20074; }
-.term-cal-stat.done-others { background: #5c7cfa; }
-.term-cal-stat.planned { background: #20c997; }
-.term-cal-stat.assigned { background: #28a745; }
-.term-cal-stat.ws-done { background: #fd7e14; }
-.term-cal-stat.ws-others { background: #ff922b; }
-.term-cal-stat.planned-ws { background: #6f42c1; }
+.term-cal-stat:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 0 12px rgba(255,255,255,0.12);
+}
+.term-cal-stat.done { background: linear-gradient(160deg, #ff3ba0, #e20074); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(226, 0, 116, 0.42); }
+.term-cal-stat.done-others { background: linear-gradient(160deg, #7ca3ff, #4f74f8); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(92, 124, 250, 0.38); }
+.term-cal-stat.planned { background: linear-gradient(160deg, #35e3b4, #16b388); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(32, 201, 151, 0.35); }
+.term-cal-stat.assigned { background: linear-gradient(160deg, #4cd067, #23964a); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(40, 167, 69, 0.34); }
+.term-cal-stat.ws-done { background: linear-gradient(160deg, #ffa14a, #f3740a); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(253, 126, 20, 0.36); }
+.term-cal-stat.ws-others { background: linear-gradient(160deg, #ffc071, #ff8d1a); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(255, 146, 43, 0.34); }
+.term-cal-stat.planned-ws { background: linear-gradient(160deg, #9b6eff, #6637be); box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(111, 66, 193, 0.4); }
 .term-cal-stat.muted { opacity: 0.45; pointer-events: none; }
 .term-cal-add {
     display: inline-flex;
@@ -150,11 +167,19 @@ details.terminkal-legend-wrap[open] .terminkal-legend-summary {
     color: #fff !important;
     font-weight: 700;
     text-decoration: none !important;
-    margin-left: auto;
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
     font-size: 1.1rem;
     line-height: 1;
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
 }
-.term-cal-add:hover { background: #e20074; color: #fff !important; }
+.term-cal-add:hover {
+    background: linear-gradient(160deg, #ff3ba0, #e20074);
+    color: #fff !important;
+    box-shadow: 0 0 14px rgba(226, 0, 116, 0.45);
+}
 /* Mobil: eine Zeile pro Tag — lesbar, keine 7 Micro-Spalten */
 .term-cal-week-mobile {
     display: flex;
