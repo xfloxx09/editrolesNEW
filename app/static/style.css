@@ -1,38 +1,78 @@
-body {
-    background-color: #1a1a1a; /* Dunkles Schwarz/Grau */
-    color: #f0f0f0; /* Heller Text für Kontrast */
-    font-family: 'TeleNeo', 'Helvetica Neue', Helvetica, Arial, sans-serif; /* Telekom Schriftart, falls verfügbar */
+:root {
+    --tk-bg: #121214;
+    --tk-surface: #1a1a1f;
+    --tk-surface-elevated: #24242c;
+    --tk-surface-input: #2e2e36;
+    --tk-border: rgba(255, 255, 255, 0.085);
+    --tk-border-strong: rgba(226, 0, 116, 0.35);
+    --tk-magenta: #e20074;
+    --tk-magenta-dark: #b8005c;
+    --tk-magenta-glow: rgba(226, 0, 116, 0.28);
+    --tk-magenta-soft: rgba(226, 0, 116, 0.2);
+    --tk-text: #f4f1f6;
+    --tk-muted: #a89fb0;
+    --tk-link: #ff6eb3;
+    --tk-link-hover: #ffffff;
+    --tk-radius: 10px;
+    --tk-radius-lg: 18px;
+    --tk-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
-/* Telekom Magenta: #e20074 */
-/* Telekom Dunkelgrau (fast schwarz): #333333 oder dunkler */
-/* Telekom Hellgrau für Akzente: #f0f0f0 */
+/* Telekom Magenta: #e20074 — use var(--tk-magenta) */
+
+body {
+    background-color: var(--tk-bg);
+    color: var(--tk-text);
+    font-family: 'TeleNeo', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+body.tk-app {
+    min-height: 100vh;
+}
+
+a {
+    color: var(--tk-link);
+}
+a:hover {
+    color: var(--tk-link-hover);
+}
+
+.text-muted {
+    color: var(--tk-muted) !important;
+}
+
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+    color: var(--tk-text);
+}
 
 .telekom-brand {
     font-weight: bold;
-    color: #e20074 !important;
+    color: var(--tk-magenta) !important;
 }
 
+.navbar.navbar-dark.bg-dark,
 .navbar {
-    background-color: #000000 !important; /* Schwarze Navbar */
-    border-bottom: 2px solid #e20074;
+    background-color: #000000 !important;
+    border-bottom: 2px solid var(--tk-magenta);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
 .nav-link {
-    color: #f0f0f0 !important;
+    color: var(--tk-text) !important;
 }
 .nav-link:hover {
-    color: #e20074 !important;
+    color: var(--tk-magenta) !important;
 }
 
 .telekom-button {
-    background-color: #e20074;
-    border-color: #e20074;
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
     color: white;
 }
 .telekom-button:hover {
-    background-color: #c0005e; /* Dunkleres Magenta für Hover */
-    border-color: #c0005e;
+    background-color: var(--tk-magenta-dark);
+    border-color: var(--tk-magenta-dark);
     color: white;
 }
 /* Keep label readable on navbar action button hover/focus */
@@ -52,18 +92,30 @@ body {
 }
 
 .telekom-button-outline {
-    border-color: #e20074;
-    color: #e20074;
+    border-color: var(--tk-magenta);
+    color: var(--tk-magenta);
 }
 .telekom-button-outline:hover {
-    background-color: #e20074;
+    background-color: var(--tk-magenta);
     color: white;
 }
 
 
 .card {
-    background-color: #2b2b2b; /* Etwas helleres Grau für Karten */
-    border: 1px solid #444;
+    background-color: var(--tk-surface-elevated);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius);
+    color: var(--tk-text);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.card-header {
+    background-color: rgba(0, 0, 0, 0.22);
+    border-bottom: 1px solid var(--tk-border);
+    color: var(--tk-text);
+}
+.card-footer {
+    background-color: rgba(0, 0, 0, 0.18);
+    border-top: 1px solid var(--tk-border);
 }
 .card-header.telekom-bg-magenta {
     background-color: #e20074;
@@ -99,24 +151,26 @@ body {
 }
 
 .form-control {
-    background-color: #333;
-    color: #f0f0f0;
-    border: 1px solid #555;
+    background-color: var(--tk-surface-input);
+    color: var(--tk-text);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius);
 }
 .form-control:focus {
-    background-color: #444;
-    color: #f0f0f0;
-    border-color: #e20074;
-    box-shadow: 0 0 0 0.2rem rgba(226, 0, 116, 0.25);
+    background-color: #3a3a44;
+    color: var(--tk-text);
+    border-color: var(--tk-magenta);
+    box-shadow: 0 0 0 0.2rem var(--tk-magenta-glow);
 }
-.custom-select { /* Für Select-Felder */
-    background-color: #333;
-    color: #f0f0f0;
-    border: 1px solid #555;
+.custom-select {
+    background-color: var(--tk-surface-input);
+    color: var(--tk-text);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius);
 }
 .custom-select:focus {
-    border-color: #e20074;
-    box-shadow: 0 0 0 0.2rem rgba(226, 0, 116, 0.25);
+    border-color: var(--tk-magenta);
+    box-shadow: 0 0 0 0.2rem var(--tk-magenta-glow);
 }
 
 
@@ -124,52 +178,63 @@ body {
     background-color: #e20074;
 }
 .progress {
-    background-color: #555; /* Hintergrund der Progressbar */
-    height: 20px; /* Etwas höher für bessere Sichtbarkeit */
+    background-color: rgba(255, 255, 255, 0.08);
+    height: 20px;
+    border-radius: var(--tk-radius);
 }
 
+.alert {
+    border-radius: var(--tk-radius);
+    border: 1px solid var(--tk-border);
+    color: var(--tk-text);
+}
+.alert-secondary {
+    background-color: rgba(255, 255, 255, 0.06);
+    border-color: var(--tk-border);
+    color: var(--tk-muted);
+}
 .alert-info {
-    background-color: #17a2b8; /* Standard Bootstrap Info, könnte man anpassen */
-    color: white;
-    border-color: #17a2b8;
+    background-color: rgba(23, 162, 184, 0.12);
+    border-color: rgba(23, 162, 184, 0.45);
+    color: #d2f1f7;
 }
 .alert-success {
-    background-color: #28a745;
-    color: white;
-    border-color: #28a745;
+    background-color: rgba(40, 167, 69, 0.12);
+    border-color: rgba(40, 167, 69, 0.45);
+    color: #d4f5df;
 }
 .alert-warning {
-    background-color: #ffc107;
-    color: #212529;
-    border-color: #ffc107;
+    background-color: rgba(255, 193, 7, 0.12);
+    border-color: rgba(255, 193, 7, 0.45);
+    color: #fff3cd;
 }
 .alert-danger {
-    background-color: #dc3545;
-    color: white;
-    border-color: #dc3545;
+    background-color: rgba(220, 53, 69, 0.14);
+    border-color: rgba(220, 53, 69, 0.5);
+    color: #ffd7dc;
 }
 
 /* Pagination Styling */
 .page-link.telekom-page-link {
-    color: #e20074;
-    background-color: #333;
-    border-color: #555;
+    color: var(--tk-magenta);
+    background-color: var(--tk-surface-input);
+    border-color: var(--tk-border);
 }
 .page-link.telekom-page-link:hover {
     color: white;
-    background-color: #e20074;
-    border-color: #e20074;
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
 }
 .page-item.active .page-link.telekom-page-active {
     z-index: 3;
     color: #fff;
-    background-color: #e20074;
-    border-color: #e20074;
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
 }
 .page-item.disabled .page-link {
-    color: #6c757d;
-    background-color: #2b2b2b;
-    border-color: #444;
+    color: var(--tk-muted);
+    background-color: var(--tk-surface);
+    border-color: var(--tk-border);
 }
 
 footer {
@@ -280,4 +345,271 @@ footer {
     font-weight: 700;
     line-height: 1.2;
     min-width: 1.75rem;
+}
+
+/* -----------------------------------------------------------------
+   Global Bootstrap / layout alignment — Telekom dark + magenta
+   Revert entire commit to undo this reskin.
+   ----------------------------------------------------------------- */
+
+hr {
+    border-top-color: var(--tk-border);
+}
+
+.border,
+.border-top,
+.border-bottom,
+.border-left,
+.border-right {
+    border-color: var(--tk-border) !important;
+}
+
+.list-group-item {
+    background-color: var(--tk-surface-elevated);
+    border-color: var(--tk-border);
+    color: var(--tk-text);
+}
+
+.list-group-item-action:hover,
+.list-group-item-action:focus {
+    background-color: rgba(226, 0, 116, 0.09);
+    color: var(--tk-text);
+}
+
+.dropdown-menu {
+    background-color: var(--tk-surface-elevated);
+    border: 1px solid var(--tk-border);
+    box-shadow: var(--tk-shadow);
+    border-radius: var(--tk-radius);
+}
+.dropdown-item {
+    color: var(--tk-text);
+}
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background: rgba(226, 0, 116, 0.14);
+    color: #fff;
+}
+.dropdown-header {
+    color: var(--tk-muted);
+}
+.dropdown-divider {
+    border-top-color: var(--tk-border);
+}
+
+.nav-tabs {
+    border-bottom-color: var(--tk-border);
+}
+.nav-tabs .nav-link {
+    color: var(--tk-muted) !important;
+    border: 1px solid transparent;
+    border-radius: var(--tk-radius) var(--tk-radius) 0 0;
+}
+.nav-tabs .nav-link:hover {
+    color: var(--tk-text) !important;
+    border-color: var(--tk-border);
+    background-color: rgba(255, 255, 255, 0.04);
+}
+.nav-tabs .nav-link.active {
+    background-color: var(--tk-surface-elevated) !important;
+    border-color: var(--tk-border) var(--tk-border) var(--tk-surface-elevated) !important;
+    color: var(--tk-text) !important;
+}
+
+.breadcrumb {
+    background-color: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius);
+}
+.breadcrumb-item.active {
+    color: var(--tk-muted);
+}
+
+.modal-content {
+    background-color: var(--tk-surface-elevated);
+    border: 1px solid var(--tk-border);
+    color: var(--tk-text);
+    border-radius: var(--tk-radius-lg);
+    box-shadow: var(--tk-shadow);
+}
+.modal-header,
+.modal-footer {
+    border-color: var(--tk-border);
+}
+.modal-header .close {
+    color: var(--tk-text);
+    text-shadow: none;
+    opacity: 0.8;
+}
+.modal-header .close:hover {
+    color: var(--tk-magenta);
+    opacity: 1;
+}
+
+.input-group-text {
+    background-color: var(--tk-surface-input);
+    border: 1px solid var(--tk-border);
+    color: var(--tk-muted);
+}
+
+.input-group .form-control:not(:last-child) {
+    border-radius: var(--tk-radius) 0 0 var(--tk-radius);
+}
+
+.close {
+    color: var(--tk-text);
+    text-shadow: none;
+    opacity: 0.75;
+}
+.close:hover {
+    color: var(--tk-magenta);
+    opacity: 1;
+}
+
+.btn-primary {
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
+    color: #fff;
+}
+.btn-primary:hover,
+.btn-primary:focus {
+    background-color: var(--tk-magenta-dark);
+    border-color: var(--tk-magenta-dark);
+    color: #fff;
+}
+.btn-primary:not(:disabled):not(.disabled):active {
+    background-color: var(--tk-magenta-dark);
+    border-color: var(--tk-magenta-dark);
+}
+
+.btn-secondary {
+    background-color: var(--tk-surface-input);
+    border-color: var(--tk-border);
+    color: var(--tk-text);
+}
+.btn-secondary:hover,
+.btn-secondary:focus {
+    background-color: #3d3d48;
+    border-color: var(--tk-border-strong);
+    color: #fff;
+}
+
+.btn-outline-secondary {
+    color: var(--tk-muted);
+    border-color: var(--tk-border);
+}
+.btn-outline-secondary:hover {
+    background-color: rgba(226, 0, 116, 0.12);
+    border-color: var(--tk-magenta);
+    color: #fff;
+}
+
+.btn-outline-primary {
+    color: var(--tk-link);
+    border-color: rgba(226, 0, 116, 0.55);
+}
+.btn-outline-primary:hover {
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
+    color: #fff;
+}
+
+.btn-outline-dark {
+    color: var(--tk-text);
+    border-color: var(--tk-border);
+}
+.btn-outline-dark:hover {
+    background-color: rgba(226, 0, 116, 0.14);
+    border-color: var(--tk-magenta);
+    color: #fff;
+}
+
+.btn-link {
+    color: var(--tk-link);
+}
+.btn-link:hover {
+    color: var(--tk-link-hover);
+}
+
+.badge-secondary {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: var(--tk-text);
+    border: 1px solid var(--tk-border);
+}
+.badge-light {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--tk-text);
+}
+.badge-dark {
+    background-color: #000;
+    color: var(--tk-text);
+    border: 1px solid var(--tk-border);
+}
+
+.page-link {
+    color: var(--tk-link);
+    background-color: var(--tk-surface-input);
+    border: 1px solid var(--tk-border);
+}
+.page-link:hover {
+    color: #fff;
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
+}
+.page-item.active .page-link {
+    background-color: var(--tk-magenta);
+    border-color: var(--tk-magenta);
+}
+
+.text-dark {
+    color: var(--tk-text) !important;
+}
+.bg-light {
+    background-color: var(--tk-surface) !important;
+    color: var(--tk-text) !important;
+}
+
+pre {
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--tk-border);
+    border-radius: var(--tk-radius);
+    color: var(--tk-text);
+    padding: 0.75rem;
+}
+
+.table {
+    color: var(--tk-text);
+}
+.table-bordered {
+    border: 1px solid var(--tk-border);
+}
+.table-bordered th,
+.table-bordered td {
+    border: 1px solid var(--tk-border);
+}
+
+.invalid-feedback {
+    color: #ffb3bd;
+}
+.valid-feedback {
+    color: #b8f5cf;
+}
+
+label,
+.col-form-label,
+.form-control-label {
+    color: var(--tk-muted);
+}
+.form-check-label {
+    color: var(--tk-text);
+}
+
+/* Alerts: dismiss “×” */
+.alert .close {
+    color: inherit;
+    opacity: 0.7;
+}
+.alert .close:hover {
+    opacity: 1;
+    color: var(--tk-magenta);
 }

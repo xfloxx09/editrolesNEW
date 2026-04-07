@@ -13,9 +13,9 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: linear-gradient(155deg, #18121c 0%, #3a1230 45%, #5a0f3d 100%);
-        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34), 0 0 0 1px rgba(255, 0, 140, 0.18) inset;
+        border: 1px solid var(--tk-border);
+        background: linear-gradient(155deg, var(--tk-bg) 0%, #321528 42%, #521039 100%);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34), 0 0 0 1px var(--tk-border-strong) inset;
         transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         animation: choiceTileIn .42s ease both;
     }
@@ -25,18 +25,18 @@
         inset: 0;
         background:
             linear-gradient(120deg, rgba(255,255,255,0.08), rgba(255,255,255,0)),
-            radial-gradient(circle at 85% 18%, rgba(255, 0, 153, 0.2), transparent 45%);
+            radial-gradient(circle at 85% 18%, var(--tk-magenta-soft), transparent 45%);
         pointer-events: none;
     }
     .index-choice-tile:hover {
         color: #fff;
         text-decoration: none;
         transform: translateY(-3px) scale(1.01);
-        border-color: rgba(255, 0, 153, 0.75);
-        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.48), 0 0 28px rgba(255, 0, 153, 0.34);
+        border-color: var(--tk-magenta);
+        box-shadow: 0 16px 30px rgba(0, 0, 0, 0.48), 0 0 28px var(--tk-magenta-glow);
     }
     .index-choice-tile i {
-        color: var(--tile-accent, #e20074);
+        color: var(--tile-accent, var(--tk-magenta));
         filter: drop-shadow(0 3px 10px rgba(0,0,0,0.3));
     }
     .index-choice-tile p { margin-bottom: 0; opacity: 0.92; }
@@ -66,7 +66,7 @@
         height: 1.65rem;
         padding: 0 5px;
         border-radius: 9999px;
-        background: linear-gradient(160deg, #ff4d9a 0%, #e20074 50%, #b8005c 100%);
+        background: linear-gradient(160deg, #ff4d9a 0%, var(--tk-magenta) 50%, var(--tk-magenta-dark) 100%);
         color: #fff;
         font-weight: 700;
         font-size: 0.78rem;

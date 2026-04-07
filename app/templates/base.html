@@ -153,7 +153,7 @@
     </style>
     {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body class="tk-app">
     {% if current_user.is_authenticated and has_perm('add_coaching') %}
     <button id="qcToggle" class="qc-toggle" type="button" title="Schnellpanel öffnen/schließen" aria-label="Schnellpanel öffnen">
         <i class="fas fa-bolt"></i>
