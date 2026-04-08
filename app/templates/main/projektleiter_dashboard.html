@@ -247,10 +247,11 @@
     <div class="card mb-4">
         <div class="card-header telekom-bg-magenta text-white">Projekt-Insights</div>
         <div class="card-body">
-            {% if teams_stats %}
-            {% set most_active_team = (teams_stats|sort(attribute='num_coachings', reverse=True)|first) %}
-            {% set best_score_team = (teams_stats|sort(attribute='avg_score', reverse=True)|first) %}
-            {% set lowest_score_team = (teams_stats|sort(attribute='avg_score')|first) %}
+            {% set teams_with_coachings = teams_stats|selectattr('num_coachings', 'gt', 0)|list %}
+            {% if teams_with_coachings %}
+            {% set most_active_team = (teams_with_coachings|sort(attribute='num_coachings', reverse=True)|first) %}
+            {% set best_score_team = (teams_with_coachings|sort(attribute='avg_score', reverse=True)|first) %}
+            {% set lowest_score_team = (teams_with_coachings|sort(attribute='avg_score')|first) %}
             <div class="row">
                 <div class="col-md-4 mb-3 mb-md-0">
                     <div class="p-3 h-100" style="border:1px solid #444; border-radius:10px; background:rgba(255,255,255,0.03);">
@@ -275,7 +276,7 @@
                 </div>
             </div>
             {% else %}
-            <div class="text-muted">Keine Teamdaten verfügbar.</div>
+            <div class="text-muted">Keine Insights verfügbar (noch keine Team-Coachings im gewählten Bereich).</div>
             {% endif %}
         </div>
     </div>
