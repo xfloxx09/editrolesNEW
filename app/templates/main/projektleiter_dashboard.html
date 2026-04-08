@@ -197,30 +197,6 @@
         </div>
     </div>
 
-    <!-- Team Filter Dropdown for Member Cards (existing) -->
-    <div class="my-3">
-        <form method="GET" action="{{ url_for('main.pl_qm_dashboard') }}" id="selectTeamFilterForm" class="form-inline">
-            {% if show_project_switcher and active_project_id %}
-            <input type="hidden" name="project" value="{{ active_project_id }}">
-            {% endif %}
-            <div class="form-group">
-                <label for="team_id_filter_select" class="mr-2">Teammitglieder anzeigen für:</label>
-                <select name="team_id_filter" id="team_id_filter_select" class="form-control custom-select form-control-sm" onchange="this.form.submit()">
-                    <option value="">-- Alle Teams (Keine Mitgliederdetails) --</option>
-                    {% for team_opt in all_teams_for_filter %}
-                        <option value="{{ team_opt.id }}" {% if selected_team_id_filter and team_opt.id == selected_team_id_filter|int %}selected{% endif %}>
-                            {{ team_opt.name }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-            {% if coachings_paginated and coachings_paginated.page %}
-            <input type="hidden" name="page" value="{{ coachings_paginated.page }}">
-            {% endif %}
-        </form>
-    </div>
-    <hr class="my-3" style="border-color: #444;">
-
     <!-- Member Cards Section (existing) -->
     {% if selected_team_object_for_cards and members_data_for_cards %}
         <h3 class="mt-4 mb-3">Mitgliederübersicht für Team: {{ selected_team_object_for_cards.name }}</h3>
@@ -300,11 +276,6 @@
              Das ausgewählte Team (ID: {{ selected_team_id_filter }}) wurde nicht gefunden.
         </div>
         <hr class="my-4" style="border-color: #444;">
-    {% elif not selected_team_id_filter and all_teams_for_filter %}
-        <div class="alert alert-secondary mt-3 text-center">
-            Bitte wählen Sie oben ein Team aus, um die Mitgliederdetails anzuzeigen.
-        </div>
-        <hr class="my-4" style="border-color: #444;">
     {% endif %}
 
     <!-- Top & Flop Teams (existing) -->
@@ -355,71 +326,6 @@
             {% endif %}
         </div>
         <hr class="my-4" style="border-color: #444;">
-    {% endif %}
-
-    {% if coachings_paginated and coachings_paginated.items %}
-        <div class="table-responsive mt-3">
-            <table class="table table-striped table-hover table-dark">
-                <thead class="telekom-bg-magenta text-white">
-                    <tr>
-                        <th>Datum</th>
-                        <th>Teammitglied</th>
-                        <th>Team</th>
-                        <th>Coach</th>
-                        <th>Betreff</th>
-                        <th>Score (%)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for coaching in coachings_paginated.items %}
-                    <tr>
-                        <td>{{ coaching.coaching_date|athens_time }}</td>
-                        <td>{{ coaching.team_member_coached.name if coaching.team_member_coached else 'N/A' }}</td>
-                        <td>{{ coaching.team_member_coached.team.name if coaching.team_member_coached and coaching.team_member_coached.team else 'N/A' }}</td>
-                        <td>{{ coaching.coach.username if coaching.coach else 'N/A' }}</td>
-                        <td>{{ coaching.coaching_subject if coaching.coaching_subject else '-' }}</td>
-                        <td>{{ coaching.overall_score }}%</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <!-- Pagination (existing) -->
-        <nav aria-label="Coaching Navigation" class="mt-4">
-            <ul class="pagination justify-content-center">
-                {% set pagination_args = {} %}
-                {% if selected_team_id_filter %}
-                    {% set _ = pagination_args.update({'team_id_filter': selected_team_id_filter}) %}
-                {% endif %}
-                {% if show_project_switcher and active_project_id %}
-                    {% set _ = pagination_args.update({'project': active_project_id}) %}
-                {% endif %}
-
-                {% if coachings_paginated.has_prev %}
-                    <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.pl_qm_dashboard', page=coachings_paginated.prev_num, **pagination_args) }}">Vorherige</a></li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">Vorherige</span></li>
-                {% endif %}
-                {% for page_num in coachings_paginated.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
-                    {% if page_num %}
-                        {% if coachings_paginated.page == page_num %}
-                            <li class="page-item active"><span class="page-link telekom-page-active">{{ page_num }}</span></li>
-                        {% else %}
-                            <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.pl_qm_dashboard', page=page_num, **pagination_args) }}">{{ page_num }}</a></li>
-                        {% endif %}
-                    {% else %}
-                        <li class="page-item disabled"><span class="page-link">...</span></li>
-                    {% endif %}
-                {% endfor %}
-                {% if coachings_paginated.has_next %}
-                    <li class="page-item"><a class="page-link telekom-page-link" href="{{ url_for('main.pl_qm_dashboard', page=coachings_paginated.next_num, **pagination_args) }}">Nächste</a></li>
-                {% else %}
-                    <li class="page-item disabled"><span class="page-link">Nächste</span></li>
-                {% endif %}
-            </ul>
-        </nav>
-    {% else %}
-        <p>Keine Coachings vorhanden.</p>
     {% endif %}
 
     <!-- Modal for Coaching Trend (existing) -->
