@@ -69,16 +69,27 @@ def leitfaden_items_for_coaching_edit(coaching):
     if not coaching:
         return []
     base = leitfaden_items_for_project(coaching.project_id)
-    base_ids = {i.id for i in base}
+    # Guard against accidental duplicate rows (legacy data or repeated joins):
+    # edit form must render each checklist item only once.
+    seen_ids = set()
+    base_unique = []
+    for item in base:
+        if not item or item.id in seen_ids:
+            continue
+        seen_ids.add(item.id)
+        base_unique.append(item)
+
+    base_ids = {i.id for i in base_unique}
     extra = []
     try:
         for r in coaching.leitfaden_responses or []:
             if r.item_id not in base_ids and r.item:
+                base_ids.add(r.item_id)
                 extra.append(r.item)
     except SQLAlchemyError:
         db.session.rollback()
     extra.sort(key=lambda x: (x.position, x.id))
-    return base + extra
+    return base_unique + extra
 
 
 class DefaultCoachingBogenLayout:
