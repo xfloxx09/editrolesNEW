@@ -89,12 +89,6 @@
         background-color: #e20074;
     }
 
-    /* Chart container */
-    .chart-container {
-        position: relative;
-        height: 300px;
-        width: 100%;
-    }
 </style>
 {% endblock %}
 
@@ -164,34 +158,6 @@
                             {% endfor %}
                         </tbody>
                     </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Charts Row -->
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header telekom-bg-magenta text-white">
-                    Ø Performance / Team
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="avgPerfByTeamChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header telekom-bg-magenta text-white">
-                    Coaching-Themen Verteilung
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="subjectDistributionChart"></canvas>
-                    </div>
                 </div>
             </div>
         </div>
@@ -373,84 +339,6 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    // Charts
-    const avgPerfCtx = document.getElementById('avgPerfByTeamChart').getContext('2d');
-    const subjectCtx = document.getElementById('subjectDistributionChart').getContext('2d');
-
-    const chartLabels = {{ chart_labels|tojson|safe }};
-    const chartAvgPerformanceData = {{ chart_avg_performance_values|tojson|safe }};
-    const subjectLabels = {{ subject_labels|tojson|safe }};
-    const subjectValues = {{ subject_values|tojson|safe }};
-
-    const telekomMagenta = 'rgba(226, 0, 116, 0.7)';
-    const telekomMagentaBorder = 'rgba(226, 0, 116, 1)';
-
-    if (chartLabels.length > 0 && chartAvgPerformanceData.length > 0) {
-        new Chart(avgPerfCtx, {
-            type: 'bar',
-            data: {
-                labels: chartLabels,
-                datasets: [{
-                    label: 'Ø Performance (%)',
-                    data: chartAvgPerformanceData,
-                    backgroundColor: telekomMagenta,
-                    borderColor: telekomMagentaBorder,
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        ticks: { color: '#f0f0f0' }
-                    },
-                    x: {
-                        ticks: { color: '#f0f0f0' }
-                    }
-                },
-                plugins: {
-                    legend: { labels: { color: '#f0f0f0' } }
-                }
-            }
-        });
-    } else {
-        avgPerfCtx.font = "16px Arial";
-        avgPerfCtx.fillStyle = "#f0f0f0";
-        avgPerfCtx.textAlign = "center";
-        avgPerfCtx.fillText("Keine Daten verfügbar", avgPerfCtx.canvas.width / 2, avgPerfCtx.canvas.height / 2);
-    }
-
-    if (subjectLabels.length > 0 && subjectValues.length > 0) {
-        new Chart(subjectCtx, {
-            type: 'pie',
-            data: {
-                labels: subjectLabels,
-                datasets: [{
-                    data: subjectValues,
-                    backgroundColor: ['rgba(226,0,116,0.7)','rgba(0,169,224,0.7)','rgba(100,100,100,0.7)','rgba(150,150,150,0.7)','rgba(255,140,0,0.7)','rgba(75,192,192,0.7)','rgba(255,99,132,0.7)','rgba(54,162,235,0.7)','rgba(255,206,86,0.7)','rgba(153,102,255,0.7)']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                        labels: { color: '#f0f0f0' }
-                    }
-                }
-            }
-        });
-    } else {
-        subjectCtx.font = "16px Arial";
-        subjectCtx.fillStyle = "#f0f0f0";
-        subjectCtx.textAlign = "center";
-        subjectCtx.fillText("Keine Daten verfügbar", subjectCtx.canvas.width / 2, subjectCtx.canvas.height / 2);
-    }
-
     // Trend Modal JS (unchanged)
     let trendChartInstance = null;
     let currentTrendMemberId = null;
