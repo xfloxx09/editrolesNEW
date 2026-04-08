@@ -688,6 +688,45 @@ pre {
     border-top-right-radius: 8px;
 }
 
+/* Workshop dashboard: gleiche durchgehende Kopfzeile wie Coaching-Dashboard */
+.workshop-dashboard-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.workshop-dashboard-table thead.telekom-bg-magenta {
+    background: linear-gradient(100deg, var(--tk-magenta-dark) 0%, var(--tk-magenta) 52%, #ff4aa8 100%);
+    box-shadow: 0 3px 14px rgba(226, 0, 116, 0.28);
+}
+.workshop-dashboard-table thead.telekom-bg-magenta th {
+    background: transparent !important;
+    background-image: none !important;
+    color: #fff !important;
+    border-top: none !important;
+    border-bottom: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    vertical-align: middle;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    text-transform: none;
+    font-size: 0.8125rem;
+    letter-spacing: normal;
+    white-space: nowrap;
+}
+.workshop-dashboard-table thead.telekom-bg-magenta tr {
+    border: none;
+}
+.workshop-dashboard-table thead.telekom-bg-magenta th:first-child {
+    border-top-left-radius: 8px;
+}
+.workshop-dashboard-table thead.telekom-bg-magenta th:last-child {
+    border-top-right-radius: 8px;
+    min-width: 5.5rem;
+}
+.workshop-dashboard-table tbody td:last-child {
+    white-space: nowrap;
+    text-align: center;
+}
+
 .invalid-feedback {
     color: #ffb3bd;
 }
