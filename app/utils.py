@@ -69,20 +69,37 @@ def leitfaden_items_for_coaching_edit(coaching):
     if not coaching:
         return []
     base = leitfaden_items_for_project(coaching.project_id)
-    # Guard against accidental duplicate rows (legacy data or repeated joins):
-    # edit form must render each checklist item only once.
+    # Guard against accidental duplicate rows (legacy data, global->project migrations,
+    # or repeated joins): edit form must render each checklist point only once.
+    def _name_key(item):
+        n = ((item.name if item else '') or '').strip().lower()
+        return n or None
+
     seen_ids = set()
+    seen_name_keys = set()
     base_unique = []
     for item in base:
         if not item or item.id in seen_ids:
             continue
+        nk = _name_key(item)
+        if nk and nk in seen_name_keys:
+            continue
         seen_ids.add(item.id)
+        if nk:
+            seen_name_keys.add(nk)
         base_unique.append(item)
 
     base_ids = {i.id for i in base_unique}
     extra = []
     try:
         for r in coaching.leitfaden_responses or []:
+            if r.item_id in base_ids or not r.item:
+                continue
+            nk = _name_key(r.item)
+            if nk and nk in seen_name_keys:
+                continue
+            if nk:
+                seen_name_keys.add(nk)
             if r.item_id not in base_ids and r.item:
                 base_ids.add(r.item_id)
                 extra.append(r.item)
