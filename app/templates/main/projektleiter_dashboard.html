@@ -245,40 +245,37 @@
     {% endif %}
 
     <div class="card mb-4">
-        <div class="card-header telekom-bg-magenta text-white">Fokus-Teams (niedrigster Ø Score)</div>
-        <div class="card-body p-0">
-            {% set sorted_teams = teams_stats|sort(attribute='avg_score') %}
-            {% if sorted_teams %}
-            <div class="table-responsive">
-                <table class="table table-sm mb-0">
-                    <thead>
-                        <tr>
-                            <th style="width: 52px;">#</th>
-                            <th>Team</th>
-                            <th class="text-center">Ø Score</th>
-                            <th class="text-center">Coachings</th>
-                            <th class="text-center">Aktion</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for team in sorted_teams[:5] %}
-                        <tr>
-                            <td class="text-center"><span class="badge badge-secondary">{{ loop.index }}</span></td>
-                            <td><strong>{{ team.name }}</strong></td>
-                            <td class="text-center">{{ team.avg_score }}%</td>
-                            <td class="text-center">{{ team.num_coachings }}</td>
-                            <td class="text-center">
-                                <a href="{{ url_for('main.team_view', team_id=team.id) }}" class="btn btn-sm btn-outline-light">
-                                    Team anzeigen
-                                </a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <div class="card-header telekom-bg-magenta text-white">Projekt-Insights</div>
+        <div class="card-body">
+            {% if teams_stats %}
+            {% set most_active_team = (teams_stats|sort(attribute='num_coachings', reverse=True)|first) %}
+            {% set best_score_team = (teams_stats|sort(attribute='avg_score', reverse=True)|first) %}
+            {% set lowest_score_team = (teams_stats|sort(attribute='avg_score')|first) %}
+            <div class="row">
+                <div class="col-md-4 mb-3 mb-md-0">
+                    <div class="p-3 h-100" style="border:1px solid #444; border-radius:10px; background:rgba(255,255,255,0.03);">
+                        <div class="text-muted small text-uppercase mb-1">Aktivstes Team</div>
+                        <div class="h5 mb-1">{{ most_active_team.name if most_active_team else '—' }}</div>
+                        <div class="small">Coachings: <strong>{{ most_active_team.num_coachings if most_active_team else 0 }}</strong></div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3 mb-md-0">
+                    <div class="p-3 h-100" style="border:1px solid #444; border-radius:10px; background:rgba(255,255,255,0.03);">
+                        <div class="text-muted small text-uppercase mb-1">Bester Ø Score</div>
+                        <div class="h5 mb-1">{{ best_score_team.name if best_score_team else '—' }}</div>
+                        <div class="small">Ø Score: <strong>{{ best_score_team.avg_score if best_score_team else 0 }}%</strong></div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 h-100" style="border:1px solid #444; border-radius:10px; background:rgba(255,255,255,0.03);">
+                        <div class="text-muted small text-uppercase mb-1">Niedrigster Ø Score</div>
+                        <div class="h5 mb-1">{{ lowest_score_team.name if lowest_score_team else '—' }}</div>
+                        <div class="small">Ø Score: <strong>{{ lowest_score_team.avg_score if lowest_score_team else 0 }}%</strong></div>
+                    </div>
+                </div>
             </div>
             {% else %}
-            <div class="p-3 text-muted">Keine Teamdaten verfügbar.</div>
+            <div class="text-muted">Keine Teamdaten verfügbar.</div>
             {% endif %}
         </div>
     </div>
