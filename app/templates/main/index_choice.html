@@ -86,6 +86,67 @@
     @media (prefers-reduced-motion: reduce) {
         .planned-tile-badge { animation: none; }
     }
+    .index-help-toggle {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 1060;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: linear-gradient(145deg, #e20074 0%, #b8005c 100%);
+        color: #fff;
+        font-weight: 700;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35), 0 0 18px rgba(226, 0, 116, 0.35);
+        cursor: pointer;
+    }
+    .index-help-panel {
+        position: fixed;
+        right: 18px;
+        bottom: 74px;
+        z-index: 1060;
+        width: 340px;
+        max-width: calc(100vw - 24px);
+        max-height: 62vh;
+        overflow-y: auto;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 14px;
+        background: linear-gradient(160deg, #1f1f27 0%, #241325 60%, #2b1231 100%);
+        box-shadow: 0 18px 34px rgba(0, 0, 0, 0.45);
+        padding: 0.85rem 0.9rem 0.7rem;
+        color: #f4f1f6;
+        display: none;
+    }
+    .index-help-panel.open { display: block; }
+    .index-help-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.45rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        padding-bottom: 0.45rem;
+    }
+    .index-help-head h6 { margin: 0; font-weight: 700; }
+    .index-help-close {
+        background: transparent;
+        border: 1px solid rgba(255,255,255,0.25);
+        color: #fff;
+        border-radius: 8px;
+        width: 28px;
+        height: 28px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .index-help-list { list-style: none; padding: 0; margin: 0; }
+    .index-help-item {
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 0.5rem 0.6rem;
+        margin-bottom: 0.45rem;
+        background: rgba(255,255,255,0.03);
+    }
+    .index-help-item strong { color: #ff8fc7; display: block; margin-bottom: 0.12rem; }
 </style>
 {% endblock %}
 
@@ -173,4 +234,59 @@
         {% endif %}
     </div>
 </div>
+
+<button id="indexHelpToggle" class="index-help-toggle" type="button" title="Hilfe zu Funktionen" aria-label="Hilfe öffnen">?</button>
+<aside id="indexHelpPanel" class="index-help-panel" aria-hidden="true">
+    <div class="index-help-head">
+        <h6><i class="fas fa-info-circle mr-1"></i> Was macht was?</h6>
+        <button id="indexHelpClose" class="index-help-close" type="button" aria-label="Schließen">×</button>
+    </div>
+    <ul class="index-help-list">
+        {% if has_perm('view_coaching_dashboard') %}
+        <li class="index-help-item"><strong>Coachings</strong> Übersicht aller Einzelcoachings mit Filtern, Suche und Detailansicht.</li>
+        {% endif %}
+        {% if has_perm('terminkalender') %}
+        <li class="index-help-item"><strong>Terminkalender</strong> Tages-/Monatsplanung, offene Termine und direkte Erfassungswege.</li>
+        {% endif %}
+        {% if has_perm('view_workshop_dashboard') %}
+        <li class="index-help-item"><strong>Workshops</strong> Liste, Kennzahlen und Detailinfos zu Gruppenworkshops.</li>
+        {% endif %}
+        {% if has_perm('view_assigned_coachings') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
+        <li class="index-help-item"><strong>Zugewiesene Coachings</strong> Aufgaben ansehen, annehmen/bearbeiten und Fortschritt verfolgen.</li>
+        {% endif %}
+        {% if has_perm('planned_coachings') or has_perm('add_workshop') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
+        <li class="index-help-item"><strong>Geplante Coachings / Workshops</strong> Offene Planungen verwalten und fällige Termine starten.</li>
+        {% endif %}
+        {% if has_perm('view_own_coachings') or has_perm('leave_coaching_review') %}
+        <li class="index-help-item"><strong>Meine Coachings</strong> Eigene Coachings und Rückmeldungen als Mitarbeitender.</li>
+        {% endif %}
+        {% if has_perm('view_review') %}
+        <li class="index-help-item"><strong>Bewertungen über mich</strong> Feedback von Mitarbeitenden zu Ihren Coachings einsehen.</li>
+        {% endif %}
+        {% if has_perm('view_all_reviews') %}
+        <li class="index-help-item"><strong>Alle Bewertungen</strong> Projektweite Auswertung der Coaching-Bewertungen.</li>
+        {% endif %}
+    </ul>
+</aside>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var toggle = document.getElementById('indexHelpToggle');
+    var panel = document.getElementById('indexHelpPanel');
+    var closeBtn = document.getElementById('indexHelpClose');
+    if (!toggle || !panel) return;
+    function setOpen(open) {
+        panel.classList.toggle('open', open);
+        panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+    }
+    toggle.addEventListener('click', function () { setOpen(!panel.classList.contains('open')); });
+    if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') setOpen(false);
+    });
+});
+</script>
 {% endblock %}
