@@ -245,22 +245,41 @@
     {% endif %}
 
     <div class="card mb-4">
-        <div class="card-header telekom-bg-magenta text-white">Nächste Schritte</div>
-        <div class="card-body">
-            <div class="d-flex flex-wrap" style="gap: 0.5rem;">
-                <a href="{{ url_for('main.terminkalender') }}" class="btn btn-sm telekom-button">
-                    <i class="fas fa-calendar-week mr-1"></i> Terminkalender prüfen
-                </a>
-                <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-sm btn-outline-light">
-                    <i class="fas fa-calendar-check mr-1"></i> Geplante Termine öffnen
-                </a>
-                <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-sm btn-outline-light">
-                    <i class="fas fa-chart-line mr-1"></i> Coaching-Dashboard öffnen
-                </a>
-                <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-sm btn-outline-light">
-                    <i class="fas fa-users mr-1"></i> Workshop-Dashboard öffnen
-                </a>
+        <div class="card-header telekom-bg-magenta text-white">Fokus-Teams (niedrigster Ø Score)</div>
+        <div class="card-body p-0">
+            {% set sorted_teams = teams_stats|sort(attribute='avg_score') %}
+            {% if sorted_teams %}
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 52px;">#</th>
+                            <th>Team</th>
+                            <th class="text-center">Ø Score</th>
+                            <th class="text-center">Coachings</th>
+                            <th class="text-center">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for team in sorted_teams[:5] %}
+                        <tr>
+                            <td class="text-center"><span class="badge badge-secondary">{{ loop.index }}</span></td>
+                            <td><strong>{{ team.name }}</strong></td>
+                            <td class="text-center">{{ team.avg_score }}%</td>
+                            <td class="text-center">{{ team.num_coachings }}</td>
+                            <td class="text-center">
+                                <a href="{{ url_for('main.team_view', team_id=team.id) }}" class="btn btn-sm btn-outline-light">
+                                    Team anzeigen
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
+            {% else %}
+            <div class="p-3 text-muted">Keine Teamdaten verfügbar.</div>
+            {% endif %}
         </div>
     </div>
 
