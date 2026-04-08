@@ -348,8 +348,18 @@
                 {% if not fulfilled_plans %}
                 <div class="alert alert-secondary mb-4">Noch keine erfüllten geplanten Coachings in diesem Bereich.</div>
                 {% else %}
-                <div class="list-group mb-4 planned-open-list">
-                    {% for it in fulfilled_plans %}
+                {% set cdg = coaching_done_groups %}
+                {% for group_key, group_label in [('today', 'Heute'), ('last_week', 'Letzte 7 Tage'), ('last_month', 'Letzter Monat'), ('older', 'Älter')] %}
+                {% set group_items = cdg.get(group_key, []) %}
+                {% if group_items %}
+                <details class="planned-group" {% if group_key == 'today' %}open{% endif %}>
+                    <summary>
+                        <span>{{ group_label }}</span>
+                        <span class="badge badge-secondary">{{ group_items|length }}</span>
+                    </summary>
+                    <div class="planned-group-body">
+                <div class="list-group mb-2 planned-open-list">
+                    {% for it in group_items %}
                     {% set is_mine_fc = (it.coach_id == current_user.id) %}
                     <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
@@ -399,6 +409,10 @@
                     </div>
                     {% endfor %}
                 </div>
+                    </div>
+                </details>
+                {% endif %}
+                {% endfor %}
                 {% endif %}
                 {% endif %}
 
@@ -408,8 +422,18 @@
                 {% if not fulfilled_workshop_plans %}
                 <div class="alert alert-secondary mb-0">Noch keine erfüllten Planungen in diesem Bereich.</div>
                 {% else %}
-                <div class="list-group mb-0 planned-open-list">
-                    {% for it in fulfilled_workshop_plans %}
+                {% set wdg = workshop_done_groups %}
+                {% for group_key, group_label in [('today', 'Heute'), ('last_week', 'Letzte 7 Tage'), ('last_month', 'Letzter Monat'), ('older', 'Älter')] %}
+                {% set group_items = wdg.get(group_key, []) %}
+                {% if group_items %}
+                <details class="planned-group" {% if group_key == 'today' %}open{% endif %}>
+                    <summary>
+                        <span>{{ group_label }}</span>
+                        <span class="badge badge-secondary">{{ group_items|length }}</span>
+                    </summary>
+                    <div class="planned-group-body">
+                <div class="list-group mb-2 planned-open-list">
+                    {% for it in group_items %}
                     {% set is_mine_fw = (it.coach_id == current_user.id) %}
                     <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
@@ -435,6 +459,10 @@
                     </div>
                     {% endfor %}
                 </div>
+                    </div>
+                </details>
+                {% endif %}
+                {% endfor %}
                 {% endif %}
                 {% endif %}
 

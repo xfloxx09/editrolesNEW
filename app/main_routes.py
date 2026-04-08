@@ -2896,6 +2896,8 @@ def planned_coachings_list():
     sort_today = today_athens_date()
     next_week_end = sort_today + timedelta(days=7)
     next_month_end = sort_today + timedelta(days=31)
+    last_week_start = sort_today - timedelta(days=7)
+    last_month_start = sort_today - timedelta(days=31)
     can_pc = current_user.has_permission('planned_coachings')
     can_pw = current_user.has_permission('add_workshop')
     can_view_others = _can_view_others_planned_in_scope()
@@ -3095,6 +3097,35 @@ def planned_coachings_list():
     coaching_open_groups = _bucket_open_rows(items)
     workshop_open_groups = _bucket_open_rows(workshop_items)
 
+    def _bucket_done_rows(rows, date_attr):
+        out = {
+            'today': [],
+            'last_week': [],
+            'last_month': [],
+            'older': [],
+        }
+        for row in rows or []:
+            done_obj = getattr(row, date_attr, None)
+            d = None
+            if done_obj is not None:
+                dt = getattr(done_obj, 'coaching_date', None) or getattr(done_obj, 'workshop_date', None)
+                if dt:
+                    d = utc_naive_or_aware_to_athens_date(dt)
+            if d is None:
+                d = row.planned_for_date or sort_today
+            if d == sort_today:
+                out['today'].append(row)
+            elif d >= last_week_start:
+                out['last_week'].append(row)
+            elif d >= last_month_start:
+                out['last_month'].append(row)
+            else:
+                out['older'].append(row)
+        return out
+
+    coaching_done_groups = _bucket_done_rows(fulfilled_plans, 'fulfilled_coaching')
+    workshop_done_groups = _bucket_done_rows(fulfilled_workshop_plans, 'fulfilled_workshop')
+
     return render_template(
         'main/planned_coachings.html',
         title='Geplante Coachings / Workshops',
@@ -3107,6 +3138,8 @@ def planned_coachings_list():
         can_see_workshop_plans=can_see_workshop_plans,
         coaching_open_groups=coaching_open_groups,
         workshop_open_groups=workshop_open_groups,
+        coaching_done_groups=coaching_done_groups,
+        workshop_done_groups=workshop_done_groups,
         today_d=sort_today,
         config=current_app.config,
     )
