@@ -111,7 +111,7 @@
 .coaching-dashboard-table-wrap {
     width: 100%;
     max-width: 100%;
-    overflow-x: hidden;
+    overflow-x: auto;
     box-sizing: border-box;
     -webkit-overflow-scrolling: touch;
 }
@@ -191,9 +191,11 @@
     text-align: center;
     width: 1%;
     white-space: nowrap;
+    overflow: visible;
+    min-width: 5.75rem;
     /* etwas mehr Padding rechts: Überschrift wirkt nicht nach rechts geklebt */
     padding-left: 0.35rem;
-    padding-right: 0.5rem;
+    padding-right: 0.6rem;
 }
 .coaching-dashboard-fixed-table td.cdt-coach-act .btn {
     white-space: normal;
@@ -804,15 +806,15 @@
             <col style="width:13%">
             <col style="width:9%">
             <col style="width:12%">
-            <col style="width:13%">
+            <col style="width:11%">
             <col style="width:8%">
             <col style="width:4%">
             <col style="width:4%">
             <col style="width:8%">
             <col style="width:6%">
             <col style="width:6%">
-            <col style="width:5%">
-            <col style="width:5%">
+            <col style="width:4%">
+            <col style="width:8%">
         </colgroup>
         {% else %}
         <colgroup>
@@ -820,13 +822,13 @@
             <col style="width:14%">
             <col style="width:9%">
             <col style="width:13%">
-            <col style="width:17%">
+            <col style="width:15%">
             <col style="width:9%">
             <col style="width:4%">
             <col style="width:4%">
             <col style="width:9%">
             <col style="width:5%">
-            <col style="width:7%">
+            <col style="width:9%">
         </colgroup>
         {% endif %}
         <thead class="telekom-bg-magenta text-white">
