@@ -63,6 +63,28 @@
     color: #d4f3fb !important;
     background: rgba(23, 162, 184, 0.25);
 }
+.planned-group {
+    border: 1px solid #474f5c;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.02);
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+}
+.planned-group summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.6rem 0.85rem;
+    background: rgba(255,255,255,0.05);
+    color: #f0f0f0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #474f5c;
+}
+.planned-group summary::-webkit-details-marker { display: none; }
+.planned-group-body { padding: 0.65rem 0.7rem 0.2rem; }
+.planned-group:not([open]) summary { border-bottom: none; }
 </style>
 {% endblock %}
 
@@ -161,8 +183,13 @@
                 {% for group_key, group_label in [('today', 'Heute'), ('next_week', 'Nächste 7 Tage'), ('next_month', 'Nächster Monat'), ('later', 'Später')] %}
                 {% set group_items = cg.get(group_key, []) %}
                 {% if group_items %}
-                <h4 class="h6 mb-2 mt-3 text-light">{{ group_label }} <span class="badge badge-secondary ml-1">{{ group_items|length }}</span></h4>
-                <div class="list-group mb-3 planned-open-list">
+                <details class="planned-group" {% if group_key == 'today' %}open{% endif %}>
+                    <summary>
+                        <span>{{ group_label }}</span>
+                        <span class="badge badge-secondary">{{ group_items|length }}</span>
+                    </summary>
+                    <div class="planned-group-body">
+                <div class="list-group mb-2 planned-open-list">
                     {% for it in group_items %}
                     {% set is_mine = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
@@ -229,6 +256,8 @@
                     </div>
                     {% endfor %}
                 </div>
+                    </div>
+                </details>
                 {% endif %}
                 {% endfor %}
                 {% endif %}
@@ -243,8 +272,13 @@
                 {% for group_key, group_label in [('today', 'Heute'), ('next_week', 'Nächste 7 Tage'), ('next_month', 'Nächster Monat'), ('later', 'Später')] %}
                 {% set group_items = wg.get(group_key, []) %}
                 {% if group_items %}
-                <h4 class="h6 mb-2 mt-3 text-light">{{ group_label }} <span class="badge badge-secondary ml-1">{{ group_items|length }}</span></h4>
-                <div class="list-group mb-3 planned-open-list">
+                <details class="planned-group" {% if group_key == 'today' %}open{% endif %}>
+                    <summary>
+                        <span>{{ group_label }}</span>
+                        <span class="badge badge-secondary">{{ group_items|length }}</span>
+                    </summary>
+                    <div class="planned-group-body">
+                <div class="list-group mb-2 planned-open-list">
                     {% for it in group_items %}
                     {% set is_mine_w = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
@@ -296,6 +330,8 @@
                     </div>
                     {% endfor %}
                 </div>
+                    </div>
+                </details>
                 {% endif %}
                 {% endfor %}
                 {% endif %}
