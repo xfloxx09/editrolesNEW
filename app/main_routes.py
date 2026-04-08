@@ -2894,6 +2894,8 @@ def open_planned_coachings_for_member():
 )
 def planned_coachings_list():
     sort_today = today_athens_date()
+    next_week_end = sort_today + timedelta(days=7)
+    next_month_end = sort_today + timedelta(days=31)
     can_pc = current_user.has_permission('planned_coachings')
     can_pw = current_user.has_permission('add_workshop')
     can_view_others = _can_view_others_planned_in_scope()
@@ -3071,6 +3073,28 @@ def planned_coachings_list():
             )
             fulfilled_plans = fulfilled_plans[:100]
 
+    def _bucket_open_rows(rows):
+        out = {
+            'today': [],
+            'next_week': [],
+            'next_month': [],
+            'later': [],
+        }
+        for row in rows or []:
+            d = row.planned_for_date or sort_today
+            if d == sort_today:
+                out['today'].append(row)
+            elif d <= next_week_end:
+                out['next_week'].append(row)
+            elif d <= next_month_end:
+                out['next_month'].append(row)
+            else:
+                out['later'].append(row)
+        return out
+
+    coaching_open_groups = _bucket_open_rows(items)
+    workshop_open_groups = _bucket_open_rows(workshop_items)
+
     return render_template(
         'main/planned_coachings.html',
         title='Geplante Coachings / Workshops',
@@ -3081,6 +3105,8 @@ def planned_coachings_list():
         can_view_others_planned=can_view_others,
         can_see_coaching_plans=can_see_coaching_plans,
         can_see_workshop_plans=can_see_workshop_plans,
+        coaching_open_groups=coaching_open_groups,
+        workshop_open_groups=workshop_open_groups,
         today_d=sort_today,
         config=current_app.config,
     )

@@ -71,10 +71,6 @@
 {% set n_done = (fulfilled_plans|length if can_see_coaching_plans else 0) + (fulfilled_workshop_plans|length if can_see_workshop_plans else 0) %}
 <div class="container mt-4">
     <h2 class="mb-2"><i class="fas fa-calendar-alt text-info"></i> Geplante Coachings / Workshops</h2>
-    <p class="text-muted">Offene Termine aus dem Kalender („+“ planen) und Folgetermine aus dem Coaching-Bogen. Workshops vormerken Sie im Terminkalender; hier sehen Sie die Liste und können sie als echten Workshop erfassen.</p>
-    {% if can_view_others_planned %}
-    <p class="text-muted small mb-0">Als Projektleitung / QM sehen Sie zusätzlich geplante Termine der Coaches in Ihrem Projektbereich (nur lesen). Bearbeiten und „Jetzt coachen“ / „Workshop erfassen“ bleiben dem jeweiligen Coach vorbehalten.</p>
-    {% endif %}
 
     <div class="card planned-page-tabs mb-4 border-0 shadow-none">
         <ul class="nav nav-tabs nav-justified" id="plannedMainTabs" role="tablist">
@@ -161,8 +157,13 @@
                 {% if not items %}
                 <div class="alert alert-secondary mb-4">{% if can_view_others_planned %}Keine offenen geplanten Coachings in Ihrem Projektbereich.{% else %}Sie haben keine offenen geplanten Coachings.{% endif %}</div>
                 {% else %}
-                <div class="list-group mb-4 planned-open-list">
-                    {% for it in items %}
+                {% set cg = coaching_open_groups %}
+                {% for group_key, group_label in [('today', 'Heute'), ('next_week', 'Nächste 7 Tage'), ('next_month', 'Nächster Monat'), ('later', 'Später')] %}
+                {% set group_items = cg.get(group_key, []) %}
+                {% if group_items %}
+                <h4 class="h6 mb-2 mt-3 text-light">{{ group_label }} <span class="badge badge-secondary ml-1">{{ group_items|length }}</span></h4>
+                <div class="list-group mb-3 planned-open-list">
+                    {% for it in group_items %}
                     {% set is_mine = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
                     <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
@@ -229,6 +230,8 @@
                     {% endfor %}
                 </div>
                 {% endif %}
+                {% endfor %}
+                {% endif %}
                 {% endif %}
 
                 {% if can_see_workshop_plans %}
@@ -236,8 +239,13 @@
                 {% if not workshop_items %}
                 <div class="alert alert-secondary mb-0">{% if can_view_others_planned %}Keine offenen geplanten Workshops in Ihrem Projektbereich.{% else %}Sie haben keine offenen geplanten Workshops.{% endif %}</div>
                 {% else %}
-                <div class="list-group mb-0 planned-open-list">
-                    {% for it in workshop_items %}
+                {% set wg = workshop_open_groups %}
+                {% for group_key, group_label in [('today', 'Heute'), ('next_week', 'Nächste 7 Tage'), ('next_month', 'Nächster Monat'), ('later', 'Später')] %}
+                {% set group_items = wg.get(group_key, []) %}
+                {% if group_items %}
+                <h4 class="h6 mb-2 mt-3 text-light">{{ group_label }} <span class="badge badge-secondary ml-1">{{ group_items|length }}</span></h4>
+                <div class="list-group mb-3 planned-open-list">
+                    {% for it in group_items %}
                     {% set is_mine_w = (it.coach_id == current_user.id) %}
                     {% set can_start = it.planned_for_date <= today_d %}
                     <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
@@ -288,6 +296,8 @@
                     </div>
                     {% endfor %}
                 </div>
+                {% endif %}
+                {% endfor %}
                 {% endif %}
                 {% endif %}
 
