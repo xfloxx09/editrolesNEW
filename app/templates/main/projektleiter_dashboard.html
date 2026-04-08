@@ -244,55 +244,25 @@
         <hr class="my-4" style="border-color: #444;">
     {% endif %}
 
-    <!-- Top & Flop Teams (existing) -->
-    {% if top_3_teams or flop_3_teams %}
-        <h4 class="mt-3 mb-3">Team Leistungsübersicht (basierend auf allen Coachings)</h4>
-        <div class="row mb-4">
-            {% if top_3_teams %}
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-header telekom-bg-magenta text-white">Top 3 Teams (nach Ø Performance Mark & Coachings)</div>
-                    <ul class="list-group list-group-flush">
-                        {% for team_data in top_3_teams %}
-                            <li class="list-group-item" style="background-color: #343a40; color: #f8f9fa; border-color: #454d55;">
-                                <strong>{{ loop.index }}. {{ team_data.name }}</strong><br> 
-                                <small>
-                                    Ø Score (bas. Perf.Mark): {{ team_data.avg_score }}% | 
-                                    Coachings: {{ team_data.num_coachings }} | 
-                                    Gesamtzeit: {{ team_data.total_time }} Min.
-                                </small>
-                            </li>
-                        {% else %}
-                            <li class="list-group-item" style="background-color: #343a40; color: #f8f9fa; border-color: #454d55;">Keine Teams mit ausreichenden Daten.</li>
-                        {% endfor %}
-                    </ul>
-                </div>
+    <div class="card mb-4">
+        <div class="card-header telekom-bg-magenta text-white">Nächste Schritte</div>
+        <div class="card-body">
+            <div class="d-flex flex-wrap" style="gap: 0.5rem;">
+                <a href="{{ url_for('main.terminkalender') }}" class="btn btn-sm telekom-button">
+                    <i class="fas fa-calendar-week mr-1"></i> Terminkalender prüfen
+                </a>
+                <a href="{{ url_for('main.planned_coachings_list') }}" class="btn btn-sm btn-outline-light">
+                    <i class="fas fa-calendar-check mr-1"></i> Geplante Termine öffnen
+                </a>
+                <a href="{{ url_for('main.coaching_dashboard') }}" class="btn btn-sm btn-outline-light">
+                    <i class="fas fa-chart-line mr-1"></i> Coaching-Dashboard öffnen
+                </a>
+                <a href="{{ url_for('main.workshop_dashboard') }}" class="btn btn-sm btn-outline-light">
+                    <i class="fas fa-users mr-1"></i> Workshop-Dashboard öffnen
+                </a>
             </div>
-            {% endif %}
-            {% if flop_3_teams %}
-            <div class="col-md-6 mb-3">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-header telekom-bg-magenta text-white">Niedrigste 3 Teams (nach Ø Performance Mark & Coachings)</div>
-                     <ul class="list-group list-group-flush">
-                        {% for team_data in flop_3_teams %}
-                            <li class="list-group-item" style="background-color: #343a40; color: #f8f9fa; border-color: #454d55;">
-                                <strong>{{ loop.index }}. {{ team_data.name }}</strong><br>
-                                <small>
-                                    Ø Score (bas. Perf.Mark): {{ team_data.avg_score }}% | 
-                                    Coachings: {{ team_data.num_coachings }} | 
-                                    Gesamtzeit: {{ team_data.total_time }} Min.
-                                </small>
-                            </li>
-                        {% else %}
-                             <li class="list-group-item" style="background-color: #343a40; color: #f8f9fa; border-color: #454d55;">Keine Teams mit ausreichenden Daten für diese Ansicht.</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-            {% endif %}
         </div>
-        <hr class="my-4" style="border-color: #444;">
-    {% endif %}
+    </div>
 
     <!-- Modal for Coaching Trend (existing) -->
     <div class="modal fade" id="coachingTrendModal" tabindex="-1" role="dialog" aria-labelledby="coachingTrendModalLabel" aria-hidden="true">
