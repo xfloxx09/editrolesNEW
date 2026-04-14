@@ -5,7 +5,7 @@ from sqlalchemy import desc, or_, false
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung, CoachingThemaItem, CoachingBogenLayout, PlannedCoaching
+from app.models import User, Team, TeamMember, Coaching, Workshop, workshop_participants, Project, Role, Permission, AssignedCoaching, LeitfadenItem, CoachingLeitfadenResponse, Abteilung, CoachingThemaItem, CoachingBogenLayout, PlannedCoaching, PlannedWorkshop
 from app.forms import RegistrationForm, TeamForm, TeamMemberForm, CoachingForm, WorkshopForm, ProjectForm, RoleForm, AdminAssignedCoachingForm, TeamMemberWithUserForm, LeitfadenItemForm, TeamsCoachingBulkForm, AbteilungForm, CoachingThemaItemForm, CoachingBogenLayoutForm
 from app.utils import role_required, permission_required, ROLE_ADMIN, ROLE_BETRIEBSLEITER, ROLE_TEAMLEITER, ROLE_ABTEILUNGSLEITER, get_or_create_archiv_team, ARCHIV_TEAM_NAME, get_or_create_role, workshop_individual_rating_from_request, projects_in_abteilung, leitfaden_items_for_coaching_edit, bogen_layout_for_project
 from app.main_routes import calculate_date_range, get_month_name_german, _sync_assigned_coaching_status_from_progress
@@ -82,6 +82,23 @@ def _admin_delete_coachings_by_ids(coaching_ids):
             _sync_assigned_coaching_status_from_progress(ac)
     db.session.commit()
     return deleted
+
+
+def _unlink_planned_workshops_before_delete(workshop_ids):
+    """
+    Remove FK links from planned_workshops before deleting workshops.
+    A previously fulfilled planned workshop becomes open again.
+    """
+    ids = _normalize_int_ids(workshop_ids)
+    if not ids:
+        return
+    PlannedWorkshop.query.filter(PlannedWorkshop.fulfilled_workshop_id.in_(ids)).update(
+        {
+            PlannedWorkshop.fulfilled_workshop_id: None,
+            PlannedWorkshop.status: 'open',
+        },
+        synchronize_session=False,
+    )
 
 
 def _role_ids_with_multiple_teams():
@@ -1347,6 +1364,7 @@ def manage_workshops():
             if workshop_ids_to_delete:
                 try:
                     workshop_ids_to_delete_int = [int(id_str) for id_str in workshop_ids_to_delete]
+                    _unlink_planned_workshops_before_delete(workshop_ids_to_delete_int)
                     db.session.execute(workshop_participants.delete().where(workshop_participants.c.workshop_id.in_(workshop_ids_to_delete_int)))
                     deleted_count = Workshop.query.filter(Workshop.id.in_(workshop_ids_to_delete_int)).delete(synchronize_session='fetch')
                     db.session.commit()
@@ -1455,6 +1473,7 @@ def edit_workshop_entry(workshop_id):
 def delete_workshop_entry(workshop_id):
     workshop = Workshop.query.get_or_404(workshop_id)
     try:
+        _unlink_planned_workshops_before_delete([workshop_id])
         db.session.delete(workshop)
         db.session.commit()
         flash(f'Workshop ID {workshop_id} erfolgreich gelöscht.', 'success')
