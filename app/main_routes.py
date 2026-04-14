@@ -994,7 +994,7 @@ def profile():
 @permission_required('view_coaching_dashboard')
 def coaching_dashboard():
     page = request.args.get('page', 1, type=int)
-    period_arg = request.args.get('period', '30days')
+    period_arg = request.args.get('period', 'all')
     team_arg = request.args.get('team', 'all')
     search_arg = request.args.get('search', default='', type=str).strip()
     project_raw = (request.args.get('project') or '').strip()

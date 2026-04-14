@@ -148,6 +148,13 @@ def _sync_user_team_members_from_form(user, role, form):
         return False
     want_set = set(want)
     all_rows = lambda: TeamMember.query.filter_by(user_id=user.id).all()
+    def _archive_member_row(member_row):
+        if member_row.team_id == archiv.id:
+            return
+        member_row.original_team_id = member_row.team_id
+        member_row.original_project_id = member_row.team.project_id if member_row.team else None
+        member_row.team_id = archiv.id
+
     for tid in want:
         found = False
         for m in all_rows():
@@ -179,9 +186,11 @@ def _sync_user_team_members_from_form(user, role, form):
             if n == 0:
                 db.session.delete(m)
             else:
+                old_team_name = m.team.name if m.team else "?"
+                _archive_member_row(m)
                 flash(
-                    f'Team „{m.team.name if m.team else "?"}“: Mitglied bleibt (Coachings vorhanden).',
-                    'warning',
+                    f'Team „{old_team_name}“: Mitglied ins ARCHIV verschoben (Coachings vorhanden).',
+                    'info',
                 )
     if not role.has_permission('multiple_teams'):
         keep = want[0] if want else None
@@ -189,8 +198,11 @@ def _sync_user_team_members_from_form(user, role, form):
             for m in list(all_rows()):
                 if m.team_id == archiv.id:
                     continue
-                if m.team_id != keep and Coaching.query.filter_by(team_member_id=m.id).count() == 0:
-                    db.session.delete(m)
+                if m.team_id != keep:
+                    if Coaching.query.filter_by(team_member_id=m.id).count() == 0:
+                        db.session.delete(m)
+                    else:
+                        _archive_member_row(m)
     return True
 
 
