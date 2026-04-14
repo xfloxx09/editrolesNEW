@@ -49,7 +49,7 @@
                     <option value="all" {% if current_teammember_id_filter == 'all' or not current_teammember_id_filter.isdigit() %}selected{% endif %}>Alle Mitglieder</option>
                     {% for member in all_team_members %} {# Assuming all_team_members contains objects with id and name #}
                     <option value="{{ member.id }}" {% if current_teammember_id_filter == member.id|string %}selected{% endif %}>
-                        {{ member.display_name }} {% if member.team %}({{ member.team.name }}){% endif %}
+                        {{ member.name }} {% if member.team %}({{ member.team.name }}){% endif %}
                     </option>
                     {% endfor %}
                 </select>
@@ -62,7 +62,7 @@
                     <option value="all" {% if current_coach_id_filter == 'all' or not current_coach_id_filter.isdigit() %}selected{% endif %}>Alle Coaches</option>
                     {% for coach_user in all_coaches %}
                     <option value="{{ coach_user.id }}" {% if current_coach_id_filter == coach_user.id|string %}selected{% endif %}>
-                        {{ coach_user.display_name }}
+                        {{ coach_user.username }}
                     </option>
                     {% endfor %}
                 </select>

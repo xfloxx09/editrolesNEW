@@ -243,8 +243,8 @@
                                         </thead>
                                         <tbody>
                                             {% for member in members %}
-                                            <tr data-name="{{ member.display_name }}" data-score="{{ member.combined_score }}" data-performance="{{ member.avg_score }}" data-coachings="{{ member.coaching_count }}" data-time="{{ member.total_time }}" data-last="{{ member.last_coaching_date.isoformat() if member.last_coaching_date else '' }}">
-                                                <td>{{ member.display_name }}</td>
+                                            <tr data-name="{{ member.name }}" data-score="{{ member.combined_score }}" data-performance="{{ member.avg_score }}" data-coachings="{{ member.coaching_count }}" data-time="{{ member.total_time }}" data-last="{{ member.last_coaching_date.isoformat() if member.last_coaching_date else '' }}">
+                                                <td>{{ member.name }}</td>
                                                 <td><strong>{{ member.combined_score|round(1) }}%</strong></td>
                                                 <td>
                                                     <div class="progress" style="width: 100px;">

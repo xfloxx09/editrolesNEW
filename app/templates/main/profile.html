@@ -8,7 +8,7 @@
                 <h2>{{ title }}</h2>
             </div>
             <div class="card-body">
-                <p>Angemeldet als: <strong>{{ current_user.display_name }}</strong> ({{ current_user.role }})</p>
+                <p>Angemeldet als: <strong>{{ current_user.username }}</strong> ({{ current_user.role }})</p>
                 <hr>
                 <form method="POST" action="{{ url_for('main.profile') }}" novalidate>
                     {{ form.hidden_tag() }}

@@ -157,7 +157,7 @@ class TeamForm(FlaskForm):
         super(TeamForm, self).__init__(*args, **kwargs)
         self.original_name = original_name
         possible_leaders = User.query.filter(User.role.has(name=ROLE_TEAMLEITER)).order_by(User.username).all()
-        self.team_leaders.choices = [(u.id, u.display_name) for u in possible_leaders]
+        self.team_leaders.choices = [(u.id, u.username) for u in possible_leaders]
         self.project_id.choices = [(p.id, p.name) for p in Project.query.order_by(Project.name).all()]
 
     def validate_name(self, name_field):
@@ -258,7 +258,7 @@ class CoachingForm(FlaskForm):
 
         members = query.order_by(TeamMember.name).all()
         for m in members:
-            generated_choices.append((m.id, f"{m.display_name} ({m.team.name})"))
+            generated_choices.append((m.id, f"{m.name} ({m.team.name})"))
         self.team_member_id.choices = generated_choices
 
     def update_assignment_choices(self, team_member_id, coach_id):
@@ -350,7 +350,7 @@ class WorkshopForm(FlaskForm):
 
         members = query.order_by(TeamMember.name).all()
         for m in members:
-            generated_choices.append((m.id, f"{m.display_name} ({m.team.name})"))
+            generated_choices.append((m.id, f"{m.name} ({m.team.name})"))
         self.team_member_ids.choices = generated_choices
 
     def validate_team_member_ids(self, field):
@@ -402,7 +402,7 @@ class AssignedCoachingForm(FlaskForm):
                 Team.name != ARCHIV_TEAM_NAME,
                 or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
             ).order_by(Team.name, TeamMember.name).all()
-            self.team_member_id.choices = [(m.id, f"{m.display_name} ({m.team.name})") for m in members]
+            self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in members]
 
             coaches = users_for_assignment_coach_dropdown(project_id, team_member_id)
             self.coach_id.choices = [(u.id, f"{u.coach_display_name} ({u.role_name})") for u in coaches]
@@ -444,7 +444,7 @@ class AdminAssignedCoachingForm(FlaskForm):
         coaches.sort(key=lambda u: (u.coach_display_name or '').lower())
         self.coach_id.choices = [(u.id, f"{u.coach_display_name} ({u.role_name})") for u in coaches]
         self.team_member_id.choices = [
-            (m.id, f"{m.display_name} ({m.team.name})")
+            (m.id, f"{m.name} ({m.team.name})")
             for m in TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
                 Team.name != ARCHIV_TEAM_NAME,
                 or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),

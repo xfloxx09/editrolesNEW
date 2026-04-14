@@ -38,7 +38,7 @@
                         {{ form.team_leaders.label(class="form-control-label") }}
                         <select name="team_leaders" id="team_leaders" class="form-control custom-select" multiple size="5">
                             {% for leader in all_team_leaders %}
-                                <option value="{{ leader.id }}" data-project="{{ leader.project_id }}" style="display: none;">{{ leader.display_name }} ({{ leader.project_ref.name }})</option>
+                                <option value="{{ leader.id }}" data-project="{{ leader.project_id }}" style="display: none;">{{ leader.username }} ({{ leader.project_ref.name }})</option>
                             {% endfor %}
                         </select>
                         <small class="form-text text-muted">Halte Strg (Cmd) gedrückt, um mehrere Teamleiter auszuwählen.</small>

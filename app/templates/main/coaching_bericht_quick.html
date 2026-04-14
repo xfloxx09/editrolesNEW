@@ -188,7 +188,7 @@
             </div>
             <div class="col-md-4 mb-2 mb-md-0">
                 <span class="text-muted d-block">Teammitglied</span>
-                <strong>{{ coaching.team_member.display_name if coaching.team_member else '–' }}</strong>
+                <strong>{{ coaching.team_member.name if coaching.team_member else '–' }}</strong>
                 {% if coaching.team_member and coaching.team_member.team %}
                 <span class="text-muted">({{ coaching.team_member.team.name }})</span>
                 {% endif %}

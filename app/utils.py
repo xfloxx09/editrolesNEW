@@ -673,7 +673,7 @@ def quick_planned_due_today_notifications():
 
         out.append({
             'kind': 'coaching',
-            'title': (pc.team_member.display_name or 'Coaching').strip() if pc.team_member else 'Coaching',
+            'title': (pc.team_member.name or 'Coaching').strip() if pc.team_member else 'Coaching',
             'subtitle': subtitle,
             'action_label': 'Jetzt coachen',
             'action_href': url_for('main.add_coaching', project=pid, planned_id=pc.id) if pid else None,

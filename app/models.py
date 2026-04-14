@@ -4,7 +4,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 from datetime import datetime, timezone
 from sqlalchemy.exc import SQLAlchemyError
-from app.name_utils import format_person_name
 
 # Association tables
 team_leaders = db.Table('team_leaders',
@@ -80,15 +79,10 @@ class User(UserMixin, db.Model):
         try:
             for tm in self.team_members:
                 if tm and tm.name and str(tm.name).strip():
-                    return tm.display_name
+                    return str(tm.name).strip()
         except (TypeError, AttributeError):
             pass
-        fallback = format_person_name(self.username)
-        return fallback or (self.username or '').strip() or '—'
-
-    @property
-    def display_name(self):
-        return self.coach_display_name
+        return (self.username or '').strip() or '—'
 
 
 class Role(db.Model):
@@ -180,10 +174,6 @@ class TeamMember(db.Model):
     coachings = db.relationship('Coaching', back_populates='team_member')
     workshops = db.relationship('Workshop', secondary=workshop_participants, back_populates='participants')
     assigned_coachings = db.relationship('AssignedCoaching', back_populates='team_member')
-
-    @property
-    def display_name(self):
-        return format_person_name(self.name) or (self.name or '').strip() or '—'
 
 
 class Coaching(db.Model):

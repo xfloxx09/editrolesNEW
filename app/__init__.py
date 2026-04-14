@@ -587,11 +587,6 @@ def create_app(config_class=Config):
         return {'has_perm': has_perm}
 
     @app.context_processor
-    def inject_person_name_helper():
-        from app.name_utils import format_person_name
-        return {'person_name': format_person_name}
-
-    @app.context_processor
     def inject_mein_team_nav():
         from app.utils import user_has_mein_team_nav
         if current_user.is_authenticated:
@@ -653,11 +648,6 @@ def create_app(config_class=Config):
             'cancelled': 'Storniert'
         }
         return translations.get(status, status)
-
-    @app.template_filter('person_name')
-    def format_person_name_filter(value):
-        from app.name_utils import format_person_name
-        return format_person_name(value)
 
     try:
         os.makedirs(app.instance_path)

@@ -70,7 +70,7 @@
                         {% set c = rev.coaching %}
                         <tr>
                             <td>{% if c %}{{ c.coaching_date|athens_time }}{% else %}-{% endif %}</td>
-                            <td>{% if c and c.team_member %}{{ c.team_member.display_name }}{% else %}-{% endif %}</td>
+                            <td>{% if c and c.team_member %}{{ c.team_member.name }}{% else %}-{% endif %}</td>
                             <td>{% if c %}{{ c.coaching_subject or '—' }}{% else %}-{% endif %}</td>
                             <td>{{ rev.rating }}/5</td>
                             <td class="text-center">
