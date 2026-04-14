@@ -339,10 +339,7 @@ def _may_view_assigned_rejection_bericht(assignment):
     if assignment.coach_id == current_user.id:
         return True
     is_pl_owner = assignment.project_leader_id == current_user.id
-    if is_pl_owner and (
-        current_user.has_permission('assign_coachings')
-        or current_user.has_permission('view_pl_qm_dashboard')
-    ):
+    if is_pl_owner and current_user.has_permission('assign_coachings'):
         return True
     if current_user.has_permission('view_assigned_coaching_report'):
         return True
@@ -457,10 +454,7 @@ def _sync_assigned_coaching_status_from_progress(assignment):
 
 
 def _user_can_assign_coachings():
-    return (
-        current_user.has_permission('assign_coachings')
-        or current_user.has_permission('view_pl_qm_dashboard')
-    )
+    return current_user.has_permission('assign_coachings')
 
 
 def _member_performance_for_assigned_page(project_id):
@@ -856,7 +850,7 @@ def _assigned_coachings_index_badge_count(user):
     role_filters = []
     if user.has_permission('view_assigned_coachings'):
         role_filters.append(AssignedCoaching.coach_id == user.id)
-    if user.has_permission('assign_coachings') or user.has_permission('view_pl_qm_dashboard'):
+    if user.has_permission('assign_coachings'):
         role_filters.append(AssignedCoaching.project_leader_id == user.id)
     if not role_filters:
         return 0
@@ -3452,7 +3446,7 @@ def assigned_coachings():
 
 @bp.route('/create-assigned-coaching', methods=['GET', 'POST'])
 @login_required
-@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+@permission_required('assign_coachings')
 def create_assigned_coaching():
     _apply_query_project_to_session()
     project_id = get_visible_project_id()
@@ -3508,7 +3502,7 @@ def create_assigned_coaching():
 
 @bp.route('/api/assignment-coaches')
 @login_required
-@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+@permission_required('assign_coachings')
 def api_assignment_coaches():
     """Coach dropdown options for the current project; refined by selected team member (optional)."""
     project_id = get_visible_project_id()
@@ -3528,7 +3522,7 @@ def api_assignment_coaches():
 
 @bp.route('/api/member-current-score')
 @login_required
-@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+@permission_required('assign_coachings')
 def get_member_current_score():
     mid = request.args.get('member_id', type=int)
     if not mid:
@@ -3791,10 +3785,7 @@ def assigned_coaching_report(assignment_id):
             return redirect(url_for('main.index'))
 
     is_pl_owner = assignment.project_leader_id == current_user.id
-    may_pl = is_pl_owner and (
-        current_user.has_permission('assign_coachings')
-        or current_user.has_permission('view_pl_qm_dashboard')
-    )
+    may_pl = is_pl_owner and current_user.has_permission('assign_coachings')
     may_scope = current_user.has_permission('view_assigned_coaching_report')
     if not may_pl and not may_scope:
         flash('Keine Berechtigung für diesen Bericht.', 'danger')
@@ -3851,7 +3842,7 @@ def assigned_coaching_rejection_bericht(assignment_id):
 
 @bp.route('/cancel-assigned-coaching/<int:assignment_id>', methods=['POST'])
 @login_required
-@any_permission_required('assign_coachings', 'view_pl_qm_dashboard')
+@permission_required('assign_coachings')
 def cancel_assigned_coaching(assignment_id):
     assignment = AssignedCoaching.query.get_or_404(assignment_id)
     tm = TeamMember.query.options(joinedload(TeamMember.team)).get(assignment.team_member_id)
