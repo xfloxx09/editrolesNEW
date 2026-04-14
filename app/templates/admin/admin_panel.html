@@ -71,7 +71,7 @@
                     {% set tm = user.team_members[0] if user.team_members else None %}
                      <tr>
                         <td>{{ user.id }}</td>
-                        <td>{{ user.username }}</td>
+                        <td>{{ user.display_name }}</td>
                         <td>{{ user.email }}</td>
                         <td>{{ user.role.name if user.role else '-' }}</td>
                         <td>{{ tm.name.split(' ')[0] if tm else '-' }}</td>
@@ -178,7 +178,7 @@
                         <td>{{ team.id }}</td>
                         <td>{{ team.name }}</td>
                         <td>{{ team.project_ref.name if team.project_ref else '-' }}</td>
-                        <td>{% for leader in team.leaders %}{{ leader.username }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
+                        <td>{% for leader in team.leaders %}{{ leader.display_name }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
                         <td>{{ team.members|length }}</td>
                         <td>
                             <a href="{{ url_for('admin.edit_team', team_id=team.id) }}" class="btn btn-xs btn-outline-secondary">Bearbeiten & Mitglieder</a>
@@ -283,7 +283,7 @@
                     {% for member in archiv_paginated.items %}
                         <tr>
                             <td>{{ member.id }}</td>
-                            <td>{{ member.name }}</td>
+                            <td>{{ member.display_name }}</td>
                             <td>{{ member.original_team.name if member.original_team else '-' }}</td>
                             <td>{{ member.original_project.name if member.original_project else '-' }}</td>
                             <td>

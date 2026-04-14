@@ -107,7 +107,7 @@
                             <td>{% if c and c.project %}{{ c.project.name }}{% else %}—{% endif %}</td>
                             <td>{% if c and c.team_member and c.team_member.team %}{{ c.team_member.team.name }}{% else %}—{% endif %}</td>
                             <td>{% if c and c.coach %}{{ c.coach.coach_display_name }}{% else %}—{% endif %}</td>
-                            <td>{% if c and c.team_member %}{{ c.team_member.name }}{% else %}—{% endif %}</td>
+                            <td>{% if c and c.team_member %}{{ c.team_member.display_name }}{% else %}—{% endif %}</td>
                             <td>{{ rev.rating }}/5</td>
                             <td class="text-center small">
                                 {% if not rev.visible_to_coach %}

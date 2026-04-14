@@ -147,7 +147,7 @@
                                 {% if proj %}
                                 <a class="btn btn-sm telekom-button" style="background-color: #e20074; color: white; border-radius: 16px;"
                                    href="{{ url_for('main.add_coaching', project=proj, planned_id=it.id) }}">
-                                    <i class="fas fa-chalkboard-teacher"></i> Jetzt coachen · {{ it.team_member.name }}
+                                    <i class="fas fa-chalkboard-teacher"></i> Jetzt coachen · {{ it.team_member.display_name }}
                                 </a>
                                 {% endif %}
                             {% endif %}
@@ -196,7 +196,7 @@
                     <div class="list-group-item flex-column align-items-start" style="background: #333; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-center flex-wrap">
                             <div class="mb-2 mb-md-0">
-                                <strong>{{ it.team_member.name }}</strong>
+                                <strong>{{ it.team_member.display_name }}</strong>
                                 {% if it.team and it.team.name %}
                                 <span class="text-muted">({{ it.team.name }})</span>
                                 {% endif %}
@@ -364,7 +364,7 @@
                     <div class="list-group-item flex-column align-items-start" style="background: #1e1e1e; border-color: #444; color: #eee;">
                         <div class="d-flex w-100 justify-content-between align-items-start flex-wrap">
                             <div class="mb-2 mb-md-0">
-                                <strong>{{ it.team_member.name }}</strong>
+                                <strong>{{ it.team_member.display_name }}</strong>
                                 {% if it.team and it.team.name %}
                                 <span class="text-muted">({{ it.team.name }})</span>
                                 {% endif %}

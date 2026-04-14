@@ -27,7 +27,7 @@
                     <select name="member" class="form-control form-control-sm">
                         <option value="">Alle Mitglieder</option>
                         {% for member in all_members %}
-                            <option value="{{ member.id }}" {% if member_filter == member.id %}selected{% endif %}>{{ member.name }} ({{ member.team.name }})</option>
+                            <option value="{{ member.id }}" {% if member_filter == member.id %}selected{% endif %}>{{ member.display_name }} ({{ member.team.name }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -80,7 +80,7 @@
                         {% for assignment in assignments.items %}
                         <tr>
                             <td>{{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}</td>
-                            <td>{{ assignment.team_member.name }} ({{ assignment.team_member.team.name }})</td>
+                            <td>{{ assignment.team_member.display_name }} ({{ assignment.team_member.team.name }})</td>
                             <td>{{ assignment.coach.coach_display_name }}</td>
                             <td>{{ assignment.expected_coaching_count }}</td>
                             <td>

@@ -30,7 +30,7 @@
                 <select name="member_id" class="form-control">
                     <option value="">-- Alle Mitglieder --</option>
                     {% for member in all_team_members %}
-                        <option value="{{ member.id }}" {% if current_member == member.id %}selected{% endif %}>{{ member.name }}</option>
+                        <option value="{{ member.id }}" {% if current_member == member.id %}selected{% endif %}>{{ member.display_name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -66,7 +66,7 @@
                     {% for coaching in coachings.items %}
                         <tr>
                             <td>{{ coaching.coaching_date|athens_time }}</td>
-                            <td>{{ coaching.team_member.name }}</td>
+                            <td>{{ coaching.team_member.display_name }}</td>
                             <td>{{ coaching.team_member.team.name }}</td>
                             <td>{{ coaching.coaching_style }}</td>
                             <td>{{ coaching.coaching_subject }}</td>

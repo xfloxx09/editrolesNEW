@@ -21,7 +21,7 @@
             <div class="row">
                 <div class="col-md-6">
                     <strong>Coach:</strong> {{ report.assignment.coach.coach_display_name }}<br>
-                    <strong>Teammitglied:</strong> {{ report.assignment.team_member.name }} (Team: {{ report.assignment.team_member.team.name }})<br>
+                    <strong>Teammitglied:</strong> {{ report.assignment.team_member.display_name }} (Team: {{ report.assignment.team_member.team.name }})<br>
                     <strong>Deadline:</strong> {{ report.assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}<br>
                     <strong>Erwartete Coachings:</strong> {{ report.coachings_expected }}<br>
                     <strong>Durchgeführte Coachings:</strong> {{ report.coachings_done }}

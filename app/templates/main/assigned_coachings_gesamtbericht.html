@@ -106,7 +106,7 @@
                     <select name="member" class="form-control form-control-sm bg-dark text-light border-secondary" onchange="this.form.submit()">
                         <option value="">Alle</option>
                         {% for member in all_members %}
-                        <option value="{{ member.id }}" {% if member_filter == member.id %}selected{% endif %}>{{ member.name }}</option>
+                        <option value="{{ member.id }}" {% if member_filter == member.id %}selected{% endif %}>{{ member.display_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -146,7 +146,7 @@
                 <tr>
                     <td>{{ assignment.deadline|athens_time('%d.%m.%Y %H:%M') }}</td>
                     <td>{{ assignment.team_member.team.project.name if assignment.team_member.team and assignment.team_member.team.project else '—' }}</td>
-                    <td>{{ assignment.team_member.name }} <span class="text-muted">({{ assignment.team_member.team.name }})</span></td>
+                    <td>{{ assignment.team_member.display_name }} <span class="text-muted">({{ assignment.team_member.team.name }})</span></td>
                     <td>{{ assignment.coach.coach_display_name if assignment.coach else '—' }}</td>
                     <td>{{ assignment.project_leader.coach_display_name if assignment.project_leader else '—' }}</td>
                     <td>{{ assignment.expected_coaching_count }}</td>

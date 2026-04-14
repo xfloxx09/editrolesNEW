@@ -499,7 +499,8 @@ def _member_performance_for_assigned_page(project_id):
         combined = 0.4 * perf_part + 0.3 * cnt_part + 0.3 * time_part
         out.append({
             'id': m.id,
-            'name': m.name,
+            'name': m.display_name,
+            'display_name': m.display_name,
             'team_name': m.team.name if m.team else '',
             'combined_score': combined,
             'avg_score': r['avg_score'],
