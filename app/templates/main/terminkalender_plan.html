@@ -7,6 +7,18 @@
 
     <form method="post" class="card card-body bg-dark border-secondary text-light">
         <input type="hidden" name="project_id" value="{{ project_id or '' }}">
+        {% if filter_projects and filter_projects|length > 1 %}
+        <div class="form-group">
+            <label for="project_filter">Projekt-Filter</label>
+            <select id="project_filter" class="form-control">
+                <option value="all" {% if not project_id %}selected{% endif %}>Alle sichtbaren Projekte</option>
+                {% for p in filter_projects %}
+                <option value="{{ p.id }}" {% if project_id and project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+            <small class="form-text text-muted">Filtert nur die Mitarbeiterliste für diese Planung.</small>
+        </div>
+        {% endif %}
 
         <div class="form-group">
             <label for="plan_date">Datum</label>
@@ -42,10 +54,23 @@
 document.addEventListener('DOMContentLoaded', function() {
     var cb = document.getElementById('has_verabredung');
     var w = document.getElementById('verab_wrap');
+    var pf = document.getElementById('project_filter');
     if (cb && w) {
         function t() { w.style.display = cb.checked ? 'block' : 'none'; }
         cb.addEventListener('change', t);
         t();
+    }
+    if (pf) {
+        pf.addEventListener('change', function() {
+            var url = new URL(window.location.href);
+            url.searchParams.set('day', '{{ plan_date.isoformat() }}');
+            if (pf.value === 'all') {
+                url.searchParams.delete('project');
+            } else {
+                url.searchParams.set('project', pf.value);
+            }
+            window.location.href = url.toString();
+        });
     }
 });
 </script>

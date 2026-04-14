@@ -188,8 +188,7 @@
                     {% endif %}
                     <i class="fas fa-tasks fa-3x"></i>
                 </span>
-                <h4 class="mb-1">Zugewiesene Coachings</h4>
-                <p class="mb-0">{% if has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}Zuweisen &amp; Übersicht{% else %}Meine Aufgaben{% endif %}</p>
+                <h4 class="mb-0">Meine Aufgaben</h4>
             </a>
         </div>
         {% endif %}
@@ -252,7 +251,7 @@
         <li class="index-help-item"><strong>Workshops</strong> Liste, Kennzahlen und Detailinfos zu Gruppenworkshops.</li>
         {% endif %}
         {% if has_perm('view_assigned_coachings') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
-        <li class="index-help-item"><strong>Zugewiesene Coachings</strong> Aufgaben ansehen, annehmen/bearbeiten und Fortschritt verfolgen.</li>
+        <li class="index-help-item"><strong>Meine Aufgaben</strong> Aufgaben ansehen, annehmen/bearbeiten und Fortschritt verfolgen.</li>
         {% endif %}
         {% if has_perm('planned_coachings') or has_perm('add_workshop') or has_perm('assign_coachings') or has_perm('view_pl_qm_dashboard') %}
         <li class="index-help-item"><strong>Geplante Coachings / Workshops</strong> Offene Planungen verwalten und fällige Termine starten.</li>

@@ -1816,7 +1816,9 @@ def terminkalender_plan():
         allowed_ids = {m.id for m in _team_members_for_planned_coaching_picker(project_id)}
         if not tm or tm.id not in allowed_ids:
             flash('Bitte ein gültiges Teammitglied wählen.', 'warning')
-            return redirect(url_for('main.terminkalender_plan', day=plan_date.isoformat()))
+            kw = {'day': plan_date.isoformat()}
+            kw['project'] = project_id if project_id else 'all'
+            return redirect(url_for('main.terminkalender_plan', **kw))
         notes = (request.form.get('notes') or '').strip()
         has_v = request.form.get('has_verabredung') == '1'
         vtext = (request.form.get('verabredung_text') or '').strip()
@@ -1836,6 +1838,7 @@ def terminkalender_plan():
         return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
 
     members = _team_members_for_planned_coaching_picker(project_id)
+    filter_projects = _projects_for_coaching_workshop_picker()
     selected_member_id = request.args.get('suggested_member_id', type=int)
     allowed_member_ids = {m.id for m in members}
     if selected_member_id not in allowed_member_ids:
@@ -1845,6 +1848,7 @@ def terminkalender_plan():
         title='Geplantes Coaching anlegen',
         plan_date=plan_date,
         project_id=project_id,
+        filter_projects=filter_projects,
         members=members,
         selected_member_id=selected_member_id,
         today=today,
