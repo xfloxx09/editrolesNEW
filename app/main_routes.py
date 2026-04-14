@@ -1083,7 +1083,8 @@ def coaching_dashboard():
             scope_filters.append(Team.id == tid)
 
     archiv_team = get_or_create_archiv_team()
-    graph_filters = scope_filters + [TeamMember.team_id != archiv_team.id]
+    # Graphs must hide every ARCHIV team row, not only the default ARCHIV team id.
+    graph_filters = scope_filters + [Team.name != ARCHIV_TEAM_NAME]
 
     list_filters = list(scope_filters)
     list_filters.append(TeamMember.team_id != archiv_team.id)
