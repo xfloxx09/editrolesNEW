@@ -1282,29 +1282,30 @@ def coaching_dashboard():
                            config=current_app.config)
 
 
-def _team_members_for_planned_coaching_picker(project_id):
-    """Gleiche Team-/Mitglied-Sicht wie beim Coaching erfassen (kein volles Projekt für eingeschränkte Rollen)."""
+def _team_members_for_planned_coaching_picker(project_id=None):
+    """Teammitglied-Auswahl für geplante Coachings (optional projektübergreifend im sichtbaren Scope)."""
     query = (
         TeamMember.query.join(Team, TeamMember.team_id == Team.id)
         .filter(
-            Team.project_id == project_id,
             Team.name != ARCHIV_TEAM_NAME,
             Team.active_for_coaching.is_(True),
         )
     )
+    if project_id:
+        query = query.filter(Team.project_id == project_id)
+    else:
+        accessible = get_accessible_project_ids()
+        if accessible is not None:
+            if not accessible:
+                return []
+            query = query.filter(Team.project_id.in_(accessible))
+
     if current_user.has_permission('coach_own_team_only'):
         coach_team_member = current_user.team_members[0] if current_user.team_members else None
         if coach_team_member:
             query = query.filter(TeamMember.team_id == coach_team_member.team_id)
         else:
             query = query.filter(false())
-    else:
-        if current_user.role_name == ROLE_TEAMLEITER:
-            led = sorted({tm.team_id for tm in current_user.team_members if tm.team_id})
-            if led:
-                query = query.filter(TeamMember.team_id.in_(led))
-        elif current_user.role_name not in (ROLE_ADMIN, ROLE_BETRIEBSLEITER):
-            pass
     members = query.order_by(Team.name, TeamMember.name).all()
     return [m for m in members if team_member_eligible_for_new_coaching(m)]
 
@@ -1791,17 +1792,23 @@ def terminkalender_plan():
     if request.method == 'POST':
         project_id = request.form.get('project_id', type=int)
     else:
-        project_id = _resolve_coaching_workshop_project_id()
+        project_raw = (request.args.get('project') or '').strip().lower()
+        if project_raw == 'all':
+            project_id = None
+        elif project_raw.isdigit():
+            project_id = int(project_raw)
+        else:
+            project_id = _resolve_coaching_workshop_project_id()
+            # With multiple visible projects, default picker scope should include all visible projects.
+            if accessible is not None and len(accessible) > 1:
+                project_id = None
 
     if accessible is not None:
-        if not project_id or project_id not in accessible:
-            project_id = get_visible_project_id()
-        if not project_id or project_id not in accessible:
+        if project_id and project_id not in accessible:
             flash('Bitte ein gültiges Projekt wählen.', 'danger')
             return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
-    elif not project_id:
-        flash('Kein Projekt ausgewählt.', 'danger')
-        return redirect(url_for('main.terminkalender', year=plan_date.year, month=plan_date.month))
+        if not project_id and len(accessible) == 1:
+            project_id = accessible[0]
 
     if request.method == 'POST':
         member_id = request.form.get('team_member_id', type=int)
@@ -1817,7 +1824,7 @@ def terminkalender_plan():
             coach_user_id=current_user.id,
             team_member_id=member_id,
             planned_for_date=plan_date,
-            project_id=project_id,
+            project_id=tm.team.project_id if tm and tm.team else project_id,
             team_id=tm.team_id,
             notes=notes,
             has_verabredung=has_v,

@@ -6,7 +6,7 @@
     <p class="text-muted">Termin frei wählbar</p>
 
     <form method="post" class="card card-body bg-dark border-secondary text-light">
-        <input type="hidden" name="project_id" value="{{ project_id }}">
+        <input type="hidden" name="project_id" value="{{ project_id or '' }}">
 
         <div class="form-group">
             <label for="plan_date">Datum</label>
