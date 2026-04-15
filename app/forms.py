@@ -398,7 +398,7 @@ class AssignedCoachingForm(FlaskForm):
         self.team_member_active_assignment_counts = {}
         if allowed_project_ids:
             project_id = allowed_project_ids[0]
-            members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
+            members = TeamMember.query.options(joinedload(TeamMember.team)).join(Team, TeamMember.team_id == Team.id).filter(
                 Team.project_id.in_(allowed_project_ids),
                 Team.name != ARCHIV_TEAM_NAME,
                 or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
