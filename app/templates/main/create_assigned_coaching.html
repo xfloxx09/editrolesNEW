@@ -4,6 +4,19 @@
 <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 <script>
 $(document).ready(function() {
+    function updateAssignedHint() {
+        var $selected = $('#team_member_id option:selected');
+        var count = parseInt($selected.data('activeAssignments') || 0, 10);
+        var $hint = $('#assigned_member_hint');
+        if (count > 0) {
+            $hint
+                .text('Hinweis: Dieses Teammitglied hat bereits ' + count + ' aktive Zuweisung(en).')
+                .show();
+        } else {
+            $hint.hide();
+        }
+    }
+
     function reloadAssignmentCoaches(memberId) {
         $.getJSON("{{ url_for('main.api_assignment_coaches') }}", {
             team_member_id: memberId || ''
@@ -23,6 +36,7 @@ $(document).ready(function() {
     // When team member changes: coach list + current performance note
     $('#team_member_id').change(function() {
         var memberId = $(this).val();
+        updateAssignedHint();
         reloadAssignmentCoaches(memberId);
         if (memberId) {
             $.getJSON("{{ url_for('main.get_member_current_score') }}", { member_id: memberId })
@@ -44,6 +58,7 @@ $(document).ready(function() {
     if ($('#team_member_id').val()) {
         $('#team_member_id').trigger('change');
     } else {
+        updateAssignedHint();
         reloadAssignmentCoaches('');
     }
 });
@@ -69,11 +84,12 @@ $(document).ready(function() {
                             {% for value, label in form.team_member_id.choices %}
                                 {% set team_name = label.split('(')[-1].rstrip(')') if '(' in label else '' %}
                                 {% set member_name = label.split(' (')[0] %}
+                                {% set assigned_count = active_assignment_counts.get(value, 0) %}
                                 {% if team_name != ns.prev_team %}
                                     {% if not loop.first %}</optgroup>{% endif %}
                                     <optgroup label="{{ team_name }}">
                                 {% endif %}
-                                <option value="{{ value }}" {% if form.team_member_id.data == value %}selected{% endif %}>{{ member_name }}</option>
+                                <option value="{{ value }}" data-active-assignments="{{ assigned_count }}" {% if form.team_member_id.data == value %}selected{% endif %}>{{ member_name }}</option>
                                 {% set ns.prev_team = team_name %}
                                 {% if loop.last %}</optgroup>{% endif %}
                             {% endfor %}
@@ -81,6 +97,7 @@ $(document).ready(function() {
                         {% if form.team_member_id.errors %}
                             <div class="invalid-feedback d-block">{% for error in form.team_member_id.errors %}{{ error }}{% endfor %}</div>
                         {% endif %}
+                        <div id="assigned_member_hint" class="mt-1 text-warning small" style="display:none;"></div>
                         <div class="mt-1 text-muted small">Aktuelle Performance Note: <span id="current_note_display">N/A</span></div>
                         <input type="hidden" id="current_note_hidden" name="current_note">
                     </div>

@@ -7,7 +7,7 @@ from flask_login import current_user
 from sqlalchemy import false, or_
 from sqlalchemy.orm import joinedload
 from app import db
-from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem, CoachingThemaItem, Abteilung
+from app.models import User, Team, TeamMember, Project, Role, Permission, LeitfadenItem, CoachingThemaItem, Abteilung, AssignedCoaching
 from app.utils import (
     ARCHIV_TEAM_NAME,
     ROLE_TEAMLEITER,
@@ -395,6 +395,7 @@ class AssignedCoachingForm(FlaskForm):
 
     def __init__(self, allowed_project_ids=None, team_member_id=None, *args, **kwargs):
         super(AssignedCoachingForm, self).__init__(*args, **kwargs)
+        self.team_member_active_assignment_counts = {}
         if allowed_project_ids:
             project_id = allowed_project_ids[0]
             members = TeamMember.query.join(Team, TeamMember.team_id == Team.id).filter(
@@ -402,7 +403,24 @@ class AssignedCoachingForm(FlaskForm):
                 Team.name != ARCHIV_TEAM_NAME,
                 or_(Team.active_for_coaching.is_(True), Team.visible_for_coaching_assignment.is_(True)),
             ).order_by(Team.name, TeamMember.name).all()
-            self.team_member_id.choices = [(m.id, f"{m.name} ({m.team.name})") for m in members]
+            member_ids = [m.id for m in members]
+            if member_ids:
+                rows = db.session.query(
+                    AssignedCoaching.team_member_id,
+                    db.func.count(AssignedCoaching.id),
+                ).filter(
+                    AssignedCoaching.team_member_id.in_(member_ids),
+                    AssignedCoaching.status.in_(['pending', 'accepted', 'in_progress']),
+                ).group_by(AssignedCoaching.team_member_id).all()
+                self.team_member_active_assignment_counts = {mid: int(cnt or 0) for mid, cnt in rows}
+
+            self.team_member_id.choices = [
+                (
+                    m.id,
+                    f"{m.name}{' ⚠' if self.team_member_active_assignment_counts.get(m.id, 0) > 0 else ''} ({m.team.name})"
+                )
+                for m in members
+            ]
 
             coaches = users_for_assignment_coach_dropdown(project_id, team_member_id)
             self.coach_id.choices = [(u.id, f"{u.coach_display_name} ({u.role_name})") for u in coaches]

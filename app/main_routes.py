@@ -3497,7 +3497,12 @@ def create_assigned_coaching():
         flash('Coaching-Aufgabe zugewiesen.', 'success')
         return redirect(url_for('main.assigned_coachings', project=project_id))
 
-    return render_template('main/create_assigned_coaching.html', form=form, config=current_app.config)
+    return render_template(
+        'main/create_assigned_coaching.html',
+        form=form,
+        active_assignment_counts=getattr(form, 'team_member_active_assignment_counts', {}),
+        config=current_app.config,
+    )
 
 
 @bp.route('/api/assignment-coaches')
