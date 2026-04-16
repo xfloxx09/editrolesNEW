@@ -2367,6 +2367,9 @@ def edit_coaching(coaching_id):
             return redirect(url_for('main.edit_coaching', coaching_id=coaching_id))
         prev_assigned_id = coaching.assigned_coaching_id
         form.populate_obj(coaching)
+        # Form uses 0 as "no assignment" sentinel; DB FK requires NULL instead of 0.
+        if not coaching.assigned_coaching_id:
+            coaching.assigned_coaching_id = None
         if form.coaching_style.data != 'TCAP':
             coaching.tcap_id = None
         if leitfaden_items:
