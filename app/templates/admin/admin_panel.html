@@ -52,6 +52,7 @@
         </form>
 
         {% if user_filter_active or users_paginated.items %}
+            <div class="table-responsive">
             <table class="table table-sm">
                 <thead>
                     <tr>
@@ -78,7 +79,7 @@
                         <td>{{ tm.name.split(' ')[1] if tm and tm.name.split(' ')|length > 1 else '-' }}</td>
                         <td>{{ tm.team.name if tm and tm.team else '-' }}</td>
                         <td>{{ tm.pylon if tm else '-' }}</td>
-                        <td>
+                        <td class="text-nowrap">
                             <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-xs btn-outline-secondary">Bearbeiten</a>
                             {% if user.username != 'admin' and user.id != current_user.id %}
                             <form action="{{ url_for('admin.delete_user', user_id=user.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('Benutzer wirklich löschen?');">
@@ -90,6 +91,7 @@
                 {% endfor %}
                 </tbody>
             </table>
+            </div>
 
             {% if users_paginated.pages > 1 %}
             <nav>
